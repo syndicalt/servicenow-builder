@@ -2965,6 +2965,46 @@ def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
     assert "client-secret" not in captured.out
 
 
+def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spec_root = tmp_path / "lifecycle-bootstrap"
+
+    exit_code = main(
+        [
+            "plan-lifecycle-business-rule",
+            "--endpoint-url",
+            "https://sidecar.example.gov/lifecycle/events",
+            "--integration-identity",
+            "jedi-devproject-lifecycle-integration",
+            "--draft-state-value",
+            "-6",
+            "--ready-state-value",
+            "1",
+            "--run-id",
+            "lifecycle-business-rule-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    spec_path = spec_root / "lifecycle-business-rule-001.json"
+    payload = json.loads(spec_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "lifecycle_business_rule_specs=1" in captured.out
+    assert payload["table"] == "rm_story"
+    assert payload["when"] == "after"
+    assert payload["action"] == "update"
+    assert "previous.state == '-6'" in payload["condition"]
+    assert "current.state == '1'" in payload["condition"]
+    assert "https://sidecar.example.gov/lifecycle/events" in payload["script"]
+    assert "story_state_changed" in payload["script"]
+    assert "story_sys_id" not in json.dumps(payload)
+
+
 def test_cli_run_writeback_batch_processes_job_file(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

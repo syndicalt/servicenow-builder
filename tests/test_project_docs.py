@@ -929,3 +929,28 @@ def test_sprint_sixty_two_change_log_documents_build_claim_execution() -> None:
     assert "build claim audit" in change_log
     assert "fresh_story_state_mismatch" in change_log
     assert "Work in Progress" in change_log
+
+
+def test_operator_guide_documents_lifecycle_business_rule_bootstrap() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "plan-lifecycle-business-rule" in guide
+    assert "Business Rule first" in guide
+    assert "Flow" in guide
+    assert "--draft-state-value" in guide
+    assert "--ready-state-value" in guide
+    assert "reviewable ServiceNow script artifact" in guide
+    assert "does not install" in guide
+
+
+def test_sprint_sixty_three_change_log_documents_business_rule_bootstrap() -> None:
+    change_log = Path("docs/sprints/sprint-63-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Business Rule first" in change_log
+    assert "plan-lifecycle-business-rule" in change_log
+    assert "rm_story" in change_log
+    assert "Draft to Ready" in change_log
+    assert "story_state_changed" in change_log
+    assert "story_sys_id" in change_log

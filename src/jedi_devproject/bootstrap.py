@@ -35,6 +35,16 @@ class BootstrapApplyResult(BaseModel):
     reasons: list[str]
 
 
+class LifecycleBusinessRuleSpec(BaseModel):
+    name: str
+    table: str
+    when: str
+    action: str
+    active: bool
+    condition: str
+    script: str
+
+
 class BootstrapClient(Protocol):
     def fetch_story_dictionary_fields(self) -> list[StoryDictionaryField]:
         """Fetch active story dictionary fields."""
@@ -121,3 +131,71 @@ def apply_bootstrap_fields(
         form_layout_changes=[],
         reasons=[],
     )
+
+
+def build_lifecycle_business_rule_spec(
+    *,
+    endpoint_url: str,
+    integration_identity: str,
+    draft_state_value: str,
+    ready_state_value: str,
+) -> LifecycleBusinessRuleSpec:
+    if not endpoint_url.startswith("https://"):
+        raise ValueError("endpoint_url must use https")
+    _require_non_empty("integration_identity", integration_identity)
+    _require_non_empty("draft_state_value", draft_state_value)
+    _require_non_empty("ready_state_value", ready_state_value)
+
+    condition = (
+        "current.state.changes() && "
+        f"previous.state == {_js_string(draft_state_value)} && "
+        f"current.state == {_js_string(ready_state_value)}"
+    )
+    script = f"""(function executeRule(current, previous) {{
+    var request = new sn_ws.RESTMessageV2();
+    request.setEndpoint({_js_string(endpoint_url)});
+    request.setHttpMethod('post');
+    request.setRequestHeader('Content-Type', 'application/json');
+
+    var eventId = [
+        current.number.toString(),
+        previous.state.toString(),
+        current.state.toString(),
+        new GlideDateTime().getNumericValue().toString()
+    ].join('-');
+
+    var payload = {{
+        event_id: eventId,
+        event_type: 'story_state_changed',
+        source: 'servicenow-business-rule',
+        table: 'rm_story',
+        story_number: current.number.toString(),
+        previous_state: 'Draft',
+        current_state: 'Ready',
+        occurred_at: new GlideDateTime().getValue(),
+        correlation_id: eventId,
+        emitted_by: {_js_string(integration_identity)}
+    }};
+
+    request.setRequestBody(JSON.stringify(payload));
+    request.executeAsync();
+}})(current, previous);"""
+
+    return LifecycleBusinessRuleSpec(
+        name="Jedi DevProject lifecycle event emitter",
+        table=BOOTSTRAP_TABLE,
+        when="after",
+        action="update",
+        active=True,
+        condition=condition,
+        script=script,
+    )
+
+
+def _require_non_empty(field_name: str, value: str) -> None:
+    if value.strip() == "":
+        raise ValueError(f"{field_name} must not be empty")
+
+
+def _js_string(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"

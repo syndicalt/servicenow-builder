@@ -143,6 +143,22 @@ The event boundary rejects unknown fields, including ServiceNow `story_sys_id`. 
 
 Bootstrap should eventually install or document the ServiceNow-side pieces needed for this contract: a Business Rule or Flow that detects `Draft` to `Ready`, a Scripted REST API or outbound REST Message path for event delivery, and the integration identity used in `emitted_by`. That bootstrap work must be explicit and reviewed; this contract alone does not create ServiceNow scripts.
 
+Business Rule first is the preferred lifecycle trigger bootstrap. A scoped after-update Business Rule on `rm_story` is deterministic, can inspect `previous` and `current` state, and is easier to review in an Update Set than a Flow. Flow remains a later option for approval composition, but the state-change emitter should stay small and table-local.
+
+Use `plan-lifecycle-business-rule` to write a reviewable ServiceNow script artifact:
+
+```bash
+python3 -m jedi_devproject.cli plan-lifecycle-business-rule \
+  --endpoint-url https://sidecar.example.gov/lifecycle/events \
+  --integration-identity jedi-devproject-lifecycle-integration \
+  --draft-state-value -6 \
+  --ready-state-value 1 \
+  --run-id lifecycle-business-rule-20260513-001 \
+  --spec-root artifacts/lifecycle-bootstrap
+```
+
+The command writes a local Business Rule spec for `rm_story` after update. It emits `story_state_changed` only when the state changes from the supplied Draft value to the supplied Ready value. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
+
 Use `process-lifecycle-event` to validate a captured lifecycle event and write a local orchestration plan:
 
 ```bash

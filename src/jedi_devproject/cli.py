@@ -23,7 +23,11 @@ from jedi_devproject.artifacts import (
     write_lifecycle_manifest,
     write_reviewed_delivery_lifecycle_manifest,
 )
-from jedi_devproject.bootstrap import apply_bootstrap_fields, plan_bootstrap_fields
+from jedi_devproject.bootstrap import (
+    apply_bootstrap_fields,
+    build_lifecycle_business_rule_spec,
+    plan_bootstrap_fields,
+)
 from jedi_devproject.external_build import (
     ExternalBuildPipelineResult,
     reviewed_delivery_jobs_from_build_result,
@@ -258,6 +262,16 @@ def main(argv: list[str] | None = None) -> int:
     apply_bootstrap.add_argument("--confirm-fields", action="store_true")
     apply_bootstrap.add_argument("--audit-root", type=Path, required=True)
     apply_bootstrap.add_argument("--run-id", default="bootstrap-fields")
+    plan_lifecycle_business_rule = subparsers.add_parser(
+        "plan-lifecycle-business-rule",
+        help="Write a reviewable ServiceNow lifecycle Business Rule spec.",
+    )
+    plan_lifecycle_business_rule.add_argument("--endpoint-url", required=True)
+    plan_lifecycle_business_rule.add_argument("--integration-identity", required=True)
+    plan_lifecycle_business_rule.add_argument("--draft-state-value", required=True)
+    plan_lifecycle_business_rule.add_argument("--ready-state-value", required=True)
+    plan_lifecycle_business_rule.add_argument("--run-id", required=True)
+    plan_lifecycle_business_rule.add_argument("--spec-root", type=Path, required=True)
     run_writeback = subparsers.add_parser(
         "run-writeback-batch",
         help="Run structured writeback jobs from a JSON file.",
@@ -999,6 +1013,25 @@ def main(argv: list[str] | None = None) -> int:
             f"{reasons}".strip()
         )
         return 0 if bootstrap_result.applied or not bootstrap_result.reasons else 1
+
+    if args.command == "plan-lifecycle-business-rule":
+        try:
+            business_rule_spec = build_lifecycle_business_rule_spec(
+                endpoint_url=args.endpoint_url,
+                integration_identity=args.integration_identity,
+                draft_state_value=args.draft_state_value,
+                ready_state_value=args.ready_state_value,
+            )
+        except ValueError as exc:
+            print(f"lifecycle_business_rule_specs=0 reason={exc}")
+            return 1
+        spec_path = write_json_artifact_once(
+            args.spec_root,
+            filename=f"{args.run_id}.json",
+            payload=business_rule_spec.model_dump(mode="json"),
+        )
+        print(f"lifecycle_business_rule_specs=1 table={business_rule_spec.table} path={spec_path}")
+        return 0
 
     if args.command == "run-writeback-batch":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
