@@ -2264,6 +2264,55 @@ def test_cli_run_delivery_artifact_smoke_creates_placeholder_and_plans_attachmen
     assert "sys_id" not in json.dumps(report)
 
 
+def test_cli_run_reviewed_delivery_smoke_creates_reviewed_handoff_path(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    artifact_root = tmp_path / "reviewed-delivery-smoke"
+
+    exit_code = main(
+        [
+            "run-reviewed-delivery-smoke",
+            "--run-id",
+            "reviewed-delivery-smoke-001",
+            "--story-number",
+            "STRY0010013",
+            "--reviewer-id",
+            "release-coordinator",
+            "--artifact-root",
+            str(artifact_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    export_path = artifact_root / "exports" / "reviewed-delivery-smoke-001" / "STRY0010013.xml"
+    job_path = (
+        artifact_root
+        / "reviewed-delivery-jobs"
+        / "reviewed-delivery-smoke-001.json"
+    )
+    report_path = (
+        artifact_root
+        / "artifact-handoff-reports"
+        / "reviewed-delivery-smoke-001.json"
+    )
+    jobs = json.loads(job_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "reviewed_delivery_artifacts=1" in captured.out
+    assert "handoff_plans=1" in captured.out
+    assert "delivery_attachments_planned=1" in captured.out
+    assert "delivery_attachments_applied=0" in captured.out
+    assert export_path.exists()
+    assert "<placeholder_update_set" not in export_path.read_text(encoding="utf-8")
+    assert jobs[0]["delivery_contract"] == "reviewed_export"
+    assert jobs[0]["reviewer_id"] == "release-coordinator"
+    assert report["summary"]["attach_to_servicenow"] == 1
+    assert report["decisions"][0]["delivery_contract"] == "reviewed_export"
+    assert "sys_id" not in json.dumps(report)
+
+
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

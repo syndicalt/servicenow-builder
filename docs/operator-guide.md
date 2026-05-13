@@ -361,6 +361,18 @@ python3 -m jedi_devproject.cli run-delivery-artifact-smoke \
 
 The command creates an XML-shaped placeholder Update Set artifact, writes a handoff report with `delivery_contract=smoke_placeholder`, and prints the planned attachment count. It does not call ServiceNow and does not attach files. This smoke path validates orchestration only; it is not a substitute for a real reviewed Update Set export.
 
+Use `run-reviewed-delivery-smoke` to exercise the approved local delivery path without ServiceNow mutation:
+
+```bash
+python3 -m jedi_devproject.cli run-reviewed-delivery-smoke \
+  --run-id reviewed-delivery-smoke-20260513-001 \
+  --story-number STRY0010013 \
+  --reviewer-id release-coordinator \
+  --artifact-root artifacts/reviewed-delivery-smoke
+```
+
+The command creates a non-placeholder XML fixture, writes a reviewed delivery job with `delivery_contract=reviewed_export`, writes the handoff report, and prints one planned delivery attachment. It does not call ServiceNow and does not attach files.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

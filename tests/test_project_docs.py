@@ -75,6 +75,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "smoke_placeholder" in guide
     assert "review-delivery-artifact" in guide
     assert "--reviewer-id" in guide
+    assert "run-reviewed-delivery-smoke" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -699,3 +700,15 @@ def test_sprint_fifty_change_log_documents_reviewed_delivery_job_writer() -> Non
     assert "artifact_sha256" in change_log
     assert "reviewed_export" in change_log
     assert "write-once" in change_log
+
+
+def test_sprint_fifty_one_change_log_documents_reviewed_delivery_smoke() -> None:
+    change_log = Path("docs/sprints/sprint-51-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run-reviewed-delivery-smoke" in change_log
+    assert "reviewed delivery" in change_log
+    assert "reviewed_export" in change_log
+    assert "attach_to_servicenow=1" in change_log
+    assert "does not call ServiceNow" in change_log

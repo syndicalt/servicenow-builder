@@ -203,6 +203,18 @@ def main(argv: list[str] | None = None) -> int:
     delivery_smoke.add_argument("--run-id", required=True)
     delivery_smoke.add_argument("--story-number", required=True)
     delivery_smoke.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    reviewed_delivery_smoke = subparsers.add_parser(
+        "run-reviewed-delivery-smoke",
+        help="Create a local reviewed delivery artifact and plan attachment.",
+    )
+    reviewed_delivery_smoke.add_argument("--run-id", required=True)
+    reviewed_delivery_smoke.add_argument("--story-number", required=True)
+    reviewed_delivery_smoke.add_argument("--reviewer-id", required=True)
+    reviewed_delivery_smoke.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=Path("artifacts"),
+    )
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -774,6 +786,50 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             "delivery_artifact_created=True "
+            f"delivery_attachments_planned={handoff_report['summary']['attach_to_servicenow']} "
+            "delivery_attachments_applied=0"
+        )
+        return 0
+
+    if args.command == "run-reviewed-delivery-smoke":
+        export_dir = args.artifact_root / "exports" / args.run_id
+        export_dir.mkdir(parents=True, exist_ok=True)
+        export_path = export_dir / f"{args.story_number}.xml"
+        if export_path.exists():
+            parser.error(f"reviewed delivery smoke artifact already exists: {export_path}")
+        export_path.write_text(
+            (
+                f'<unload story_number="{args.story_number}" '
+                'artifact_kind="update_set_xml">'
+                '<sys_update_xml action="INSERT_OR_UPDATE" />'
+                "</unload>"
+            ),
+            encoding="utf-8",
+        )
+        reviewed_job = build_reviewed_delivery_artifact_job(
+            story_number=args.story_number,
+            artifact_kind=ArtifactKind.UPDATE_SET_XML,
+            artifact_path=export_path,
+            reviewer_id=args.reviewer_id,
+        )
+        write_json_artifact_once(
+            args.artifact_root / "reviewed-delivery-jobs",
+            filename=f"{args.run_id}.json",
+            payload=[reviewed_job],
+        )
+        handoff_report = build_artifact_handoff_report(
+            run_id=args.run_id,
+            story_number=args.story_number,
+            artifacts=[reviewed_job],
+        )
+        write_json_artifact_once(
+            args.artifact_root / "artifact-handoff-reports",
+            filename=f"{args.run_id}.json",
+            payload=handoff_report,
+        )
+        print(
+            "reviewed_delivery_artifacts=1 "
+            f"handoff_plans={handoff_report['summary']['total']} "
             f"delivery_attachments_planned={handoff_report['summary']['attach_to_servicenow']} "
             "delivery_attachments_applied=0"
         )
