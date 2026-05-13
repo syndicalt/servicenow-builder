@@ -6,10 +6,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from jedi_devproject import __version__
-from jedi_devproject.artifacts import write_json_artifact_once
+from jedi_devproject.artifacts import write_candidate_artifact, write_json_artifact_once
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
+    generate_implementation_update_set_candidate,
 )
 from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus, Story
 from jedi_devproject.pipeline import PipelineInputs, run_pipeline
@@ -51,6 +52,17 @@ def main(argv: list[str] | None = None) -> int:
     build_packet.add_argument("--story-number")
     build_packet.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     build_packet.add_argument("--run-id", required=True)
+    build_candidate = subparsers.add_parser(
+        "build-implementation-candidate",
+        help=(
+            "Build a validated implementation candidate artifact from an explicit "
+            "provider response."
+        ),
+    )
+    build_candidate.add_argument("--sample-file", type=Path, required=True)
+    build_candidate.add_argument("--provider-response-file", type=Path, required=True)
+    build_candidate.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    build_candidate.add_argument("--run-id", required=True)
     plan_writeback = subparsers.add_parser(
         "plan-writeback",
         help="Plan ServiceNow writeback for an external build result without applying it.",
@@ -171,6 +183,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"implementation_packets={len(stories)} run_id={args.run_id}")
         return 0
 
+    if args.command == "build-implementation-candidate":
+        stories = _load_sample_stories(args.sample_file)
+        if not stories:
+            print("implementation_candidates=0 reason=no_stories_found")
+            return 1
+        provider = StaticResponseProvider(_load_json_object(args.provider_response_file))
+        for story in stories:
+            candidate = generate_implementation_update_set_candidate(
+                story=story,
+                policy=_default_policy(),
+                provider_policy=_default_implementation_provider_policy(),
+                rags=_default_rags(),
+                provider=provider,
+            )
+            write_candidate_artifact(
+                args.artifact_root,
+                run_id=args.run_id,
+                candidate=candidate,
+            )
+        print(f"implementation_candidates={len(stories)} run_id={args.run_id}")
+        return 0
+
     if args.command == "plan-writeback":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         writeback_result = execute_writeback(
@@ -256,6 +290,21 @@ def _load_sample_stories(path: Path) -> list[Story]:
     if isinstance(payload, dict):
         return [Story.model_validate(payload)]
     return [Story.model_validate(item) for item in payload]
+
+
+def _load_json_object(path: Path) -> dict[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("provider response file must contain a JSON object")
+    return payload
+
+
+class StaticResponseProvider:
+    def __init__(self, response: dict[str, object]) -> None:
+        self._response = response
+
+    def generate(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._response
 
 
 def _default_policy() -> AllowlistPolicy:

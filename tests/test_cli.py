@@ -262,6 +262,146 @@ def test_cli_build_implementation_packet_fails_closed_when_pdi_story_missing(
     assert "client-secret" not in captured.out
 
 
+def test_cli_build_implementation_candidate_writes_validated_candidate_artifact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sample_path = tmp_path / "story.json"
+    provider_response_path = tmp_path / "provider-response.json"
+    artifact_root = tmp_path / "implementation-candidates"
+    sample_payload = {
+        "sys_id": "abc123",
+        "number": "STRY0010013",
+        "short_description": "Add implementation notes to the story form",
+        "description": (
+            "Create a string field named u_ai_review_notes on rm_story and place it "
+            "on the default story form so release coordinators can see automation "
+            "notes before testing."
+        ),
+        "story_points": 3,
+        "priority": 4,
+        "state": "Ready",
+        "data_classification": "public",
+        "acceptance_criteria": (
+            "The rm_story table has an active u_ai_review_notes string field labeled "
+            "AI Review Notes. The field appears on the default story form below "
+            "Acceptance criteria. Existing stories are not modified."
+        ),
+        "affected_tables": ["sys_dictionary", "sys_ui_form"],
+        "additional_context": {
+            "target_table": "rm_story",
+            "field_name": "u_ai_review_notes",
+        },
+    }
+    provider_response = {
+        "changes": [
+            {
+                "table": "sys_dictionary",
+                "operation": "insert",
+                "fields": {
+                    "name": "rm_story",
+                    "element": "u_ai_review_notes",
+                    "column_label": "AI Review Notes",
+                },
+            }
+        ],
+        "test_plan": ["Confirm AI Review Notes appears on the Story form."],
+        "rollback_notes": ["Remove the field and form placement from the update set."],
+    }
+    sample_path.write_text(json.dumps(sample_payload), encoding="utf-8")
+    provider_response_path.write_text(json.dumps(provider_response), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "build-implementation-candidate",
+            "--sample-file",
+            str(sample_path),
+            "--provider-response-file",
+            str(provider_response_path),
+            "--artifact-root",
+            str(artifact_root),
+            "--run-id",
+            "candidate-run-001",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    artifact_path = artifact_root / "candidate-run-001" / "STRY0010013.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    serialized_artifact = json.dumps(artifact)
+
+    assert exit_code == 0
+    assert "implementation_candidates=1" in captured.out
+    assert "abc123" not in captured.out
+    assert artifact["story_number"] == "STRY0010013"
+    assert artifact["status"] == "Ready for Review"
+    assert artifact["changes"][0]["table"] == "sys_dictionary"
+    assert artifact["artifact_hash"]
+    assert "Rollback:" in artifact["reviewer_notes"][-1]
+    assert "abc123" not in serialized_artifact
+
+
+def test_cli_build_implementation_candidate_rejects_unsafe_provider_response(
+    tmp_path: Path,
+) -> None:
+    sample_path = tmp_path / "story.json"
+    provider_response_path = tmp_path / "provider-response.json"
+    artifact_root = tmp_path / "implementation-candidates"
+    sample_path.write_text(
+        json.dumps(
+            {
+                "sys_id": "abc123",
+                "number": "STRY0010013",
+                "short_description": "Add implementation notes to the story form",
+                "description": (
+                    "Create a string field named u_ai_review_notes on rm_story and "
+                    "place it on the default story form."
+                ),
+                "story_points": 3,
+                "priority": 4,
+                "state": "Ready",
+                "data_classification": "public",
+                "acceptance_criteria": "The field appears on the default story form.",
+                "affected_tables": ["sys_dictionary", "sys_ui_form"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    provider_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [
+                    {
+                        "table": "sys_user",
+                        "operation": "update",
+                        "fields": {"name": "bad"},
+                    }
+                ],
+                "test_plan": ["Confirm the change."],
+                "rollback_notes": ["Undo the change."],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="table not allowed: sys_user"):
+        main(
+            [
+                "build-implementation-candidate",
+                "--sample-file",
+                str(sample_path),
+                "--provider-response-file",
+                str(provider_response_path),
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "candidate-run-002",
+            ]
+        )
+
+    assert not (artifact_root / "candidate-run-002").exists()
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []

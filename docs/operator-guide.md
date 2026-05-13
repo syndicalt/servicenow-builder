@@ -51,6 +51,20 @@ The command runs deterministic safety, risk, provider-policy, and specialized RA
 
 Packet artifacts exclude the ServiceNow story `sys_id`. They include the story number, minimized story text, allowed tables, allowed operations, citations, compliance context, risk score, and the required model output contract.
 
+Use `build-implementation-candidate` to validate an explicit provider response and write a validated implementation candidate artifact:
+
+```bash
+python3 -m jedi_devproject.cli build-implementation-candidate \
+  --sample-file artifacts/stories/STRY0010013.json \
+  --provider-response-file artifacts/provider-responses/STRY0010013.json \
+  --artifact-root artifacts/implementation-candidates \
+  --run-id candidate-run-20260513-001
+```
+
+The provider response file must be a JSON object containing allowed changes plus `test_plan` and `rollback_notes`. The command validates the response against the deterministic implementation packet gates, then writes a write-once `UpdateSetCandidate` artifact. Unsafe provider responses fail before any artifact is written.
+
+This command is a dry-run operator adapter for a future approved model provider. It does not call Now Assist or any external model endpoint.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:

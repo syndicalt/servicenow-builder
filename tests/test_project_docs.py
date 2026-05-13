@@ -37,6 +37,15 @@ def test_operator_guide_documents_implementation_packet_artifact() -> None:
     assert "sys_id" in guide
 
 
+def test_operator_guide_documents_implementation_candidate_artifact() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "build-implementation-candidate" in guide
+    assert "--provider-response-file" in guide
+    assert "validated implementation candidate" in guide
+    assert "write-once" in guide
+
+
 def test_readme_documents_controlled_story_writeback_scope() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
@@ -89,6 +98,17 @@ def test_sprint_thirty_one_change_log_documents_candidate_handoff() -> None:
     assert "artifact_hash" in change_log
     assert "reviewable handoff" in change_log
     assert "manual-review" in change_log
+
+
+def test_sprint_thirty_two_change_log_documents_candidate_cli() -> None:
+    change_log = Path("docs/sprints/sprint-32-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "build-implementation-candidate" in change_log
+    assert "provider response file" in change_log
+    assert "write-once candidate artifact" in change_log
+    assert "unsafe provider response" in change_log
 
 
 def test_sprint_zero_governance_documents_are_present() -> None:
