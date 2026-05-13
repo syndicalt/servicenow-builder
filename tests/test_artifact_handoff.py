@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import pytest
+
 from jedi_devproject.artifact_handoff import (
     ArtifactExposure,
     ArtifactKind,
@@ -63,19 +67,24 @@ def test_test_evidence_bundle_is_attached_after_approval() -> None:
     assert plan.service_now_attachment_label == "Test Evidence Bundle"
 
 
-def test_handoff_report_summarizes_multiple_artifact_decisions() -> None:
+def test_handoff_report_summarizes_multiple_artifact_decisions(tmp_path: Path) -> None:
+    candidate_path = tmp_path / "STRY0010013.json"
+    evidence_path = tmp_path / "STRY0010013.zip"
+    candidate_path.write_text('{"story_number":"STRY0010013"}', encoding="utf-8")
+    evidence_path.write_text("test evidence", encoding="utf-8")
+
     report = build_artifact_handoff_report(
         run_id="handoff-001",
         story_number="STRY0010013",
         artifacts=[
             {
                 "artifact_kind": "implementation_candidate",
-                "artifact_path": "artifacts/candidates/STRY0010013.json",
+                "artifact_path": str(candidate_path),
                 "approved_for_delivery": False,
             },
             {
                 "artifact_kind": "test_evidence_bundle",
-                "artifact_path": "artifacts/test-evidence/STRY0010013.zip",
+                "artifact_path": str(evidence_path),
                 "approved_for_delivery": True,
             },
         ],
@@ -90,6 +99,22 @@ def test_handoff_report_summarizes_multiple_artifact_decisions() -> None:
         "delivery_evidence": 1,
     }
     assert report["decisions"][0]["attach_to_servicenow"] is False
+    assert len(report["decisions"][0]["artifact_sha256"]) == 64
     assert report["decisions"][1]["service_now_attachment_label"] == (
         "Test Evidence Bundle"
     )
+
+
+def test_handoff_report_rejects_missing_artifact_path(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        build_artifact_handoff_report(
+            run_id="handoff-001",
+            story_number="STRY0010013",
+            artifacts=[
+                {
+                    "artifact_kind": "implementation_candidate",
+                    "artifact_path": str(tmp_path / "missing.json"),
+                    "approved_for_delivery": False,
+                }
+            ],
+        )

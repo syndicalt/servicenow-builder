@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, field_validator
@@ -89,15 +91,17 @@ def build_artifact_handoff_report(
     story_number: str,
     artifacts: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    decisions = [
-        plan_artifact_handoff(
+    decisions = []
+    for artifact in artifacts:
+        artifact_path = Path(str(artifact["artifact_path"]))
+        plan = plan_artifact_handoff(
             story_number=story_number,
             artifact_kind=ArtifactKind(str(artifact["artifact_kind"])),
-            artifact_path=str(artifact["artifact_path"]),
+            artifact_path=str(artifact_path),
             approved_for_delivery=bool(artifact["approved_for_delivery"]),
         ).model_dump(mode="json")
-        for artifact in artifacts
-    ]
+        plan["artifact_sha256"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        decisions.append(plan)
     return {
         "run_id": run_id,
         "story_number": story_number,

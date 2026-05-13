@@ -1656,18 +1656,22 @@ def test_cli_plan_artifact_handoff_writes_decision_report(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    candidate_path = tmp_path / "STRY0010013.json"
+    export_path = tmp_path / "STRY0010013.xml"
+    candidate_path.write_text('{"story_number":"STRY0010013"}', encoding="utf-8")
+    export_path.write_text("<unload/>", encoding="utf-8")
     jobs_path = tmp_path / "handoff-jobs.json"
     jobs_path.write_text(
         json.dumps(
             [
                 {
                     "artifact_kind": "implementation_candidate",
-                    "artifact_path": "artifacts/candidates/STRY0010013.json",
+                    "artifact_path": str(candidate_path),
                     "approved_for_delivery": False,
                 },
                 {
                     "artifact_kind": "update_set_xml",
-                    "artifact_path": "artifacts/exports/STRY0010013.xml",
+                    "artifact_path": str(export_path),
                     "approved_for_delivery": True,
                 },
             ]
@@ -1698,6 +1702,7 @@ def test_cli_plan_artifact_handoff_writes_decision_report(
     assert "handoff_plans=2" in captured.out
     assert "attach_to_servicenow=1" in captured.out
     assert report["summary"]["delivery_evidence"] == 1
+    assert len(report["decisions"][0]["artifact_sha256"]) == 64
     assert report["decisions"][1]["service_now_attachment_label"] == (
         "Approved Update Set XML"
     )

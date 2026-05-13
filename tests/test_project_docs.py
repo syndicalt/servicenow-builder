@@ -64,6 +64,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "attach" in guide
     assert "plan-artifact-handoff" in guide
     assert "handoff report" in guide
+    assert "SHA-256" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -608,3 +609,14 @@ def test_sprint_forty_three_change_log_documents_handoff_report() -> None:
     assert "handoff report" in change_log
     assert "attach_to_servicenow" in change_log
     assert "delivery_evidence" in change_log
+
+
+def test_sprint_forty_four_change_log_documents_handoff_hashing() -> None:
+    change_log = Path("docs/sprints/sprint-44-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "SHA-256" in change_log
+    assert "missing" in change_log
+    assert "fail closed" in change_log
+    assert "handoff report" in change_log
