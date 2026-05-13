@@ -59,7 +59,9 @@ def main(argv: list[str] | None = None) -> int:
             "provider response."
         ),
     )
-    build_candidate.add_argument("--sample-file", type=Path, required=True)
+    build_candidate.add_argument("--sample-file", type=Path)
+    build_candidate.add_argument("--env-file", type=Path, default=Path(".env"))
+    build_candidate.add_argument("--story-number")
     build_candidate.add_argument("--provider-response-file", type=Path, required=True)
     build_candidate.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     build_candidate.add_argument("--run-id", required=True)
@@ -152,18 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "build-implementation-packet":
-        if args.sample_file:
-            stories = _load_sample_stories(args.sample_file)
-        elif args.story_number:
-            client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
-            stories = client.fetch_stories(
-                sysparm_query=f"number={args.story_number}",
-                limit=1,
-            )
-        else:
-            parser.error(
-                "build-implementation-packet requires --sample-file or --story-number"
-            )
+        stories = _load_stories_from_args(args, parser, "build-implementation-packet")
         if not stories:
             print("implementation_packets=0 reason=no_stories_found")
             return 1
@@ -184,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "build-implementation-candidate":
-        stories = _load_sample_stories(args.sample_file)
+        stories = _load_stories_from_args(args, parser, "build-implementation-candidate")
         if not stories:
             print("implementation_candidates=0 reason=no_stories_found")
             return 1
@@ -290,6 +281,24 @@ def _load_sample_stories(path: Path) -> list[Story]:
     if isinstance(payload, dict):
         return [Story.model_validate(payload)]
     return [Story.model_validate(item) for item in payload]
+
+
+def _load_stories_from_args(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    command_name: str,
+) -> list[Story]:
+    sample_file = getattr(args, "sample_file", None)
+    story_number = getattr(args, "story_number", None)
+    if sample_file:
+        return _load_sample_stories(sample_file)
+    if story_number:
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        return client.fetch_stories(
+            sysparm_query=f"number={story_number}",
+            limit=1,
+        )
+    parser.error(f"{command_name} requires --sample-file or --story-number")
 
 
 def _load_json_object(path: Path) -> dict[str, object]:

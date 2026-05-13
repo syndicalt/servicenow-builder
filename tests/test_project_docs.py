@@ -107,6 +107,7 @@ def test_sprint_thirty_two_change_log_documents_candidate_cli() -> None:
 
     assert "build-implementation-candidate" in change_log
     assert "provider response file" in change_log
+    assert "PDI story source" in change_log
     assert "write-once candidate artifact" in change_log
     assert "unsafe provider response" in change_log
 

@@ -61,6 +61,17 @@ python3 -m jedi_devproject.cli build-implementation-candidate \
   --run-id candidate-run-20260513-001
 ```
 
+The same command can use a read-only PDI story source:
+
+```bash
+python3 -m jedi_devproject.cli build-implementation-candidate \
+  --env-file .env \
+  --story-number STRY0010013 \
+  --provider-response-file artifacts/provider-responses/STRY0010013.json \
+  --artifact-root artifacts/implementation-candidates \
+  --run-id candidate-run-20260513-001
+```
+
 The provider response file must be a JSON object containing allowed changes plus `test_plan` and `rollback_notes`. The command validates the response against the deterministic implementation packet gates, then writes a write-once `UpdateSetCandidate` artifact. Unsafe provider responses fail before any artifact is written.
 
 This command is a dry-run operator adapter for a future approved model provider. It does not call Now Assist or any external model endpoint.

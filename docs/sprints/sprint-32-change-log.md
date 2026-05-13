@@ -3,6 +3,7 @@
 ## Candidate CLI
 
 - Added `build-implementation-candidate` to convert an explicit provider response file into a validated implementation candidate.
+- Added support for a read-only PDI story source by story number.
 - Reused the implementation packet gates and response contract before writing the candidate.
 - Wrote the result through the existing write-once candidate artifact path.
 - Blocked unsafe provider response content before artifact creation.
