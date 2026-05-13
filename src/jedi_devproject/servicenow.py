@@ -255,6 +255,43 @@ class ServiceNowClient:
             if field.active
         ]
 
+    def create_story_dictionary_field(
+        self,
+        *,
+        element: str,
+        column_label: str,
+        internal_type: str,
+        max_length: int | None,
+    ) -> dict[str, Any]:
+        body = {
+            "name": "rm_story",
+            "element": element,
+            "column_label": column_label,
+            "internal_type": internal_type,
+            "active": "true",
+        }
+        if max_length is not None:
+            body["max_length"] = str(max_length)
+
+        request = HttpRequest(
+            method="POST",
+            url=f"{self._settings.base_url}/api/now/table/sys_dictionary",
+            headers={
+                "Authorization": self._auth.authorization_header(),
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            body=body,
+        )
+        response = self._transport.send(request)
+        if response.status_code >= 400:
+            raise ServiceNowApiError(
+                f"ServiceNow API failed with status {response.status_code}: "
+                f"{redact_secrets(response.json_body)}"
+            )
+        result = response.json_body.get("result", {})
+        return result if isinstance(result, dict) else {}
+
     def update_story_fields(self, story_sys_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         request = HttpRequest(
             method="PATCH",

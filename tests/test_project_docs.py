@@ -167,6 +167,17 @@ def test_sprint_thirty_seven_change_log_documents_bootstrap_planning() -> None:
     assert "no form layout" in change_log
 
 
+def test_sprint_thirty_eight_change_log_documents_bootstrap_apply() -> None:
+    change_log = Path("docs/sprints/sprint-38-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "apply-bootstrap-fields" in change_log
+    assert "confirm-table" in change_log
+    assert "confirm-fields" in change_log
+    assert "no form layout" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),

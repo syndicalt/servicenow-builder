@@ -140,6 +140,19 @@ The bootstrap plan only covers custom fields on `rm_story`:
 
 It does not create `state`, and it does not plan form layout changes. Project teams can decide later whether these operational fields should be visible on the Story form.
 
+Use `apply-bootstrap-fields` to create the missing custom table fields after reviewing the plan:
+
+```bash
+python3 -m jedi_devproject.cli apply-bootstrap-fields \
+  --env-file .env \
+  --confirm-table rm_story \
+  --confirm-fields \
+  --audit-root artifacts/bootstrap-audit \
+  --run-id bootstrap-fields-20260513-001
+```
+
+The apply command requires both `--confirm-table rm_story` and `--confirm-fields`. It creates only the missing custom fields and writes a bootstrap audit artifact. It makes no form layout changes and does not create `state`.
+
 Use `plan-writeback` to dry-run the ServiceNow writeback that would follow a successful external build:
 
 ```bash

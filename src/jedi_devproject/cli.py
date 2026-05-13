@@ -7,7 +7,7 @@ from pathlib import Path
 
 from jedi_devproject import __version__
 from jedi_devproject.artifacts import write_candidate_artifact, write_json_artifact_once
-from jedi_devproject.bootstrap import plan_bootstrap_fields
+from jedi_devproject.bootstrap import apply_bootstrap_fields, plan_bootstrap_fields
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
@@ -119,6 +119,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
     )
     plan_bootstrap.add_argument("--env-file", type=Path, default=Path(".env"))
+    apply_bootstrap = subparsers.add_parser(
+        "apply-bootstrap-fields",
+        help="Create missing ServiceNow bootstrap table fields with confirmation.",
+    )
+    apply_bootstrap.add_argument("--env-file", type=Path, default=Path(".env"))
+    apply_bootstrap.add_argument("--confirm-table")
+    apply_bootstrap.add_argument("--confirm-fields", action="store_true")
+    apply_bootstrap.add_argument("--audit-root", type=Path, required=True)
+    apply_bootstrap.add_argument("--run-id", default="bootstrap-fields")
     run_writeback = subparsers.add_parser(
         "run-writeback-batch",
         help="Run structured writeback jobs from a JSON file.",
@@ -413,6 +422,29 @@ def main(argv: list[str] | None = None) -> int:
             f"form_layout_changes={len(bootstrap_plan.form_layout_changes)}"
         )
         return 0 if bootstrap_plan.ready else 1
+
+    if args.command == "apply-bootstrap-fields":
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        bootstrap_result = apply_bootstrap_fields(
+            client,
+            confirm_table=args.confirm_table,
+            confirm_fields=args.confirm_fields,
+        )
+        audit_payload = bootstrap_result.model_dump(mode="json")
+        audit_payload["run_id"] = args.run_id
+        write_json_artifact_once(
+            args.audit_root,
+            filename=f"{args.run_id}.json",
+            payload=audit_payload,
+        )
+        reasons = " ".join(f"reason={reason}" for reason in bootstrap_result.reasons)
+        print(
+            f"applied={bootstrap_result.applied} "
+            f"created_fields={len(bootstrap_result.created_fields)} "
+            f"form_layout_changes={len(bootstrap_result.form_layout_changes)} "
+            f"{reasons}".strip()
+        )
+        return 0 if bootstrap_result.applied or not bootstrap_result.reasons else 1
 
     if args.command == "run-writeback-batch":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

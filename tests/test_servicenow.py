@@ -596,6 +596,55 @@ def test_servicenow_client_fetches_active_story_dictionary_fields() -> None:
     ]
 
 
+def test_servicenow_client_creates_story_dictionary_field() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=201,
+                json_body={
+                    "result": {
+                        "name": "rm_story",
+                        "element": "u_ai_status",
+                    }
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    client.create_story_dictionary_field(
+        element="u_ai_status",
+        column_label="AI Status",
+        internal_type="string",
+        max_length=80,
+    )
+
+    request = transport.requests[1]
+    assert request.method == "POST"
+    assert request.url == "https://dev205693.service-now.com/api/now/table/sys_dictionary"
+    assert request.headers["Authorization"] == "Bearer token-123"
+    assert request.headers["Content-Type"] == "application/json"
+    assert request.body == {
+        "name": "rm_story",
+        "element": "u_ai_status",
+        "column_label": "AI Status",
+        "internal_type": "string",
+        "max_length": "80",
+        "active": "true",
+    }
+    assert "client-secret" not in repr(request.sanitized())
+
+
 def test_servicenow_client_updates_story_fields_with_patch_without_secret_leakage() -> None:
     transport = RecordingTransport(
         [

@@ -935,6 +935,7 @@ class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
         self.updated_fields: list[dict[str, object]] = []
+        self.created_dictionary_fields: list[dict[str, object]] = []
         self.stories = [
             Story(
                 sys_id="abc123",
@@ -1008,6 +1009,23 @@ class FakeServiceNowClient:
     def fetch_story_dictionary_fields(self) -> list[StoryDictionaryField]:
         self.calls.append({"fetch_story_dictionary_fields": True})
         return self.dictionary_fields
+
+    def create_story_dictionary_field(
+        self,
+        *,
+        element: str,
+        column_label: str,
+        internal_type: str,
+        max_length: int | None,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "element": element,
+            "column_label": column_label,
+            "internal_type": internal_type,
+            "max_length": max_length,
+        }
+        self.created_dictionary_fields.append(payload)
+        return payload
 
     def update_story_fields(self, story_sys_id: str, fields: dict[str, object]) -> None:
         self.updated_fields.append({"story_sys_id": story_sys_id, "fields": fields})
@@ -1471,6 +1489,100 @@ def test_cli_plan_bootstrap_fields_reports_missing_custom_fields_without_mutatio
     assert "missing_fields=u_ai_build_reference,u_ai_candidate_artifact" in captured.out
     assert "form_layout_changes=0" in captured.out
     assert "state" not in captured.out
+    assert "client-secret" not in captured.out
+
+
+def test_cli_apply_bootstrap_fields_requires_confirmation_without_mutation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "apply-bootstrap-fields",
+                "--env-file",
+                str(env_path),
+                "--audit-root",
+                str(tmp_path / "bootstrap-audit"),
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "applied=False" in captured.out
+    assert "reason=bootstrap_confirmation_required" in captured.out
+    assert fake_client.created_dictionary_fields == []
+
+
+def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.dictionary_fields = []
+    audit_root = tmp_path / "bootstrap-audit"
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "apply-bootstrap-fields",
+                "--env-file",
+                str(env_path),
+                "--confirm-table",
+                "rm_story",
+                "--confirm-fields",
+                "--audit-root",
+                str(audit_root),
+                "--run-id",
+                "bootstrap-run-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    audit_path = audit_root / "bootstrap-run-001.json"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "applied=True" in captured.out
+    assert "created_fields=3" in captured.out
+    assert "form_layout_changes=0" in captured.out
+    assert [field["element"] for field in fake_client.created_dictionary_fields] == [
+        "u_ai_status",
+        "u_ai_build_reference",
+        "u_ai_candidate_artifact",
+    ]
+    assert audit["created_fields"] == [
+        "u_ai_status",
+        "u_ai_build_reference",
+        "u_ai_candidate_artifact",
+    ]
+    assert audit["form_layout_changes"] == []
+    assert "state" not in json.dumps(audit)
     assert "client-secret" not in captured.out
 
 
