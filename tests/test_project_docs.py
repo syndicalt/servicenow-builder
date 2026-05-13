@@ -14,6 +14,7 @@ def test_operator_guide_documents_plan_writeback_dry_run() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
     assert "plan-writeback" in guide
+    assert "verify-writeback" in guide
     assert "dry-run" in guide
     assert "Ready for Testing" in guide
     assert "does not apply" in guide
@@ -532,3 +533,14 @@ def test_sprint_twenty_eight_change_log_documents_implementation_packet() -> Non
     assert "Now Assist" in change_log
     assert "deterministic gates" in change_log
     assert "generate_implementation_candidate" in change_log
+
+
+def test_sprint_thirty_nine_change_log_documents_live_writeback_verification() -> None:
+    change_log = Path("docs/sprints/sprint-39-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "verify-writeback" in change_log
+    assert "STRY0010013" in change_log
+    assert "remote_writeback_already_applied" in change_log
+    assert "build-writeback-apply-20260513-001" in change_log

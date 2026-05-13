@@ -464,6 +464,7 @@ def test_servicenow_client_requests_and_maps_writeback_idempotency_fields() -> N
                             "story_points": "3",
                             "priority": "4",
                             "state": "-7",
+                            "u_ai_status": "Ready for Testing",
                             "u_ai_build_reference": "build-20260513-001",
                             "u_ai_candidate_artifact": "artifacts/STRY0010013.json",
                         }
@@ -486,8 +487,10 @@ def test_servicenow_client_requests_and_maps_writeback_idempotency_fields() -> N
     story = client.fetch_stories(sysparm_query="number=STRY0010013", limit=1)[0]
 
     requested_fields = transport.requests[1].params["sysparm_fields"].split(",")
+    assert "u_ai_status" in requested_fields
     assert "u_ai_build_reference" in requested_fields
     assert "u_ai_candidate_artifact" in requested_fields
+    assert story.additional_context["u_ai_status"] == "Ready for Testing"
     assert story.additional_context["u_ai_build_reference"] == "build-20260513-001"
     assert story.additional_context["u_ai_candidate_artifact"] == "artifacts/STRY0010013.json"
 

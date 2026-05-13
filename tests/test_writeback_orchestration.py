@@ -12,6 +12,7 @@ from jedi_devproject.writeback_orchestration import (
     execute_writeback,
     load_writeback_requests,
     run_writeback_batch,
+    verify_writeback,
 )
 
 
@@ -20,11 +21,15 @@ class FakeWritebackClient:
         self,
         *,
         story_state: str = "Ready",
+        ai_status: str | None = None,
         build_reference: str | None = None,
+        candidate_artifact: str | None = None,
     ) -> None:
         self.updated_fields: list[dict[str, object]] = []
         self.story_state = story_state
+        self.ai_status = ai_status
         self.build_reference = build_reference
+        self.candidate_artifact = candidate_artifact
         self.dictionary_fields = [
             StoryDictionaryField(
                 element="state",
@@ -69,7 +74,13 @@ class FakeWritebackClient:
                 state=self.story_state,
                 data_classification=DataClassification.PUBLIC,
                 additional_context={
-                    "u_ai_build_reference": self.build_reference,
+                    key: value
+                    for key, value in {
+                        "u_ai_status": self.ai_status,
+                        "u_ai_build_reference": self.build_reference,
+                        "u_ai_candidate_artifact": self.candidate_artifact,
+                    }.items()
+                    if value is not None
                 },
             )
         ]
@@ -455,3 +466,49 @@ def test_build_writeback_batch_report_excludes_story_sys_ids(tmp_path: Path) -> 
     assert report["summary"]["applied"] == 1
     assert report["results"][0]["story_number"] == "STRY0010013"
     assert "story_sys_id" not in repr(report)
+
+
+def test_verify_writeback_confirms_remote_story_matches_expected_fields() -> None:
+    client = FakeWritebackClient(
+        story_state="-7",
+        ai_status="Ready for Testing",
+        build_reference="build-20260513-001",
+        candidate_artifact="artifacts/STRY0010013.json",
+    )
+
+    result = verify_writeback(
+        client,
+        story_number="STRY0010013",
+        build_reference="build-20260513-001",
+        artifact_url="artifacts/STRY0010013.json",
+    )
+
+    assert result.verified is True
+    assert result.story_number == "STRY0010013"
+    assert result.expected_state == "-7"
+    assert result.actual_fields["state"] == "-7"
+    assert result.actual_fields["u_ai_status"] == "Ready for Testing"
+    assert result.reasons == []
+
+
+def test_verify_writeback_reports_field_mismatches_without_mutation() -> None:
+    client = FakeWritebackClient(
+        story_state="Ready",
+        ai_status="Build Complete",
+        build_reference="older-build",
+        candidate_artifact="artifacts/old.json",
+    )
+
+    result = verify_writeback(
+        client,
+        story_number="STRY0010013",
+        build_reference="build-20260513-001",
+        artifact_url="artifacts/STRY0010013.json",
+    )
+
+    assert result.verified is False
+    assert "state_mismatch" in result.reasons
+    assert "u_ai_status_mismatch" in result.reasons
+    assert "u_ai_build_reference_mismatch" in result.reasons
+    assert "u_ai_candidate_artifact_mismatch" in result.reasons
+    assert client.updated_fields == []

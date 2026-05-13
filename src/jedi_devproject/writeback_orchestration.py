@@ -89,6 +89,14 @@ class WritebackCapabilityResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class WritebackVerificationResult(BaseModel):
+    story_number: str
+    verified: bool
+    expected_state: str | None = None
+    actual_fields: dict[str, str | None] = Field(default_factory=dict)
+    reasons: list[str] = Field(default_factory=list)
+
+
 def evaluate_writeback_capability(client: WritebackClient) -> WritebackCapabilityResult:
     state_mapping = build_state_mapping_from_choices(
         [choice.model_dump() for choice in client.fetch_story_state_choices()]
@@ -111,6 +119,60 @@ def evaluate_writeback_capability(client: WritebackClient) -> WritebackCapabilit
             state_mapping.ready_for_testing if state_mapping is not None else None
         ),
         missing_fields=missing_fields,
+        reasons=reasons,
+    )
+
+
+def verify_writeback(
+    client: WritebackClient,
+    *,
+    story_number: str,
+    build_reference: str,
+    artifact_url: str | None,
+) -> WritebackVerificationResult:
+    stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+    if not stories:
+        return WritebackVerificationResult(
+            story_number=story_number,
+            verified=False,
+            reasons=["story_not_found"],
+        )
+
+    state_mapping = build_state_mapping_from_choices(
+        [choice.model_dump() for choice in client.fetch_story_state_choices()]
+    )
+    if state_mapping is None:
+        return WritebackVerificationResult(
+            story_number=stories[0].number,
+            verified=False,
+            reasons=["ready_for_testing_state_not_found"],
+        )
+
+    story = stories[0]
+    actual_fields = {
+        "state": story.state,
+        "u_ai_status": story.additional_context.get("u_ai_status"),
+        "u_ai_build_reference": story.additional_context.get("u_ai_build_reference"),
+        "u_ai_candidate_artifact": story.additional_context.get(
+            "u_ai_candidate_artifact"
+        ),
+    }
+    expected_fields = {
+        "state": state_mapping.ready_for_testing,
+        "u_ai_status": "Ready for Testing",
+        "u_ai_build_reference": build_reference,
+        "u_ai_candidate_artifact": artifact_url,
+    }
+    reasons = [
+        f"{field}_mismatch"
+        for field, expected_value in expected_fields.items()
+        if actual_fields.get(field) != expected_value
+    ]
+    return WritebackVerificationResult(
+        story_number=story.number,
+        verified=not reasons,
+        expected_state=state_mapping.ready_for_testing,
+        actual_fields=actual_fields,
         reasons=reasons,
     )
 

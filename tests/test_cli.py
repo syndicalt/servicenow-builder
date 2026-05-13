@@ -936,6 +936,9 @@ class FakeServiceNowClient:
         self.calls: list[dict[str, object]] = []
         self.updated_fields: list[dict[str, object]] = []
         self.created_dictionary_fields: list[dict[str, object]] = []
+        self.ai_status = "Ready for Testing"
+        self.build_reference = "build-20260513-001"
+        self.candidate_artifact = "artifacts/STORY0010001.json"
         self.stories = [
             Story(
                 sys_id="abc123",
@@ -948,6 +951,11 @@ class FakeServiceNowClient:
                 data_classification=DataClassification.PUBLIC,
                 acceptance_criteria="Portal help text shows Send.",
                 affected_tables=["sp_instance"],
+                additional_context={
+                    "u_ai_status": self.ai_status,
+                    "u_ai_build_reference": self.build_reference,
+                    "u_ai_candidate_artifact": self.candidate_artifact,
+                },
             )
         ]
         self.dictionary_fields = [
@@ -1444,6 +1452,86 @@ def test_cli_check_writeback_capability_reports_ready_instance(
     assert "allowed=True" in captured.out
     assert "ready_for_testing_state=-7" in captured.out
     assert "client-secret" not in captured.out
+
+
+def test_cli_verify_writeback_reports_verified_remote_story(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.stories[0] = fake_client.stories[0].model_copy(update={"state": "-7"})
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "verify-writeback",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STORY0010001",
+                "--build-reference",
+                "build-20260513-001",
+                "--artifact-url",
+                "artifacts/STORY0010001.json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "verified=True" in captured.out
+    assert "state=-7" in captured.out
+    assert "u_ai_status=Ready for Testing" in captured.out
+    assert "abc123" not in captured.out
+    assert "client-secret" not in captured.out
+
+
+def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "verify-writeback",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STORY0010001",
+                "--build-reference",
+                "build-20260513-001",
+                "--artifact-url",
+                "artifacts/STORY0010001.json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "verified=False" in captured.out
+    assert "reason=state_mismatch" in captured.out
 
 
 def test_cli_plan_bootstrap_fields_reports_missing_custom_fields_without_mutation(

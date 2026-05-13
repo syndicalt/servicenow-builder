@@ -202,6 +202,18 @@ Automated orchestration should call the application boundary directly through `e
 
 Writeback apply is idempotent by writeback audit artifact and remote writeback state. If an identical story/build audit artifact already exists, `execute_writeback()` treats the retry as already recorded and returns a no-op result without issuing another ServiceNow update. If the audit artifact is missing but the ServiceNow story already has the target state and matching `u_ai_build_reference`, orchestration also returns a no-op result instead of appending duplicate work notes.
 
+Use `verify-writeback` after apply to read the remote story and confirm the structured writeback fields match the expected build result:
+
+```bash
+python3 -m jedi_devproject.cli verify-writeback \
+  --env-file .env \
+  --story-number STRY0010013 \
+  --build-reference build-20260513-001 \
+  --artifact-url artifacts/STRY0010013.json
+```
+
+The command is read-only. It discovers the instance `Ready for Testing` state value, fetches the story, and compares `state`, `u_ai_status`, `u_ai_build_reference`, and `u_ai_candidate_artifact`. It prints `verified=True` only when all expected fields match.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

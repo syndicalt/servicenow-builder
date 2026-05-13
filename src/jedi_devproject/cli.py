@@ -26,6 +26,7 @@ from jedi_devproject.writeback_orchestration import (
     execute_writeback,
     load_writeback_requests,
     run_writeback_batch,
+    verify_writeback,
 )
 
 
@@ -114,6 +115,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Check whether the ServiceNow instance supports structured writeback.",
     )
     check_writeback.add_argument("--env-file", type=Path, default=Path(".env"))
+    verify_writeback_parser = subparsers.add_parser(
+        "verify-writeback",
+        help="Read ServiceNow and verify a completed structured writeback.",
+    )
+    verify_writeback_parser.add_argument("--env-file", type=Path, default=Path(".env"))
+    verify_writeback_parser.add_argument("--story-number", required=True)
+    verify_writeback_parser.add_argument("--build-reference", required=True)
+    verify_writeback_parser.add_argument("--artifact-url")
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -410,6 +419,28 @@ def main(argv: list[str] | None = None) -> int:
             f"missing_fields={missing_fields} reasons={reasons}"
         )
         return 0 if capability.allowed else 1
+
+    if args.command == "verify-writeback":
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        verification = verify_writeback(
+            client,
+            story_number=args.story_number,
+            build_reference=args.build_reference,
+            artifact_url=args.artifact_url,
+        )
+        printable_fields = " ".join(
+            f"{key}={value}" for key, value in sorted(verification.actual_fields.items())
+        )
+        printable_reasons = " ".join(
+            f"reason={reason}" for reason in verification.reasons
+        )
+        print(
+            f"verified={verification.verified} "
+            f"story_number={verification.story_number} "
+            f"expected_state={verification.expected_state} "
+            f"{printable_fields} {printable_reasons}".strip()
+        )
+        return 0 if verification.verified else 1
 
     if args.command == "plan-bootstrap-fields":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

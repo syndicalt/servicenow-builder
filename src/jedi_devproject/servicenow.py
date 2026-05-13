@@ -174,6 +174,7 @@ class ServiceNowClient:
                     "story_points",
                     "priority",
                     "state",
+                    "u_ai_status",
                     "u_ai_build_reference",
                     "u_ai_candidate_artifact",
                 ]
@@ -386,7 +387,11 @@ def _story_from_record(record: dict[str, Any]) -> Story:
         data_classification=DataClassification.PUBLIC,
         additional_context={
             key: str(record[key])
-            for key in ["u_ai_build_reference", "u_ai_candidate_artifact"]
+            for key in [
+                "u_ai_status",
+                "u_ai_build_reference",
+                "u_ai_candidate_artifact",
+            ]
             if record.get(key)
         },
     )
