@@ -118,6 +118,19 @@ The smoke runner writes an implementation packet, validated candidate artifact, 
 
 The smoke runner also writes a lifecycle manifest under `artifacts/lifecycle-smoke/lifecycle-manifests/<run-id>.json`. The manifest is a single audit index for the run and includes SHA-256 hashes for the implementation packet, implementation candidate, candidate batch report, and writeback outcome. It does not include ServiceNow sys_ids.
 
+## Operational Store
+
+The runtime uses SQLite for durable operational state and keeps large, reviewable filesystem artifacts as files under the controlled workspace. SQLite is the local MVP store for lifecycle orchestration because it gives the sidecar real transactions, foreign keys, idempotency constraints, and simple backup semantics without introducing an external database before the runtime boundary is approved.
+
+The operational schema is initialized by `connect_operational_store()` in `jedi_devproject.operational_store` and includes:
+
+- `lifecycle_events`: inbound ServiceNow lifecycle events and their preserved original payload.
+- `fulfillment_jobs`: one idempotent fulfillment job per lifecycle event, including status, attempt count, and worker lock metadata.
+- `job_events`: append-only status history for queued, running, completed, blocked, or failed job transitions.
+- `artifact_refs`: references to generated filesystem artifacts with SHA-256 hashes.
+
+The current claim primitive is `claim_next_fulfillment_job(worker_id=...)`. It uses a SQLite transaction to select the oldest queued job, mark it `running`, increment the attempt count, and set `locked_by` and `locked_at`. Later API and worker processes should use this store instead of treating JSON files as a queue.
+
 ## Lifecycle Event Contract
 
 ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.
