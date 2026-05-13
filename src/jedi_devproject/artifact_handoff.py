@@ -197,12 +197,15 @@ def delivery_attachment_jobs_from_report(report: dict[str, Any]) -> list[dict[st
             continue
         if decision.get("delivery_contract") != _REVIEWED_DELIVERY_CONTRACT:
             raise ValueError("delivery_contract_required")
+        if decision.get("artifact_sha256") is None:
+            raise ValueError("artifact_hash_required")
         jobs.append(
             {
                 "story_number": story_number,
                 "artifact_kind": str(decision["artifact_kind"]),
                 "artifact_path": str(decision["artifact_path"]),
                 "delivery_contract": str(decision["delivery_contract"]),
+                "artifact_sha256": str(decision["artifact_sha256"]),
                 "attachment_label": str(decision["service_now_attachment_label"]),
             }
         )

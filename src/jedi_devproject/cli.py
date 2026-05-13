@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -712,6 +713,15 @@ def main(argv: list[str] | None = None) -> int:
                 "delivery_attachments_applied=0 reason=attachment_audit_already_exists"
             )
             return 1
+        for delivery_job in delivery_jobs:
+            artifact_path = Path(delivery_job["artifact_path"])
+            artifact_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+            if artifact_hash != delivery_job["artifact_sha256"]:
+                print(
+                    f"delivery_attachments_planned={len(delivery_jobs)} "
+                    "delivery_attachments_applied=0 reason=artifact_hash_mismatch"
+                )
+                return 1
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
         if not stories:
@@ -733,6 +743,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "artifact_kind": delivery_job["artifact_kind"],
                     "artifact_path": delivery_job["artifact_path"],
+                    "artifact_sha256": delivery_job["artifact_sha256"],
                     "attachment_label": delivery_job["attachment_label"],
                     "attachment_sys_id": str(attachment.get("sys_id", "")),
                 }

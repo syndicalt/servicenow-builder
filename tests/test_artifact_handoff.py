@@ -192,6 +192,7 @@ def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
                 "artifact_path": "artifacts/export.xml",
                 "attach_to_servicenow": True,
                 "delivery_contract": "reviewed_export",
+                "artifact_sha256": "b" * 64,
                 "service_now_attachment_label": "Approved Update Set XML",
             },
         ],
@@ -205,6 +206,7 @@ def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
             "artifact_kind": "update_set_xml",
             "artifact_path": "artifacts/export.xml",
             "delivery_contract": "reviewed_export",
+            "artifact_sha256": "b" * 64,
             "attachment_label": "Approved Update Set XML",
         }
     ]
