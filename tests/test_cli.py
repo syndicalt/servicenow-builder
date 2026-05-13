@@ -177,6 +177,50 @@ def test_cli_build_implementation_packet_writes_safe_review_artifact(
     assert "abc123" not in serialized_artifact
 
 
+def test_cli_build_implementation_packet_fetches_story_from_pdi(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "implementation-packets"
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "build-implementation-packet",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STRY0010013",
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "packet-run-002",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    artifact_path = artifact_root / "packet-run-002" / "STORY0010001.json"
+
+    assert exit_code == 0
+    assert fake_client.calls[0] == {"sysparm_query": "number=STRY0010013", "limit": 1}
+    assert artifact_path.exists()
+    assert "implementation_packets=1" in captured.out
+    assert "abc123" not in captured.out
+    assert "client-secret" not in captured.out
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []

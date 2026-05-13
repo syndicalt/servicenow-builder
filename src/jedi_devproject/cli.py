@@ -46,7 +46,9 @@ def main(argv: list[str] | None = None) -> int:
         "build-implementation-packet",
         help="Build reviewable LLM implementation packet artifacts from local stories.",
     )
-    build_packet.add_argument("--sample-file", type=Path, required=True)
+    build_packet.add_argument("--sample-file", type=Path)
+    build_packet.add_argument("--env-file", type=Path, default=Path(".env"))
+    build_packet.add_argument("--story-number")
     build_packet.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     build_packet.add_argument("--run-id", required=True)
     plan_writeback = subparsers.add_parser(
@@ -138,7 +140,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "build-implementation-packet":
-        stories = _load_sample_stories(args.sample_file)
+        if args.sample_file:
+            stories = _load_sample_stories(args.sample_file)
+        elif args.story_number:
+            client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+            stories = client.fetch_stories(
+                sysparm_query=f"number={args.story_number}",
+                limit=1,
+            )
+        else:
+            parser.error(
+                "build-implementation-packet requires --sample-file or --story-number"
+            )
         artifact_dir = args.artifact_root / args.run_id
         for story in stories:
             packet = build_implementation_packet(

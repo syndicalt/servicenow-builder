@@ -30,6 +30,7 @@ def test_operator_guide_documents_implementation_packet_artifact() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
     assert "build-implementation-packet" in guide
+    assert "--story-number" in guide
     assert "implementation packet" in guide
     assert "Now Assist" in guide
     assert "does not call a model" in guide
@@ -61,6 +62,7 @@ def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
 
     assert "build-implementation-packet" in change_log
     assert "reviewable implementation packet artifact" in change_log
+    assert "read-only PDI story fetch" in change_log
     assert "Now Assist" in change_log
     assert "no model call" in change_log
 
