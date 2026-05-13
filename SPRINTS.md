@@ -275,5 +275,49 @@ The project continued beyond the original Sprint 0-9 baseline to close the SPM-a
 | Sprint 25 | External build-result writeback job file ingestion |
 | Sprint 26 | Batch report artifacts |
 | Sprint 27 | Manifest alignment for Controlled story writeback |
+| Sprint 28 | PDI lifecycle smoke confidence and current story workflow validation |
+| Sprint 29 | LLM implementation packet CLI and read-only PDI story source |
+| Sprint 30 | Provider output contract hardening with tests and rollback requirements |
+| Sprint 31 | Validated Update Set candidate handoff and stable artifact hashes |
+| Sprint 32 | Candidate builder CLI for explicit provider responses |
+| Sprint 33 | Batch implementation candidate runner |
+| Sprint 34 | Candidate batch report artifacts |
+| Sprint 35 | Candidate batch failure isolation |
+| Sprint 36 | Dry-run lifecycle smoke through writeback planning |
+| Sprint 37 | Bootstrap field planning for controlled writeback fields |
+| Sprint 38 | Bootstrap field apply with confirmation gates |
+| Sprint 39 | Structured writeback verification |
+| Sprint 40 | Apply lifecycle manifest verification |
+| Sprint 41 | Writeback batch idempotency and audit behavior |
+| Sprint 42 | Writeback batch CLI and reports |
+| Sprint 43 | Artifact handoff report contract |
+| Sprint 44 | Artifact handoff evidence hashing and fail-closed missing files |
+| Sprint 45 | Artifact handoff work-note summary writeback |
+| Sprint 46 | Delivery attachment gate through the ServiceNow Attachment API |
+| Sprint 47 | Delivery artifact smoke path for attachment planning |
+| Sprint 48 | Delivery attachment audit records |
+| Sprint 49 | Delivery contract gate requiring `reviewed_export` |
+| Sprint 50 | Reviewed delivery artifact job writer |
+| Sprint 51 | Reviewed delivery smoke path |
+| Sprint 52 | Delivery artifact hash verification before attach |
+| Sprint 53 | Dry-run delivery hash preflight |
+| Sprint 54 | Missing delivery artifact fail-closed preflight |
+| Sprint 55 | Reviewed Update Set XML `sys_update_xml` marker gate |
+| Sprint 56 | Reviewed delivery lifecycle manifest |
 
 Controlled story writeback is now explicitly scoped to external build completion evidence and `Ready for Testing` transition handling. Direct Update Set imports, deployments, production promotion, and unvalidated ServiceNow mutation remain out of scope.
+
+## Next Roadmap Focus
+
+The next product boundary is the External build pipeline contract. The sidecar can already prepare implementation packets, validate implementation candidates, record controlled writeback, and manage reviewed delivery handoff artifacts. What remains is to define the formal contract with the external build system:
+
+- Inputs: story number, implementation candidate, allowed tables, test plan, rollback notes, and compliance context references.
+- Outputs: build status, build reference, reviewed Update Set XML path, test evidence path, failure reasons, and reviewer/build actor identity.
+- Gates: no ServiceNow state advancement or attachment apply unless writeback capability, reviewed export, test evidence, hash, actor, and audit checks pass.
+- Evidence: one lifecycle manifest tying implementation packet, candidate, build result, writeback audit, reviewed delivery job, handoff report, and delivery attachment plan.
+
+After the build contract is explicit, the following roadmap items should be prioritized:
+
+1. Test Evidence Bundle review and attachment path.
+2. Full lifecycle smoke from PDI story fetch through reviewed delivery handoff.
+3. ATO evidence refresh: data flow, threat model, control mapping, residual risk register, and sprint evidence index.

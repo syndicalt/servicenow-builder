@@ -244,6 +244,18 @@ def test_sprint_plan_documents_extended_roadmap_completion() -> None:
     assert "Current MVP roadmap status: implemented" in sprint_plan
 
 
+def test_sprint_plan_documents_delivery_lifecycle_roadmap_through_sprint_56() -> None:
+    sprint_plan = Path("SPRINTS.md").read_text(encoding="utf-8")
+
+    assert "Sprint 28" in sprint_plan
+    assert "Sprint 56" in sprint_plan
+    assert "LLM implementation packet" in sprint_plan
+    assert "Artifact handoff" in sprint_plan
+    assert "Reviewed delivery lifecycle manifest" in sprint_plan
+    assert "Next Roadmap Focus" in sprint_plan
+    assert "External build pipeline contract" in sprint_plan
+
+
 def test_sprint_one_change_log_documents_schema_work() -> None:
     change_log = Path("docs/sprints/sprint-1-change-log.md").read_text(encoding="utf-8")
 
@@ -774,3 +786,14 @@ def test_sprint_fifty_six_change_log_documents_reviewed_delivery_lifecycle_manif
     assert "artifact_handoff_report" in change_log
     assert "reviewed_delivery_job" in change_log
     assert "sys_id" in change_log
+
+
+def test_sprint_fifty_seven_change_log_documents_roadmap_refresh() -> None:
+    change_log = Path("docs/sprints/sprint-57-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "SPRINTS.md" in change_log
+    assert "Sprint 56" in change_log
+    assert "Next Roadmap Focus" in change_log
+    assert "External build pipeline contract" in change_log
