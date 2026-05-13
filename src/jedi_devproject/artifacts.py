@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from jedi_devproject.models import UpdateSetCandidate
-from jedi_devproject.writeback import WritebackAuditEvent
+from jedi_devproject.writeback import BuildClaimAuditEvent, WritebackAuditEvent
 
 
 class ArtifactWriteError(RuntimeError):
@@ -44,6 +44,30 @@ def write_writeback_audit_artifact(root: Path, *, event: WritebackAuditEvent) ->
 def writeback_audit_artifact_path(root: Path, *, event: WritebackAuditEvent) -> Path:
     safe_build_reference = event.build_reference.replace("/", "_").replace("\\", "_")
     return root / f"{event.story_number}-{safe_build_reference}.json"
+
+
+def write_build_claim_audit_artifact(
+    root: Path,
+    *,
+    event: BuildClaimAuditEvent,
+) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    path = build_claim_audit_artifact_path(root, event=event)
+
+    if path.exists():
+        raise ArtifactWriteError(f"build claim audit artifact already exists: {path}")
+
+    path.write_text(event.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def build_claim_audit_artifact_path(
+    root: Path,
+    *,
+    event: BuildClaimAuditEvent,
+) -> Path:
+    safe_event_id = event.lifecycle_event_id.replace("/", "_").replace("\\", "_")
+    return root / f"{event.story_number}-{safe_event_id}-claim.json"
 
 
 def write_json_artifact_once(

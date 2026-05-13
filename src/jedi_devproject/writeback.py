@@ -72,6 +72,19 @@ class WritebackAuditEvent(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class BuildClaimAuditEvent(BaseModel):
+    story_number: str
+    lifecycle_event_id: str
+    actor_type: ActorType
+    actor_id: str
+    run_id: str | None = None
+    apply_requested: bool
+    applied: bool
+    allowed: bool
+    fields: dict[str, str] = Field(default_factory=dict)
+    reasons: list[str] = Field(default_factory=list)
+
+
 REQUIRED_STRUCTURED_WRITEBACK_FIELDS = {
     "state",
     "u_ai_status",

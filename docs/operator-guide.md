@@ -168,6 +168,17 @@ The work note includes the lifecycle event id used as the orchestration trigger.
 
 This is not live apply. The apply path must still fetch the story fresh from ServiceNow, verify the current state, require an integration actor identity, write audit evidence, and use the same allowlisted field and state-transition controls as the Ready for Testing writeback.
 
+The application boundary for applying this claim is `execute_build_claim()` with `BuildClaimExecutionRequest` in `jedi_devproject.writeback_orchestration`. It performs a fresh story read before mutation and blocks with `fresh_story_state_mismatch` if the story is no longer in the expected source state.
+
+Apply requires:
+
+- `apply=True`
+- matching `confirm_story_number`
+- service or human `actor_id`
+- `audit_root`
+
+Successful apply updates the story to `Work in Progress`, sets `u_ai_status=Build In Progress`, writes the work note, and records a build claim audit artifact. Retries are idempotent when the build claim audit already exists and return `build_claim_already_recorded` without another ServiceNow update.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:

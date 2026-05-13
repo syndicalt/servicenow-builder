@@ -906,3 +906,26 @@ def test_sprint_sixty_one_change_log_documents_build_claim_planner() -> None:
     assert "Build In Progress" in change_log
     assert "State transitions are disabled" in change_log
     assert "not live apply" in change_log
+
+
+def test_operator_guide_documents_build_claim_execution_boundary() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "execute_build_claim" in guide
+    assert "BuildClaimExecutionRequest" in guide
+    assert "fresh story" in guide
+    assert "build claim audit" in guide
+    assert "build_claim_already_recorded" in guide
+
+
+def test_sprint_sixty_two_change_log_documents_build_claim_execution() -> None:
+    change_log = Path("docs/sprints/sprint-62-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "execute_build_claim" in change_log
+    assert "BuildClaimExecutionRequest" in change_log
+    assert "fresh story" in change_log
+    assert "build claim audit" in change_log
+    assert "fresh_story_state_mismatch" in change_log
+    assert "Work in Progress" in change_log

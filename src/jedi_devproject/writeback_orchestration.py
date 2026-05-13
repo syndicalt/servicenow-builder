@@ -7,6 +7,8 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field
 
 from jedi_devproject.artifacts import (
+    build_claim_audit_artifact_path,
+    write_build_claim_audit_artifact,
     write_writeback_audit_artifact,
     writeback_audit_artifact_path,
 )
@@ -15,6 +17,7 @@ from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
 from jedi_devproject.writeback import (
     REQUIRED_STRUCTURED_WRITEBACK_FIELDS,
     ActorType,
+    BuildClaimAuditEvent,
     ExternalBuildResult,
     ExternalBuildStatus,
     StoryWritebackPlan,
@@ -22,6 +25,7 @@ from jedi_devproject.writeback import (
     WritebackAuditEvent,
     build_state_mapping_from_choices,
     plan_external_build_writeback,
+    plan_story_build_claim_writeback,
     validate_writeback_fields,
 )
 
@@ -51,6 +55,20 @@ class WritebackExecutionRequest(BaseModel):
     artifact_url: str | None = None
     build_status: ExternalBuildStatus = ExternalBuildStatus.SUCCEEDED
     from_state: str
+    apply: bool = False
+    confirm_story_number: str | None = None
+    actor_type: ActorType = ActorType.SERVICE
+    actor_id: str | None = None
+    execution_id: str | None = None
+    audit_root: Path | None = None
+
+
+class BuildClaimExecutionRequest(BaseModel):
+    story_number: str
+    lifecycle_event_id: str
+    candidate_artifact_url: str | None = None
+    from_state: str
+    claim_state: str = "Work in Progress"
     apply: bool = False
     confirm_story_number: str | None = None
     actor_type: ActorType = ActorType.SERVICE
@@ -374,6 +392,100 @@ def execute_writeback(
     )
 
 
+def execute_build_claim(
+    client: WritebackClient,
+    request: BuildClaimExecutionRequest,
+) -> WritebackExecutionResult:
+    stories = client.fetch_stories(
+        sysparm_query=f"number={request.story_number}",
+        limit=1,
+    )
+    if not stories:
+        return _blocked_result("story_not_found")
+
+    story = stories[0]
+    if story.state != request.from_state:
+        return _blocked_result("fresh_story_state_mismatch", story=story)
+
+    plan = plan_story_build_claim_writeback(
+        story=story,
+        lifecycle_event_id=request.lifecycle_event_id,
+        candidate_artifact_url=request.candidate_artifact_url,
+        claim_state=request.claim_state,
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={request.from_state: {request.claim_state}},
+        ),
+    )
+    plan = _validate_claim_writeback_fields(
+        plan,
+        available_fields=_available_writeback_fields(
+            dictionary_fields=client.fetch_story_dictionary_fields(),
+            state_mapping_found=True,
+        ),
+    )
+    if not plan.allowed:
+        return WritebackExecutionResult(
+            plan=plan,
+            allowed=False,
+            applied=False,
+            reasons=plan.reasons,
+        )
+    if not request.apply:
+        return WritebackExecutionResult(plan=plan, allowed=True, applied=False)
+    if request.confirm_story_number != plan.story_number:
+        return WritebackExecutionResult(
+            plan=plan,
+            allowed=True,
+            applied=False,
+            reasons=["confirmation_mismatch"],
+        )
+    if not request.actor_id or request.audit_root is None:
+        return WritebackExecutionResult(
+            plan=plan,
+            allowed=True,
+            applied=False,
+            reasons=["actor_identity_required"],
+        )
+
+    event = BuildClaimAuditEvent(
+        story_number=plan.story_number,
+        lifecycle_event_id=request.lifecycle_event_id,
+        actor_type=request.actor_type,
+        actor_id=request.actor_id,
+        run_id=request.execution_id,
+        apply_requested=True,
+        applied=True,
+        allowed=plan.allowed,
+        fields=plan.fields,
+        reasons=plan.reasons,
+    )
+    audit_path = build_claim_audit_artifact_path(request.audit_root, event=event)
+    if audit_path.exists():
+        return WritebackExecutionResult(
+            plan=plan,
+            allowed=True,
+            applied=False,
+            idempotent=True,
+            audit_path=audit_path,
+            reasons=["build_claim_already_recorded"],
+        )
+
+    fields_to_apply: dict[str, object] = dict(plan.fields)
+    fields_to_apply["work_notes"] = plan.work_notes
+    client.update_story_fields(plan.story_sys_id, fields_to_apply)
+    written_audit_path = write_build_claim_audit_artifact(
+        request.audit_root,
+        event=event,
+    )
+    return WritebackExecutionResult(
+        plan=plan,
+        allowed=True,
+        applied=True,
+        audit_path=written_audit_path,
+    )
+
+
 def _blocked_result(
     reason: str,
     *,
@@ -433,6 +545,28 @@ def _available_writeback_fields(
     if state_mapping_found:
         available_fields.add("state")
     return available_fields
+
+
+def _validate_claim_writeback_fields(
+    plan: StoryWritebackPlan,
+    *,
+    available_fields: set[str],
+) -> StoryWritebackPlan:
+    required_fields = {"state", "u_ai_status"} & set(plan.fields)
+    if "u_ai_candidate_artifact" in plan.fields:
+        required_fields.add("u_ai_candidate_artifact")
+    missing_fields = sorted(required_fields - available_fields)
+    if not missing_fields:
+        return plan
+    return plan.model_copy(
+        update={
+            "allowed": False,
+            "reasons": [
+                *plan.reasons,
+                f"Required build claim fields are missing: {', '.join(missing_fields)}",
+            ],
+        }
+    )
 
 
 def _batch_summary(results: list[WritebackExecutionResult]) -> dict[str, int]:

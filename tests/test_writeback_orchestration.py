@@ -6,9 +6,11 @@ from jedi_devproject.models import DataClassification, Story
 from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
 from jedi_devproject.writeback import ActorType, ExternalBuildStatus
 from jedi_devproject.writeback_orchestration import (
+    BuildClaimExecutionRequest,
     WritebackExecutionRequest,
     build_writeback_batch_report,
     evaluate_writeback_capability,
+    execute_build_claim,
     execute_writeback,
     load_writeback_requests,
     run_writeback_batch,
@@ -125,6 +127,94 @@ def test_execute_writeback_dry_run_does_not_mutate_or_write_audit(tmp_path: Path
     assert result.applied is False
     assert result.audit_path is None
     assert result.plan.fields["state"] == "-7"
+    assert client.updated_fields == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_execute_build_claim_dry_run_does_not_mutate_or_write_audit(
+    tmp_path: Path,
+) -> None:
+    client = FakeWritebackClient(story_state="Ready")
+
+    result = execute_build_claim(
+        client,
+        BuildClaimExecutionRequest(
+            story_number="STRY0010013",
+            lifecycle_event_id="evt-20260513-001",
+            candidate_artifact_url="artifacts/implementation-candidates/STRY0010013.json",
+            from_state="Ready",
+            apply=False,
+            actor_type=ActorType.SERVICE,
+            actor_id="svc-jedi-orchestrator",
+            execution_id="claim-20260513-001",
+            audit_root=tmp_path,
+        ),
+    )
+
+    assert result.allowed is True
+    assert result.applied is False
+    assert result.audit_path is None
+    assert result.plan.fields["state"] == "Work in Progress"
+    assert result.plan.fields["u_ai_status"] == "Build In Progress"
+    assert client.updated_fields == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_execute_build_claim_applies_and_writes_claim_audit(
+    tmp_path: Path,
+) -> None:
+    client = FakeWritebackClient(story_state="Ready")
+
+    result = execute_build_claim(
+        client,
+        BuildClaimExecutionRequest(
+            story_number="STRY0010013",
+            lifecycle_event_id="evt-20260513-001",
+            candidate_artifact_url="artifacts/implementation-candidates/STRY0010013.json",
+            from_state="Ready",
+            apply=True,
+            confirm_story_number="STRY0010013",
+            actor_type=ActorType.SERVICE,
+            actor_id="svc-jedi-orchestrator",
+            execution_id="claim-20260513-001",
+            audit_root=tmp_path,
+        ),
+    )
+
+    assert result.allowed is True
+    assert result.applied is True
+    assert result.audit_path == tmp_path / "STRY0010013-evt-20260513-001-claim.json"
+    fields = client.updated_fields[0]["fields"]
+    assert isinstance(fields, dict)
+    assert fields["state"] == "Work in Progress"
+    assert fields["u_ai_status"] == "Build In Progress"
+    assert "Automated build started" in str(fields["work_notes"])
+
+
+def test_execute_build_claim_fails_closed_when_fresh_story_is_not_ready(
+    tmp_path: Path,
+) -> None:
+    client = FakeWritebackClient(story_state="Draft")
+
+    result = execute_build_claim(
+        client,
+        BuildClaimExecutionRequest(
+            story_number="STRY0010013",
+            lifecycle_event_id="evt-20260513-001",
+            candidate_artifact_url=None,
+            from_state="Ready",
+            apply=True,
+            confirm_story_number="STRY0010013",
+            actor_type=ActorType.SERVICE,
+            actor_id="svc-jedi-orchestrator",
+            execution_id="claim-20260513-001",
+            audit_root=tmp_path,
+        ),
+    )
+
+    assert result.allowed is False
+    assert result.applied is False
+    assert result.reasons == ["fresh_story_state_mismatch"]
     assert client.updated_fields == []
     assert list(tmp_path.iterdir()) == []
 
