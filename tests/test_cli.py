@@ -668,6 +668,123 @@ def test_cli_run_implementation_candidates_rejects_empty_job_file(
     assert "reason=no_jobs" in captured.out
 
 
+def test_cli_run_implementation_candidates_isolates_failed_jobs(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    good_story_path = tmp_path / "good-story.json"
+    bad_story_path = tmp_path / "bad-story.json"
+    good_response_path = tmp_path / "good-response.json"
+    bad_response_path = tmp_path / "bad-response.json"
+    jobs_path = tmp_path / "implementation-jobs.json"
+    artifact_root = tmp_path / "implementation-candidates"
+    batch_report_root = tmp_path / "implementation-candidate-batches"
+    base_story = {
+        "sys_id": "abc123",
+        "short_description": "Add implementation notes to the story form",
+        "description": (
+            "Create a string field named u_ai_review_notes on rm_story and place it "
+            "on the default story form."
+        ),
+        "story_points": 3,
+        "priority": 4,
+        "state": "Ready",
+        "data_classification": "public",
+        "acceptance_criteria": "The field appears on the default story form.",
+        "affected_tables": ["sys_dictionary", "sys_ui_form"],
+    }
+    good_story_path.write_text(
+        json.dumps({"number": "STRY0010013", **base_story}),
+        encoding="utf-8",
+    )
+    bad_story_path.write_text(
+        json.dumps({"number": "STRY0010014", **base_story}),
+        encoding="utf-8",
+    )
+    good_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [
+                    {
+                        "table": "sys_dictionary",
+                        "operation": "insert",
+                        "fields": {
+                            "name": "rm_story",
+                            "element": "u_ai_review_notes",
+                        },
+                    }
+                ],
+                "test_plan": ["Confirm the field appears on the Story form."],
+                "rollback_notes": ["Remove the field and form placement."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    bad_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [
+                    {
+                        "table": "sys_user",
+                        "operation": "update",
+                        "fields": {"name": "bad"},
+                    }
+                ],
+                "test_plan": ["Confirm the change."],
+                "rollback_notes": ["Undo the change."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    jobs_path.write_text(
+        json.dumps(
+            [
+                {
+                    "sample_file": str(good_story_path),
+                    "provider_response_file": str(good_response_path),
+                },
+                {
+                    "sample_file": str(bad_story_path),
+                    "provider_response_file": str(bad_response_path),
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "run-implementation-candidates",
+            "--jobs-file",
+            str(jobs_path),
+            "--artifact-root",
+            str(artifact_root),
+            "--batch-report-root",
+            str(batch_report_root),
+            "--run-id",
+            "candidate-batch-002",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = json.loads(
+        (batch_report_root / "candidate-batch-002.json").read_text(encoding="utf-8")
+    )
+    serialized_report = json.dumps(report)
+
+    assert exit_code == 1
+    assert "total=2" in captured.out
+    assert "built=1" in captured.out
+    assert "blocked=1" in captured.out
+    assert (artifact_root / "candidate-batch-002" / "STRY0010013.json").exists()
+    assert not (artifact_root / "candidate-batch-002" / "STRY0010014.json").exists()
+    assert report["summary"] == {"total": 2, "built": 1, "blocked": 1}
+    assert report["outcomes"][1]["story_number"] == "STRY0010014"
+    assert report["outcomes"][1]["status"] == "blocked"
+    assert "table not allowed" in report["outcomes"][1]["reason"]
+    assert "abc123" not in serialized_report
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []

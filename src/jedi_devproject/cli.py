@@ -210,32 +210,43 @@ def main(argv: list[str] | None = None) -> int:
             print("total=0 built=0 blocked=0 reason=no_jobs")
             return 1
         built = 0
+        blocked = 0
         outcomes: list[dict[str, object]] = []
         for job in jobs:
             stories = _load_sample_stories(job["sample_file"])
             provider = StaticResponseProvider(_load_json_object(job["provider_response_file"]))
             for story in stories:
-                candidate = generate_implementation_update_set_candidate(
-                    story=story,
-                    policy=_default_policy(),
-                    provider_policy=_default_implementation_provider_policy(),
-                    rags=_default_rags(),
-                    provider=provider,
-                )
-                candidate_path = write_candidate_artifact(
-                    args.artifact_root,
-                    run_id=args.run_id,
-                    candidate=candidate,
-                )
-                outcomes.append(
-                    {
-                        "story_number": candidate.story_number,
-                        "status": "built",
-                        "candidate_artifact": str(candidate_path),
-                    }
-                )
-                built += 1
-        summary = {"total": len(jobs), "built": built, "blocked": 0}
+                try:
+                    candidate = generate_implementation_update_set_candidate(
+                        story=story,
+                        policy=_default_policy(),
+                        provider_policy=_default_implementation_provider_policy(),
+                        rags=_default_rags(),
+                        provider=provider,
+                    )
+                    candidate_path = write_candidate_artifact(
+                        args.artifact_root,
+                        run_id=args.run_id,
+                        candidate=candidate,
+                    )
+                    outcomes.append(
+                        {
+                            "story_number": candidate.story_number,
+                            "status": "built",
+                            "candidate_artifact": str(candidate_path),
+                        }
+                    )
+                    built += 1
+                except (RuntimeError, ValueError) as exc:
+                    outcomes.append(
+                        {
+                            "story_number": story.number,
+                            "status": "blocked",
+                            "reason": str(exc),
+                        }
+                    )
+                    blocked += 1
+        summary = {"total": len(jobs), "built": built, "blocked": blocked}
         write_json_artifact_once(
             args.batch_report_root,
             filename=f"{args.run_id}.json",
@@ -246,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         print(_render_summary(summary))
-        return 0
+        return 0 if blocked == 0 else 1
 
     if args.command == "plan-writeback":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

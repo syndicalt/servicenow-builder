@@ -134,6 +134,17 @@ def test_sprint_thirty_four_change_log_documents_candidate_batch_reports() -> No
     assert "ServiceNow sys_id" in change_log
 
 
+def test_sprint_thirty_five_change_log_documents_failure_isolation() -> None:
+    change_log = Path("docs/sprints/sprint-35-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "failure isolation" in change_log
+    assert "blocked outcome" in change_log
+    assert "continues processing" in change_log
+    assert "nonzero" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),
