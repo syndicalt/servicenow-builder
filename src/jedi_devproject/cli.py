@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_candidates.add_argument("--jobs-file", type=Path, required=True)
     run_candidates.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    run_candidates.add_argument("--batch-report-root", type=Path, required=True)
     run_candidates.add_argument("--run-id", required=True)
     plan_writeback = subparsers.add_parser(
         "plan-writeback",
@@ -209,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
             print("total=0 built=0 blocked=0 reason=no_jobs")
             return 1
         built = 0
+        outcomes: list[dict[str, object]] = []
         for job in jobs:
             stories = _load_sample_stories(job["sample_file"])
             provider = StaticResponseProvider(_load_json_object(job["provider_response_file"]))
@@ -220,13 +222,29 @@ def main(argv: list[str] | None = None) -> int:
                     rags=_default_rags(),
                     provider=provider,
                 )
-                write_candidate_artifact(
+                candidate_path = write_candidate_artifact(
                     args.artifact_root,
                     run_id=args.run_id,
                     candidate=candidate,
                 )
+                outcomes.append(
+                    {
+                        "story_number": candidate.story_number,
+                        "status": "built",
+                        "candidate_artifact": str(candidate_path),
+                    }
+                )
                 built += 1
         summary = {"total": len(jobs), "built": built, "blocked": 0}
+        write_json_artifact_once(
+            args.batch_report_root,
+            filename=f"{args.run_id}.json",
+            payload={
+                "run_id": args.run_id,
+                "summary": summary,
+                "outcomes": outcomes,
+            },
+        )
         print(_render_summary(summary))
         return 0
 

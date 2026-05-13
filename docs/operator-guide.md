@@ -93,10 +93,11 @@ Run it with:
 python3 -m jedi_devproject.cli run-implementation-candidates \
   --jobs-file artifacts/implementation-candidate-jobs.json \
   --artifact-root artifacts/implementation-candidates \
+  --batch-report-root artifacts/implementation-candidate-batches \
   --run-id candidate-batch-20260513-001
 ```
 
-Empty job files fail closed with `reason=no_jobs`. The command prints a safe summary with total, built, and blocked counts.
+Empty job files fail closed with `reason=no_jobs`. The command prints a safe summary with total, built, and blocked counts. Successful runs also write a write-once batch report containing the summary and per-story outcomes. Reports do not include ServiceNow sys_ids.
 
 ## Writeback Planning
 

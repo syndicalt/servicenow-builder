@@ -123,6 +123,17 @@ def test_sprint_thirty_three_change_log_documents_candidate_batch_runner() -> No
     assert "safe summary" in change_log
 
 
+def test_sprint_thirty_four_change_log_documents_candidate_batch_reports() -> None:
+    change_log = Path("docs/sprints/sprint-34-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "candidate batch report" in change_log
+    assert "--batch-report-root" in change_log
+    assert "per-story outcome" in change_log
+    assert "ServiceNow sys_id" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),
