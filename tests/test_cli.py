@@ -785,6 +785,152 @@ def test_cli_run_implementation_candidates_isolates_failed_jobs(
     assert "abc123" not in serialized_report
 
 
+def test_cli_run_lifecycle_smoke_builds_artifacts_and_plans_writeback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    provider_response_path = tmp_path / "provider-response.json"
+    provider_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [
+                    {
+                        "table": "sp_instance",
+                        "operation": "update",
+                        "fields": {"description": "Change portal help text."},
+                    }
+                ],
+                "test_plan": ["Confirm the portal text changed."],
+                "rollback_notes": ["Restore the prior portal text."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "artifacts"
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "run-lifecycle-smoke",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STORY0010001",
+                "--provider-response-file",
+                str(provider_response_path),
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "lifecycle-smoke-001",
+                "--build-reference",
+                "build-lifecycle-smoke-001",
+                "--from-state",
+                "Ready",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "packet_built=1" in captured.out
+    assert "candidate_built=1" in captured.out
+    assert "writeback_allowed=True" in captured.out
+    assert "writeback_applied=False" in captured.out
+    assert "abc123" not in captured.out
+    assert "client-secret" not in captured.out
+    assert fake_client.updated_fields == []
+    assert (
+        artifact_root
+        / "implementation-packets"
+        / "lifecycle-smoke-001"
+        / "STORY0010001.json"
+    ).exists()
+    assert (
+        artifact_root
+        / "implementation-candidates"
+        / "lifecycle-smoke-001"
+        / "STORY0010001.json"
+    ).exists()
+    assert (
+        artifact_root
+        / "implementation-candidate-batches"
+        / "lifecycle-smoke-001.json"
+    ).exists()
+
+
+def test_cli_run_lifecycle_smoke_fails_closed_when_story_missing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    provider_response_path = tmp_path / "provider-response.json"
+    provider_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [],
+                "test_plan": ["Confirm no implementation was generated."],
+                "rollback_notes": ["No rollback required."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "artifacts"
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = []
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "run-lifecycle-smoke",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STORY9999999",
+                "--provider-response-file",
+                str(provider_response_path),
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "lifecycle-smoke-missing",
+                "--build-reference",
+                "build-lifecycle-smoke-missing",
+                "--from-state",
+                "Ready",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "packet_built=0" in captured.out
+    assert "candidate_built=0" in captured.out
+    assert "reason=no_stories_found" in captured.out
+    assert "client-secret" not in captured.out
+    assert not artifact_root.exists()
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []

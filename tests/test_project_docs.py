@@ -145,6 +145,17 @@ def test_sprint_thirty_five_change_log_documents_failure_isolation() -> None:
     assert "nonzero" in change_log
 
 
+def test_sprint_thirty_six_change_log_documents_lifecycle_smoke_runner() -> None:
+    change_log = Path("docs/sprints/sprint-36-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run-lifecycle-smoke" in change_log
+    assert "dry-run lifecycle" in change_log
+    assert "writeback plan" in change_log
+    assert "does not mutate ServiceNow" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),

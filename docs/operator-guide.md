@@ -99,6 +99,23 @@ python3 -m jedi_devproject.cli run-implementation-candidates \
 
 Empty job files fail closed with `reason=no_jobs`. The command prints a safe summary with total, built, and blocked counts. Successful runs also write a write-once batch report containing the summary and per-story outcomes. Reports do not include ServiceNow sys_ids.
 
+## Lifecycle Smoke
+
+Use `run-lifecycle-smoke` to exercise the current dry-run lifecycle from PDI story fetch through writeback planning:
+
+```bash
+python3 -m jedi_devproject.cli run-lifecycle-smoke \
+  --env-file .env \
+  --story-number STRY0010013 \
+  --provider-response-file artifacts/provider-responses/STRY0010013.json \
+  --artifact-root artifacts/lifecycle-smoke \
+  --run-id lifecycle-smoke-20260513-001 \
+  --build-reference build-lifecycle-smoke-20260513-001 \
+  --from-state Ready
+```
+
+The smoke runner writes an implementation packet, validated candidate artifact, candidate batch report, and writeback plan summary. It does not mutate ServiceNow. Missing stories fail closed before artifact creation.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:

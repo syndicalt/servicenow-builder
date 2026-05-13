@@ -73,6 +73,17 @@ def main(argv: list[str] | None = None) -> int:
     run_candidates.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     run_candidates.add_argument("--batch-report-root", type=Path, required=True)
     run_candidates.add_argument("--run-id", required=True)
+    lifecycle_smoke = subparsers.add_parser(
+        "run-lifecycle-smoke",
+        help="Run a dry-run lifecycle smoke test from story fetch through writeback plan.",
+    )
+    lifecycle_smoke.add_argument("--env-file", type=Path, default=Path(".env"))
+    lifecycle_smoke.add_argument("--story-number", required=True)
+    lifecycle_smoke.add_argument("--provider-response-file", type=Path, required=True)
+    lifecycle_smoke.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    lifecycle_smoke.add_argument("--run-id", required=True)
+    lifecycle_smoke.add_argument("--build-reference", required=True)
+    lifecycle_smoke.add_argument("--from-state", required=True)
     plan_writeback = subparsers.add_parser(
         "plan-writeback",
         help="Plan ServiceNow writeback for an external build result without applying it.",
@@ -258,6 +269,80 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(_render_summary(summary))
         return 0 if blocked == 0 else 1
+
+    if args.command == "run-lifecycle-smoke":
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        stories = client.fetch_stories(
+            sysparm_query=f"number={args.story_number}",
+            limit=1,
+        )
+        if not stories:
+            print(
+                "packet_built=0 candidate_built=0 "
+                "writeback_allowed=False writeback_applied=False reason=no_stories_found"
+            )
+            return 1
+
+        story = stories[0]
+        packet = build_implementation_packet(
+            story=story,
+            policy=_default_policy(),
+            provider_policy=_default_implementation_provider_policy(),
+            rags=_default_rags(),
+        )
+        packet_root = args.artifact_root / "implementation-packets" / args.run_id
+        write_json_artifact_once(
+            packet_root,
+            filename=f"{story.number}.json",
+            payload=packet.to_model_payload(),
+        )
+
+        candidate = generate_implementation_update_set_candidate(
+            story=story,
+            policy=_default_policy(),
+            provider_policy=_default_implementation_provider_policy(),
+            rags=_default_rags(),
+            provider=StaticResponseProvider(_load_json_object(args.provider_response_file)),
+        )
+        candidate_path = write_candidate_artifact(
+            args.artifact_root / "implementation-candidates",
+            run_id=args.run_id,
+            candidate=candidate,
+        )
+        summary = {"total": 1, "built": 1, "blocked": 0}
+        write_json_artifact_once(
+            args.artifact_root / "implementation-candidate-batches",
+            filename=f"{args.run_id}.json",
+            payload={
+                "run_id": args.run_id,
+                "summary": summary,
+                "outcomes": [
+                    {
+                        "story_number": candidate.story_number,
+                        "status": "built",
+                        "candidate_artifact": str(candidate_path),
+                    }
+                ],
+            },
+        )
+
+        writeback_result = execute_writeback(
+            client,
+            WritebackExecutionRequest(
+                story_number=story.number,
+                build_reference=args.build_reference,
+                artifact_url=str(candidate_path),
+                from_state=args.from_state,
+                apply=False,
+                execution_id=args.run_id,
+            ),
+        )
+        print(
+            "packet_built=1 candidate_built=1 "
+            f"writeback_allowed={writeback_result.allowed} "
+            f"writeback_applied={writeback_result.applied}"
+        )
+        return 0 if writeback_result.allowed else 1
 
     if args.command == "plan-writeback":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
