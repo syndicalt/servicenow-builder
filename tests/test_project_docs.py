@@ -67,6 +67,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "SHA-256" in guide
     assert "write-artifact-handoff-summary" in guide
     assert "attach-delivery-artifacts" in guide
+    assert "run-delivery-artifact-smoke" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -644,3 +645,14 @@ def test_sprint_forty_six_change_log_documents_delivery_attachment_gate() -> Non
     assert "Attachment API" in change_log
     assert "dry-run" in change_log
     assert "Approved Update Set XML" in change_log
+
+
+def test_sprint_forty_seven_change_log_documents_delivery_smoke() -> None:
+    change_log = Path("docs/sprints/sprint-47-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run-delivery-artifact-smoke" in change_log
+    assert "placeholder" in change_log
+    assert "Update Set XML" in change_log
+    assert "does not call ServiceNow" in change_log

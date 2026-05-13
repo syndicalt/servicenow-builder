@@ -329,6 +329,17 @@ python3 -m jedi_devproject.cli attach-delivery-artifacts \
 
 The command attaches only decisions where `attach_to_servicenow=true`. Internal evidence remains link-only. Delivery files use the ServiceNow Attachment API and are uploaded to the `rm_story` record without changing state or structured AI fields.
 
+Use `run-delivery-artifact-smoke` to exercise the delivery handoff and attachment planning path without a real Update Set exporter:
+
+```bash
+python3 -m jedi_devproject.cli run-delivery-artifact-smoke \
+  --run-id delivery-smoke-20260513-001 \
+  --story-number STRY0010013 \
+  --artifact-root artifacts/delivery-smoke
+```
+
+The command creates an XML-shaped placeholder Update Set artifact, writes a handoff report that marks it as approved delivery evidence, and prints the planned attachment count. It does not call ServiceNow and does not attach files. This smoke path validates orchestration only; it is not a substitute for a real reviewed Update Set export.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

@@ -177,6 +177,13 @@ def main(argv: list[str] | None = None) -> int:
     attach_delivery.add_argument("--apply", action="store_true")
     attach_delivery.add_argument("--confirm-story-number")
     attach_delivery.add_argument("--actor-id")
+    delivery_smoke = subparsers.add_parser(
+        "run-delivery-artifact-smoke",
+        help="Create a local placeholder delivery artifact and plan attachment.",
+    )
+    delivery_smoke.add_argument("--run-id", required=True)
+    delivery_smoke.add_argument("--story-number", required=True)
+    delivery_smoke.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -655,6 +662,44 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"delivery_attachments_planned={len(delivery_jobs)} "
             f"delivery_attachments_applied={len(delivery_jobs)}"
+        )
+        return 0
+
+    if args.command == "run-delivery-artifact-smoke":
+        export_dir = args.artifact_root / "exports" / args.run_id
+        export_dir.mkdir(parents=True, exist_ok=True)
+        export_path = export_dir / f"{args.story_number}.xml"
+        if export_path.exists():
+            parser.error(f"delivery smoke artifact already exists: {export_path}")
+        export_path.write_text(
+            (
+                f'<placeholder_update_set story_number="{args.story_number}" '
+                'artifact_kind="update_set_xml">'
+                "Attachment gate smoke only."
+                "</placeholder_update_set>"
+            ),
+            encoding="utf-8",
+        )
+        handoff_report = build_artifact_handoff_report(
+            run_id=args.run_id,
+            story_number=args.story_number,
+            artifacts=[
+                {
+                    "artifact_kind": "update_set_xml",
+                    "artifact_path": str(export_path),
+                    "approved_for_delivery": True,
+                }
+            ],
+        )
+        write_json_artifact_once(
+            args.artifact_root / "artifact-handoff-reports",
+            filename=f"{args.run_id}.json",
+            payload=handoff_report,
+        )
+        print(
+            "delivery_artifact_created=True "
+            f"delivery_attachments_planned={handoff_report['summary']['attach_to_servicenow']} "
+            "delivery_attachments_applied=0"
         )
         return 0
 

@@ -1984,6 +1984,45 @@ def test_cli_attach_delivery_artifacts_requires_confirmation_to_apply(
     assert "abc123" not in captured.out
 
 
+def test_cli_run_delivery_artifact_smoke_creates_placeholder_and_plans_attachment(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    artifact_root = tmp_path / "delivery-smoke"
+
+    exit_code = main(
+        [
+            "run-delivery-artifact-smoke",
+            "--run-id",
+            "delivery-smoke-001",
+            "--story-number",
+            "STRY0010013",
+            "--artifact-root",
+            str(artifact_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    export_path = artifact_root / "exports" / "delivery-smoke-001" / "STRY0010013.xml"
+    report_path = (
+        artifact_root
+        / "artifact-handoff-reports"
+        / "delivery-smoke-001.json"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "delivery_artifact_created=True" in captured.out
+    assert "delivery_attachments_planned=1" in captured.out
+    assert "delivery_attachments_applied=0" in captured.out
+    assert export_path.exists()
+    assert export_path.read_text(encoding="utf-8").startswith("<placeholder_update_set")
+    assert report["summary"]["attach_to_servicenow"] == 1
+    assert report["decisions"][0]["artifact_kind"] == "update_set_xml"
+    assert len(report["decisions"][0]["artifact_sha256"]) == 64
+    assert "sys_id" not in json.dumps(report)
+
+
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
