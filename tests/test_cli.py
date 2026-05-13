@@ -1728,6 +1728,89 @@ def test_cli_plan_artifact_handoff_writes_decision_report(
     assert "sys_id" not in json.dumps(report)
 
 
+def test_cli_review_delivery_artifact_writes_handoff_job(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    job_root = tmp_path / "reviewed-delivery-jobs"
+
+    exit_code = main(
+        [
+            "review-delivery-artifact",
+            "--run-id",
+            "reviewed-export-001",
+            "--story-number",
+            "STRY0010013",
+            "--artifact-kind",
+            "update_set_xml",
+            "--artifact-path",
+            str(export_path),
+            "--reviewer-id",
+            "release-coordinator",
+            "--job-root",
+            str(job_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    job_path = job_root / "reviewed-export-001.json"
+    jobs = json.loads(job_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "reviewed_delivery_artifacts=1" in captured.out
+    assert jobs == [
+        {
+            "story_number": "STRY0010013",
+            "artifact_kind": "update_set_xml",
+            "artifact_path": str(export_path),
+            "approved_for_delivery": True,
+            "delivery_contract": "reviewed_export",
+            "reviewer_id": "release-coordinator",
+            "artifact_sha256": jobs[0]["artifact_sha256"],
+        }
+    ]
+    assert len(jobs[0]["artifact_sha256"]) == 64
+
+
+def test_cli_review_delivery_artifact_fails_closed_for_placeholder_xml(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text(
+        '<placeholder_update_set story_number="STRY0010013" />',
+        encoding="utf-8",
+    )
+    job_root = tmp_path / "reviewed-delivery-jobs"
+
+    exit_code = main(
+        [
+            "review-delivery-artifact",
+            "--run-id",
+            "reviewed-export-001",
+            "--story-number",
+            "STRY0010013",
+            "--artifact-kind",
+            "update_set_xml",
+            "--artifact-path",
+            str(export_path),
+            "--reviewer-id",
+            "release-coordinator",
+            "--job-root",
+            str(job_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "reviewed_delivery_artifacts=0" in captured.out
+    assert "reason=reviewed_export_artifact_required" in captured.out
+    assert not (job_root / "reviewed-export-001.json").exists()
+
+
 def test_cli_write_artifact_handoff_summary_updates_work_notes_only(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

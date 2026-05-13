@@ -73,6 +73,8 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "delivery_contract" in guide
     assert "reviewed_export" in guide
     assert "smoke_placeholder" in guide
+    assert "review-delivery-artifact" in guide
+    assert "--reviewer-id" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -685,3 +687,15 @@ def test_sprint_forty_nine_change_log_documents_delivery_contract_gate() -> None
     assert "smoke_placeholder" in change_log
     assert "approved_for_delivery" in change_log
     assert "fail closed" in change_log
+
+
+def test_sprint_fifty_change_log_documents_reviewed_delivery_job_writer() -> None:
+    change_log = Path("docs/sprints/sprint-50-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "review-delivery-artifact" in change_log
+    assert "reviewer_id" in change_log
+    assert "artifact_sha256" in change_log
+    assert "reviewed_export" in change_log
+    assert "write-once" in change_log

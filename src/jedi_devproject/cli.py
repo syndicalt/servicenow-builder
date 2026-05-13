@@ -7,8 +7,10 @@ from pathlib import Path
 
 from jedi_devproject import __version__
 from jedi_devproject.artifact_handoff import (
+    ArtifactKind,
     build_artifact_handoff_report,
     build_artifact_handoff_work_note,
+    build_reviewed_delivery_artifact_job,
     delivery_attachment_jobs_from_report,
 )
 from jedi_devproject.artifacts import (
@@ -160,6 +162,20 @@ def main(argv: list[str] | None = None) -> int:
     handoff.add_argument("--story-number", required=True)
     handoff.add_argument("--jobs-file", type=Path, required=True)
     handoff.add_argument("--report-root", type=Path, required=True)
+    review_delivery = subparsers.add_parser(
+        "review-delivery-artifact",
+        help="Write a reviewed delivery artifact handoff job.",
+    )
+    review_delivery.add_argument("--run-id", required=True)
+    review_delivery.add_argument("--story-number", required=True)
+    review_delivery.add_argument(
+        "--artifact-kind",
+        choices=[ArtifactKind.UPDATE_SET_XML.value, ArtifactKind.TEST_EVIDENCE_BUNDLE.value],
+        required=True,
+    )
+    review_delivery.add_argument("--artifact-path", type=Path, required=True)
+    review_delivery.add_argument("--reviewer-id", required=True)
+    review_delivery.add_argument("--job-root", type=Path, required=True)
     handoff_summary = subparsers.add_parser(
         "write-artifact-handoff-summary",
         help="Write a ServiceNow work note summarizing an artifact handoff report.",
@@ -585,6 +601,25 @@ def main(argv: list[str] | None = None) -> int:
             payload=report,
         )
         print(_render_summary({"handoff_plans": report["summary"]["total"], **report["summary"]}))
+        return 0
+
+    if args.command == "review-delivery-artifact":
+        try:
+            job = build_reviewed_delivery_artifact_job(
+                story_number=args.story_number,
+                artifact_kind=ArtifactKind(args.artifact_kind),
+                artifact_path=args.artifact_path,
+                reviewer_id=args.reviewer_id,
+            )
+        except ValueError as exc:
+            print(f"reviewed_delivery_artifacts=0 reason={exc}")
+            return 1
+        job_path = write_json_artifact_once(
+            args.job_root,
+            filename=f"{args.run_id}.json",
+            payload=[job],
+        )
+        print(f"reviewed_delivery_artifacts=1 story_number={args.story_number} path={job_path}")
         return 0
 
     if args.command == "write-artifact-handoff-summary":

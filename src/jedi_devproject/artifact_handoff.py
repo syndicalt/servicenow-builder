@@ -49,6 +49,32 @@ _ATTACHMENT_LABELS = {
 _REVIEWED_DELIVERY_CONTRACT = "reviewed_export"
 
 
+def build_reviewed_delivery_artifact_job(
+    *,
+    story_number: str,
+    artifact_kind: ArtifactKind,
+    artifact_path: Path,
+    reviewer_id: str,
+) -> dict[str, Any]:
+    if artifact_kind not in _ATTACHMENT_LABELS:
+        raise ValueError("delivery_artifact_kind_required")
+    if reviewer_id.strip() == "":
+        raise ValueError("reviewer_id_required")
+    if artifact_kind is ArtifactKind.UPDATE_SET_XML and artifact_path.read_text(
+        encoding="utf-8"
+    ).lstrip().startswith("<placeholder_update_set"):
+        raise ValueError("reviewed_export_artifact_required")
+    return {
+        "story_number": story_number,
+        "artifact_kind": artifact_kind.value,
+        "artifact_path": str(artifact_path),
+        "approved_for_delivery": True,
+        "delivery_contract": _REVIEWED_DELIVERY_CONTRACT,
+        "reviewer_id": reviewer_id,
+        "artifact_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+    }
+
+
 def plan_artifact_handoff(
     *,
     story_number: str,

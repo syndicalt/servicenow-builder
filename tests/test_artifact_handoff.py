@@ -7,6 +7,7 @@ from jedi_devproject.artifact_handoff import (
     ArtifactKind,
     build_artifact_handoff_report,
     build_artifact_handoff_work_note,
+    build_reviewed_delivery_artifact_job,
     delivery_attachment_jobs_from_report,
     plan_artifact_handoff,
 )
@@ -207,3 +208,58 @@ def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
             "attachment_label": "Approved Update Set XML",
         }
     ]
+
+
+def test_reviewed_delivery_artifact_job_records_contract_and_hash(
+    tmp_path: Path,
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+
+    job = build_reviewed_delivery_artifact_job(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.UPDATE_SET_XML,
+        artifact_path=export_path,
+        reviewer_id="release-coordinator",
+    )
+
+    assert job["story_number"] == "STRY0010013"
+    assert job["artifact_kind"] == "update_set_xml"
+    assert job["artifact_path"] == str(export_path)
+    assert job["approved_for_delivery"] is True
+    assert job["delivery_contract"] == "reviewed_export"
+    assert job["reviewer_id"] == "release-coordinator"
+    assert len(str(job["artifact_sha256"])) == 64
+
+
+def test_reviewed_delivery_artifact_job_rejects_internal_artifact_kind(
+    tmp_path: Path,
+) -> None:
+    packet_path = tmp_path / "STRY0010013.json"
+    packet_path.write_text('{"story_number":"STRY0010013"}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="delivery_artifact_kind_required"):
+        build_reviewed_delivery_artifact_job(
+            story_number="STRY0010013",
+            artifact_kind=ArtifactKind.IMPLEMENTATION_PACKET,
+            artifact_path=packet_path,
+            reviewer_id="release-coordinator",
+        )
+
+
+def test_reviewed_delivery_artifact_job_rejects_smoke_placeholder_xml(
+    tmp_path: Path,
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text(
+        '<placeholder_update_set story_number="STRY0010013" />',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="reviewed_export_artifact_required"):
+        build_reviewed_delivery_artifact_job(
+            story_number="STRY0010013",
+            artifact_kind=ArtifactKind.UPDATE_SET_XML,
+            artifact_path=export_path,
+            reviewer_id="release-coordinator",
+        )

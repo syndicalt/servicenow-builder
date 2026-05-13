@@ -50,7 +50,7 @@ def write_json_artifact_once(
     root: Path,
     *,
     filename: str,
-    payload: dict[str, Any],
+    payload: Any,
 ) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / filename

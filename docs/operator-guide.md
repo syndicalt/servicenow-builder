@@ -290,6 +290,20 @@ The handoff report records one decision per artifact, including `attach_to_servi
 
 `approved_for_delivery=true` is not sufficient by itself for live attachment. Delivery attachments also require `delivery_contract=reviewed_export`. The local delivery smoke runner uses `delivery_contract=smoke_placeholder`, which proves the planning path but intentionally does not create an attachable delivery artifact.
 
+Use `review-delivery-artifact` to create the reviewed handoff job for a real exported delivery artifact:
+
+```bash
+python3 -m jedi_devproject.cli review-delivery-artifact \
+  --run-id reviewed-export-20260513-001 \
+  --story-number STRY0010013 \
+  --artifact-kind update_set_xml \
+  --artifact-path artifacts/exports/STRY0010013.xml \
+  --reviewer-id release-coordinator \
+  --job-root artifacts/reviewed-delivery-jobs
+```
+
+The command writes a write-once JSON jobs file with `approved_for_delivery=true`, `delivery_contract=reviewed_export`, `reviewer_id`, and `artifact_sha256`. Feed that jobs file into `plan-artifact-handoff` to produce the attachable handoff report. Smoke placeholder XML is rejected and cannot be promoted into a reviewed export.
+
 Use `write-artifact-handoff-summary` to write a short ServiceNow work note that links the handoff report back to the story:
 
 ```bash
