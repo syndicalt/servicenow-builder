@@ -238,6 +238,29 @@ python3 -m jedi_devproject.cli record-lifecycle-manifest \
 
 Lifecycle manifest files are write-once. They are intended for audit review and should reference artifacts by path and hash, not by ServiceNow sys_id.
 
+## External Build Pipeline Contract
+
+The external builder boundary is represented by `ExternalBuildPipelineResult` in `jedi_devproject.external_build`. This is a typed artifact contract, not a build executor.
+
+Required fields:
+
+- `story_number`
+- `build_reference`
+- `status`
+- `candidate_artifact_path`
+- `build_actor_id`
+
+Successful builds also require:
+
+- `reviewed_update_set_xml_path`
+- `test_evidence_path`
+
+The contract rejects unknown fields, including ServiceNow `story_sys_id`. The sidecar should use story number and artifact references at this boundary.
+
+Use `writeback_job_from_build_result()` to produce the structured writeback job shape for Ready for Testing planning. Use `reviewed_delivery_jobs_from_build_result()` to produce reviewed delivery handoff jobs for the Update Set XML and test evidence bundle.
+
+Unsuccessful builds must include failure evidence through `failure_reasons` or `message`. They can produce writeback jobs that route the story to human review, but they cannot produce reviewed delivery jobs.
+
 ## Artifact Handoff Contract
 
 Not every generated artifact should become a ServiceNow attachment. Internal orchestration evidence should stay in the controlled artifact store and be referenced by structured fields, lifecycle manifests, or artifact links.

@@ -83,6 +83,19 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "sys_update_xml" in guide
 
 
+def test_operator_guide_documents_external_build_pipeline_contract() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "External Build Pipeline Contract" in guide
+    assert "ExternalBuildPipelineResult" in guide
+    assert "writeback_job_from_build_result" in guide
+    assert "reviewed_delivery_jobs_from_build_result" in guide
+    assert "candidate_artifact_path" in guide
+    assert "reviewed_update_set_xml_path" in guide
+    assert "test_evidence_path" in guide
+    assert "story_sys_id" in guide
+
+
 def test_readme_documents_controlled_story_writeback_scope() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
@@ -797,3 +810,15 @@ def test_sprint_fifty_seven_change_log_documents_roadmap_refresh() -> None:
     assert "Sprint 56" in change_log
     assert "Next Roadmap Focus" in change_log
     assert "External build pipeline contract" in change_log
+
+
+def test_sprint_fifty_eight_change_log_documents_external_build_contract() -> None:
+    change_log = Path("docs/sprints/sprint-58-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ExternalBuildPipelineResult" in change_log
+    assert "writeback_job_from_build_result" in change_log
+    assert "reviewed_delivery_jobs_from_build_result" in change_log
+    assert "successful builds require reviewed delivery outputs" in change_log
+    assert "story_sys_id" in change_log
