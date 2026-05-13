@@ -143,6 +143,17 @@ The event boundary rejects unknown fields, including ServiceNow `story_sys_id`. 
 
 Bootstrap should eventually install or document the ServiceNow-side pieces needed for this contract: a Business Rule or Flow that detects `Draft` to `Ready`, a Scripted REST API or outbound REST Message path for event delivery, and the integration identity used in `emitted_by`. That bootstrap work must be explicit and reviewed; this contract alone does not create ServiceNow scripts.
 
+Use `process-lifecycle-event` to validate a captured lifecycle event and write a local orchestration plan:
+
+```bash
+python3 -m jedi_devproject.cli process-lifecycle-event \
+  --event-file artifacts/lifecycle-events/STRY0010013-ready.json \
+  --run-id lifecycle-event-20260513-001 \
+  --plan-root artifacts/lifecycle-event-plans
+```
+
+The command writes a write-once plan artifact under `lifecycle-event-plans`. A valid `Draft` to `Ready` event plans evaluation and records `Work in Progress` as the later claim state. Invalid events fail closed with `reason=invalid_lifecycle_event` and do not write a plan artifact. This command does not call ServiceNow and does not mutate story state.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:

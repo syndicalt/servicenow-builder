@@ -34,6 +34,10 @@ from jedi_devproject.implementation_packet import (
     build_implementation_packet,
     generate_implementation_update_set_candidate,
 )
+from jedi_devproject.lifecycle_events import (
+    LifecycleStateChangeEvent,
+    plan_story_ready_lifecycle_event,
+)
 from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus, Story
 from jedi_devproject.pipeline import PipelineInputs, run_pipeline
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
@@ -172,6 +176,13 @@ def main(argv: list[str] | None = None) -> int:
     process_external_build.add_argument("--run-id", required=True)
     process_external_build.add_argument("--writeback-job-root", type=Path, required=True)
     process_external_build.add_argument("--delivery-job-root", type=Path, required=True)
+    process_lifecycle_event = subparsers.add_parser(
+        "process-lifecycle-event",
+        help="Plan local orchestration from a ServiceNow lifecycle event.",
+    )
+    process_lifecycle_event.add_argument("--event-file", type=Path, required=True)
+    process_lifecycle_event.add_argument("--run-id", required=True)
+    process_lifecycle_event.add_argument("--plan-root", type=Path, required=True)
     handoff = subparsers.add_parser(
         "plan-artifact-handoff",
         help="Write a report describing artifact attachment and link decisions.",
@@ -659,6 +670,34 @@ def main(argv: list[str] | None = None) -> int:
             f"reviewed_delivery_jobs={len(external_delivery_jobs)} "
             f"writeback_job_file={writeback_path}"
             f"{delivery_path_text}"
+        )
+        return 0
+
+    if args.command == "process-lifecycle-event":
+        try:
+            lifecycle_event = LifecycleStateChangeEvent.model_validate(
+                _load_json_object(args.event_file)
+            )
+        except (ValidationError, ValueError) as exc:
+            print(f"lifecycle_event_plans=0 reason=invalid_lifecycle_event detail={exc}")
+            return 1
+
+        lifecycle_plan = plan_story_ready_lifecycle_event(lifecycle_event)
+        plan_path = write_json_artifact_once(
+            args.plan_root,
+            filename=f"{args.run_id}.json",
+            payload={
+                "run_id": args.run_id,
+                "event": lifecycle_event.model_dump(mode="json"),
+                "plan": lifecycle_plan.model_dump(mode="json"),
+            },
+        )
+        print(
+            "lifecycle_event_plans=1 "
+            f"story_number={lifecycle_plan.story_number} "
+            f"should_evaluate={lifecycle_plan.should_evaluate} "
+            f"claim_state={lifecycle_plan.claim_state} "
+            f"path={plan_path}"
         )
         return 0
 

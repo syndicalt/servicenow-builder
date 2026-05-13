@@ -860,3 +860,26 @@ def test_sprint_fifty_nine_change_log_documents_lifecycle_event_contract() -> No
     assert "Business Rule" in change_log
     assert "Scripted REST API" in change_log
     assert "no ServiceNow mutation" in change_log
+
+
+def test_operator_guide_documents_lifecycle_event_processor_cli() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "process-lifecycle-event" in guide
+    assert "--event-file" in guide
+    assert "--plan-root" in guide
+    assert "lifecycle-event-plans" in guide
+    assert "write-once" in guide
+
+
+def test_sprint_sixty_change_log_documents_lifecycle_event_processor() -> None:
+    change_log = Path("docs/sprints/sprint-60-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "process-lifecycle-event" in change_log
+    assert "lifecycle-event-plans" in change_log
+    assert "Draft to Ready" in change_log
+    assert "Work in Progress" in change_log
+    assert "invalid_lifecycle_event" in change_log
+    assert "no ServiceNow mutation" in change_log

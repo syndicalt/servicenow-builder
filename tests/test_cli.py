@@ -1792,6 +1792,103 @@ def test_cli_process_failed_external_build_result_writes_only_writeback_job(
     assert not (delivery_root / "external-build-001.json").exists()
 
 
+def test_cli_process_lifecycle_event_writes_story_ready_plan(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    event_path = tmp_path / "story-ready-event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "event_id": "evt-20260513-001",
+                "event_type": "story_state_changed",
+                "source": "servicenow-business-rule",
+                "table": "rm_story",
+                "story_number": "STRY0010013",
+                "previous_state": "Draft",
+                "current_state": "Ready",
+                "occurred_at": "2026-05-13T15:45:00Z",
+                "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
+                "emitted_by": "jedi-devproject-lifecycle-integration",
+            }
+        ),
+        encoding="utf-8",
+    )
+    plan_root = tmp_path / "lifecycle-event-plans"
+
+    exit_code = main(
+        [
+            "process-lifecycle-event",
+            "--event-file",
+            str(event_path),
+            "--run-id",
+            "lifecycle-event-001",
+            "--plan-root",
+            str(plan_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    plan_path = plan_root / "lifecycle-event-001.json"
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "lifecycle_event_plans=1" in captured.out
+    assert "should_evaluate=True" in captured.out
+    assert "claim_state=Work in Progress" in captured.out
+    assert payload["event"]["story_number"] == "STRY0010013"
+    assert payload["event"]["event_id"] == "evt-20260513-001"
+    assert payload["plan"]["lifecycle_action"] == "evaluate_story"
+    assert payload["plan"]["claim_state"] == "Work in Progress"
+    assert payload["plan"]["idempotency_key"] == "evt-20260513-001"
+    assert "story_sys_id" not in json.dumps(payload)
+
+
+def test_cli_process_lifecycle_event_fails_closed_for_invalid_event(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    event_path = tmp_path / "invalid-event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "event_id": "evt-20260513-001",
+                "event_type": "story_state_changed",
+                "source": "servicenow-business-rule",
+                "table": "rm_story",
+                "story_number": "STRY0010013",
+                "previous_state": "Draft",
+                "current_state": "Ready",
+                "occurred_at": "2026-05-13T15:45:00Z",
+                "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
+                "emitted_by": "jedi-devproject-lifecycle-integration",
+                "story_sys_id": "must-not-cross-this-boundary",
+            }
+        ),
+        encoding="utf-8",
+    )
+    plan_root = tmp_path / "lifecycle-event-plans"
+
+    exit_code = main(
+        [
+            "process-lifecycle-event",
+            "--event-file",
+            str(event_path),
+            "--run-id",
+            "lifecycle-event-001",
+            "--plan-root",
+            str(plan_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "lifecycle_event_plans=0" in captured.out
+    assert "reason=invalid_lifecycle_event" in captured.out
+    assert not (plan_root / "lifecycle-event-001.json").exists()
+
+
 def test_cli_plan_artifact_handoff_writes_decision_report(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
