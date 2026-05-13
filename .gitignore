@@ -1,5 +1,6 @@
 .eventloom/
 .env
 .coverage
+artifacts/
 __pycache__/
 *.py[cod]

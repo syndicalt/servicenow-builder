@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from jedi_devproject.models import DataClassification, ProviderStatus
 from jedi_devproject.security_defaults import default_provider_policies
 
@@ -17,3 +19,9 @@ def test_rules_only_default_allows_public_classification_without_external_model(
     assert rules_only.status is ProviderStatus.APPROVED
     assert rules_only.allows(task="classify_story", data_class=DataClassification.PUBLIC)
     assert not rules_only.allows(task="generate_candidate", data_class=DataClassification.CUI)
+
+
+def test_generated_artifacts_are_ignored_by_default() -> None:
+    gitignore = Path(".gitignore").read_text(encoding="utf-8")
+
+    assert "artifacts/" in gitignore
