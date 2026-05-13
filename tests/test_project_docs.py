@@ -156,6 +156,17 @@ def test_sprint_thirty_six_change_log_documents_lifecycle_smoke_runner() -> None
     assert "does not mutate ServiceNow" in change_log
 
 
+def test_sprint_thirty_seven_change_log_documents_bootstrap_planning() -> None:
+    change_log = Path("docs/sprints/sprint-37-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "plan-bootstrap-fields" in change_log
+    assert "u_ai_status" in change_log
+    assert "does not create state" in change_log
+    assert "no form layout" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),

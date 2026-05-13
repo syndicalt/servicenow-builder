@@ -220,9 +220,9 @@ def test_evaluate_writeback_capability_fails_closed_when_field_is_missing() -> N
     client = FakeWritebackClient()
     client.dictionary_fields = [
         StoryDictionaryField(
-            element="state",
-            column_label="State",
-            internal_type="choice",
+            element="u_ai_status",
+            column_label="AI Status",
+            internal_type="string",
             active=True,
         )
     ]
@@ -230,8 +230,38 @@ def test_evaluate_writeback_capability_fails_closed_when_field_is_missing() -> N
     result = evaluate_writeback_capability(client)
 
     assert result.allowed is False
-    assert "u_ai_status" in result.missing_fields
+    assert "state" not in result.missing_fields
+    assert "u_ai_build_reference" in result.missing_fields
     assert "missing_required_writeback_fields" in result.reasons
+
+
+def test_evaluate_writeback_capability_treats_state_choice_as_state_field() -> None:
+    client = FakeWritebackClient()
+    client.dictionary_fields = [
+        StoryDictionaryField(
+            element="u_ai_status",
+            column_label="AI Status",
+            internal_type="string",
+            active=True,
+        ),
+        StoryDictionaryField(
+            element="u_ai_build_reference",
+            column_label="AI Build Reference",
+            internal_type="string",
+            active=True,
+        ),
+        StoryDictionaryField(
+            element="u_ai_candidate_artifact",
+            column_label="AI Candidate Artifact",
+            internal_type="string",
+            active=True,
+        ),
+    ]
+
+    result = evaluate_writeback_capability(client)
+
+    assert result.allowed is True
+    assert result.missing_fields == []
 
 
 def test_run_writeback_batch_applies_requests_after_single_preflight(

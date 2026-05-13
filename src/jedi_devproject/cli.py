@@ -7,6 +7,7 @@ from pathlib import Path
 
 from jedi_devproject import __version__
 from jedi_devproject.artifacts import write_candidate_artifact, write_json_artifact_once
+from jedi_devproject.bootstrap import plan_bootstrap_fields
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
@@ -113,6 +114,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Check whether the ServiceNow instance supports structured writeback.",
     )
     check_writeback.add_argument("--env-file", type=Path, default=Path(".env"))
+    plan_bootstrap = subparsers.add_parser(
+        "plan-bootstrap-fields",
+        help="Plan missing ServiceNow bootstrap table fields without applying changes.",
+    )
+    plan_bootstrap.add_argument("--env-file", type=Path, default=Path(".env"))
     run_writeback = subparsers.add_parser(
         "run-writeback-batch",
         help="Run structured writeback jobs from a JSON file.",
@@ -395,6 +401,18 @@ def main(argv: list[str] | None = None) -> int:
             f"missing_fields={missing_fields} reasons={reasons}"
         )
         return 0 if capability.allowed else 1
+
+    if args.command == "plan-bootstrap-fields":
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        bootstrap_plan = plan_bootstrap_fields(client.fetch_story_dictionary_fields())
+        missing_fields = ",".join(bootstrap_plan.missing_fields)
+        print(
+            f"ready={bootstrap_plan.ready} table={bootstrap_plan.table} "
+            f"missing_fields={missing_fields} "
+            f"fields_to_create={len(bootstrap_plan.fields_to_create)} "
+            f"form_layout_changes={len(bootstrap_plan.form_layout_changes)}"
+        )
+        return 0 if bootstrap_plan.ready else 1
 
     if args.command == "run-writeback-batch":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

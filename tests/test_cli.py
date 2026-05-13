@@ -1428,6 +1428,52 @@ def test_cli_check_writeback_capability_reports_ready_instance(
     assert "client-secret" not in captured.out
 
 
+def test_cli_plan_bootstrap_fields_reports_missing_custom_fields_without_mutation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.dictionary_fields = [
+        StoryDictionaryField(
+            element="u_ai_status",
+            column_label="AI Status",
+            internal_type="string",
+            active=True,
+        )
+    ]
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "plan-bootstrap-fields",
+                "--env-file",
+                str(env_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert fake_client.updated_fields == []
+    assert "ready=False" in captured.out
+    assert "table=rm_story" in captured.out
+    assert "missing_fields=u_ai_build_reference,u_ai_candidate_artifact" in captured.out
+    assert "form_layout_changes=0" in captured.out
+    assert "state" not in captured.out
+    assert "client-secret" not in captured.out
+
+
 def test_cli_run_writeback_batch_processes_job_file(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

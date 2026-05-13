@@ -126,6 +126,20 @@ python3 -m jedi_devproject.cli check-writeback-capability --env-file .env
 
 The command is read-only. It checks for the instance `Ready for Testing` state value and required structured writeback fields.
 
+Use `plan-bootstrap-fields` to inspect the missing custom fields required for writeback:
+
+```bash
+python3 -m jedi_devproject.cli plan-bootstrap-fields --env-file .env
+```
+
+The bootstrap plan only covers custom fields on `rm_story`:
+
+- `u_ai_status`
+- `u_ai_build_reference`
+- `u_ai_candidate_artifact`
+
+It does not create `state`, and it does not plan form layout changes. Project teams can decide later whether these operational fields should be visible on the Story form.
+
 Use `plan-writeback` to dry-run the ServiceNow writeback that would follow a successful external build:
 
 ```bash

@@ -96,6 +96,8 @@ def evaluate_writeback_capability(client: WritebackClient) -> WritebackCapabilit
     available_fields = {
         field.element for field in client.fetch_story_dictionary_fields()
     }
+    if state_mapping is not None:
+        available_fields.add("state")
     missing_fields = sorted(REQUIRED_STRUCTURED_WRITEBACK_FIELDS - available_fields)
     reasons: list[str] = []
     if state_mapping is None:
