@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
@@ -243,6 +243,53 @@ def build_lifecycle_rest_message_spec(
         authentication="configured_in_servicenow",
         content_type="application/json",
     )
+
+
+def lifecycle_webhook_servicenow_record_plan(
+    spec: LifecycleWebhookBootstrapSpec,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "table": "sys_rest_message",
+            "operation": "insert_or_update",
+            "lookup": {"name": spec.rest_message.name},
+            "fields": {
+                "name": spec.rest_message.name,
+                "endpoint": spec.rest_message.endpoint_url,
+                "authentication_type": spec.rest_message.authentication,
+            },
+        },
+        {
+            "table": "sys_rest_message_fn",
+            "operation": "insert_or_update",
+            "lookup": {
+                "rest_message_name": spec.rest_message.name,
+                "function_name": spec.rest_message.method_name,
+            },
+            "fields": {
+                "function_name": spec.rest_message.method_name,
+                "http_method": spec.rest_message.http_method,
+                "content_type": spec.rest_message.content_type,
+            },
+        },
+        {
+            "table": "sys_script",
+            "operation": "insert_or_update",
+            "lookup": {
+                "name": spec.business_rule.name,
+                "collection": spec.business_rule.table,
+            },
+            "fields": {
+                "name": spec.business_rule.name,
+                "collection": spec.business_rule.table,
+                "when": spec.business_rule.when,
+                "action_update": spec.business_rule.action == "update",
+                "active": spec.business_rule.active,
+                "condition": spec.business_rule.condition,
+                "script": spec.business_rule.script,
+            },
+        },
+    ]
 
 
 def _require_non_empty(field_name: str, value: str) -> None:

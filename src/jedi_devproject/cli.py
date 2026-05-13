@@ -26,6 +26,7 @@ from jedi_devproject.artifacts import (
 from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
     build_lifecycle_webhook_bootstrap_spec,
+    lifecycle_webhook_servicenow_record_plan,
     plan_bootstrap_fields,
 )
 from jedi_devproject.external_build import (
@@ -1028,7 +1029,12 @@ def main(argv: list[str] | None = None) -> int:
         spec_path = write_json_artifact_once(
             args.spec_root,
             filename=f"{args.run_id}.json",
-            payload=webhook_bootstrap_spec.model_dump(mode="json"),
+            payload={
+                **webhook_bootstrap_spec.model_dump(mode="json"),
+                "servicenow_records": lifecycle_webhook_servicenow_record_plan(
+                    webhook_bootstrap_spec
+                ),
+            },
         )
         print(
             "lifecycle_business_rule_specs=1 "

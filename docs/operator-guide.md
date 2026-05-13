@@ -166,6 +166,14 @@ The Business Rule references the named REST Message instead of setting the endpo
 
 The generated Business Rule emits `story_state_changed` only when the state changes from the supplied Draft value to the supplied Ready value. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
 
+The artifact also includes `servicenow_records`, a deterministic plan for the ServiceNow tables that later apply code must create or update:
+
+- `sys_rest_message`
+- `sys_rest_message_fn`
+- `sys_script`
+
+Each record includes an `insert_or_update` operation, lookup keys, and the fields to write. The planning command does not apply those records. Live apply must use this record plan, require explicit confirmation, and write audit evidence before making ServiceNow changes.
+
 Use `process-lifecycle-event` to validate a captured lifecycle event and write a local orchestration plan:
 
 ```bash

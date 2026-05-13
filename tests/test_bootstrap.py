@@ -2,6 +2,7 @@ from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
     build_lifecycle_business_rule_spec,
     build_lifecycle_webhook_bootstrap_spec,
+    lifecycle_webhook_servicenow_record_plan,
     plan_bootstrap_fields,
 )
 from jedi_devproject.servicenow import StoryDictionaryField
@@ -192,3 +193,36 @@ def test_lifecycle_webhook_bootstrap_spec_requires_reviewed_endpoint() -> None:
             draft_state_value="-6",
             ready_state_value="1",
         )
+
+
+def test_lifecycle_webhook_servicenow_record_plan_has_explicit_tables() -> None:
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    plan = lifecycle_webhook_servicenow_record_plan(spec)
+
+    assert [record["table"] for record in plan] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
+    assert plan[0]["operation"] == "insert_or_update"
+    assert plan[0]["lookup"] == {"name": "Jedi DevProject Lifecycle Event API"}
+    assert plan[0]["fields"]["endpoint"] == "https://sidecar.example.gov/lifecycle/events"
+    assert plan[1]["lookup"] == {
+        "rest_message_name": "Jedi DevProject Lifecycle Event API",
+        "function_name": "post_event",
+    }
+    assert plan[1]["fields"]["http_method"] == "POST"
+    assert plan[2]["lookup"] == {
+        "name": "Jedi DevProject lifecycle event emitter",
+        "collection": "rm_story",
+    }
+    assert plan[2]["fields"]["when"] == "after"
+    assert plan[2]["fields"]["action_update"] is True
+    assert "story_state_changed" in str(plan[2]["fields"]["script"])
+    assert "story_sys_id" not in str(plan)

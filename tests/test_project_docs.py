@@ -978,3 +978,27 @@ def test_sprint_sixty_four_change_log_documents_lifecycle_rest_message_bundle() 
     assert "business_rule" in change_log
     assert "endpoint URL out of the Business Rule script" in change_log
     assert "configured_in_servicenow" in change_log
+
+
+def test_operator_guide_documents_lifecycle_servicenow_record_plan() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "servicenow_records" in guide
+    assert "sys_rest_message" in guide
+    assert "sys_rest_message_fn" in guide
+    assert "sys_script" in guide
+    assert "insert_or_update" in guide
+    assert "does not apply those records" in guide
+
+
+def test_sprint_sixty_five_change_log_documents_lifecycle_record_plan() -> None:
+    change_log = Path("docs/sprints/sprint-65-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "servicenow_records" in change_log
+    assert "sys_rest_message" in change_log
+    assert "sys_rest_message_fn" in change_log
+    assert "sys_script" in change_log
+    assert "insert_or_update" in change_log
+    assert "no live ServiceNow apply" in change_log

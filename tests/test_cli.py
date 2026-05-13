@@ -3002,6 +3002,11 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
     assert payload["business_rule"]["table"] == "rm_story"
     assert payload["business_rule"]["when"] == "after"
     assert payload["business_rule"]["action"] == "update"
+    assert [record["table"] for record in payload["servicenow_records"]] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
     assert "previous.state == '-6'" in payload["business_rule"]["condition"]
     assert "current.state == '1'" in payload["business_rule"]["condition"]
     assert "https://sidecar.example.gov/lifecycle/events" not in payload["business_rule"]["script"]
