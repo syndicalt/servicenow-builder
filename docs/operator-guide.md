@@ -118,6 +118,31 @@ The smoke runner writes an implementation packet, validated candidate artifact, 
 
 The smoke runner also writes a lifecycle manifest under `artifacts/lifecycle-smoke/lifecycle-manifests/<run-id>.json`. The manifest is a single audit index for the run and includes SHA-256 hashes for the implementation packet, implementation candidate, candidate batch report, and writeback outcome. It does not include ServiceNow sys_ids.
 
+## Lifecycle Event Contract
+
+ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.
+
+The first inbound event contract is `LifecycleStateChangeEvent` in `jedi_devproject.lifecycle_events`. It represents an `rm_story` state change emitted by a ServiceNow Business Rule or equivalent ServiceNow automation into a sidecar Scripted REST API endpoint.
+
+Required fields:
+
+- `event_id`
+- `event_type`
+- `source`
+- `table`
+- `story_number`
+- `previous_state`
+- `current_state`
+- `occurred_at`
+- `correlation_id`
+- `emitted_by`
+
+For the MVP, only `event_type=story_state_changed`, `table=rm_story`, `previous_state=Draft`, and `current_state=Ready` plans evaluation. The sidecar plan is `evaluate_story` with a later claim target of `Work in Progress`. That claim must still perform a fresh ServiceNow story read and allowlisted state-transition check before any mutation.
+
+The event boundary rejects unknown fields, including ServiceNow `story_sys_id`. Story number, idempotency key, correlation id, source, and emitted identity are enough for orchestration correlation without passing internal ServiceNow record identifiers through the external boundary.
+
+Bootstrap should eventually install or document the ServiceNow-side pieces needed for this contract: a Business Rule or Flow that detects `Draft` to `Ready`, a Scripted REST API or outbound REST Message path for event delivery, and the integration identity used in `emitted_by`. That bootstrap work must be explicit and reviewed; this contract alone does not create ServiceNow scripts.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:
@@ -260,6 +285,19 @@ The contract rejects unknown fields, including ServiceNow `story_sys_id`. The si
 Use `writeback_job_from_build_result()` to produce the structured writeback job shape for Ready for Testing planning. Use `reviewed_delivery_jobs_from_build_result()` to produce reviewed delivery handoff jobs for the Update Set XML and test evidence bundle.
 
 Unsuccessful builds must include failure evidence through `failure_reasons` or `message`. They can produce writeback jobs that route the story to human review, but they cannot produce reviewed delivery jobs.
+
+Use `process-external-build-result` to convert a build result file into downstream job files without calling ServiceNow:
+
+```bash
+python3 -m jedi_devproject.cli process-external-build-result \
+  --result-file artifacts/external-build-results/build-20260513-010.json \
+  --from-state "Work in Progress" \
+  --run-id external-build-20260513-010 \
+  --writeback-job-root artifacts/writeback-jobs \
+  --delivery-job-root artifacts/reviewed-delivery-jobs
+```
+
+Successful build results write one structured writeback job and reviewed delivery jobs for the Update Set XML and test evidence bundle. Failed or blocked build results write only the writeback job so downstream orchestration can record the failure without pretending delivery artifacts were approved.
 
 ## Artifact Handoff Contract
 

@@ -30,8 +30,10 @@ This product will run as an SPM-aware sidecar automation service. It will monito
 
 For agile stories, the sidecar may write back only at defined control points:
 
+- Story moves from Draft to Ready: ServiceNow emits a lifecycle event to the sidecar to start evaluation. This event is the trigger for orchestration; comments and work notes are not command inputs.
 - Candidate generated: record analysis status, confidence, risk, artifact reference, assumptions, and reviewer notes.
 - Candidate referred to external build pipeline: record fulfillment route and pipeline handoff metadata.
+- Candidate accepted for automated fulfillment: claim the story by setting it to Work in Progress after fresh story verification and allowlisted transition checks.
 - External build complete: record build output reference and set the story to Ready for Testing when policy permits the state transition.
 - External build failed or blocked: record the failure reason and route the story to human review without advancing the story state.
 
@@ -41,7 +43,8 @@ Comments or work notes may be used for human-readable summaries, but they are no
 
 - Users stay in ServiceNow for demand intake, project governance, backlog refinement, sprint execution, testing, and release visibility.
 - The sidecar must understand enough SPM/PPM context to avoid moving work at the wrong lifecycle stage.
+- Draft to Ready is the first event-driven automation trigger. The event starts evaluation, but build execution still depends on deterministic eligibility, risk, policy, and approval gates.
 - The product needs a ServiceNow writeback layer, but writes must be allowlisted by table, field, state, and lifecycle condition.
-- Ready for Testing is the first permitted automated state advancement, and only after an external build completion signal plus policy checks.
+- Work in Progress is the first permitted automated claim state, and only after a valid ServiceNow lifecycle event plus fresh story verification. Ready for Testing remains the completion state after an external build completion signal plus policy checks.
 - The MVP should not create a separate business workflow UI. A future UI may exist for operators to inspect runs, providers, artifacts, and failures.
 - Any customer-specific state customizations must be discovered from the instance before state writes are enabled.

@@ -822,3 +822,41 @@ def test_sprint_fifty_eight_change_log_documents_external_build_contract() -> No
     assert "reviewed_delivery_jobs_from_build_result" in change_log
     assert "successful builds require reviewed delivery outputs" in change_log
     assert "story_sys_id" in change_log
+
+
+def test_operator_guide_documents_lifecycle_event_contract() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Lifecycle Event Contract" in guide
+    assert "LifecycleStateChangeEvent" in guide
+    assert "story_state_changed" in guide
+    assert "Draft" in guide
+    assert "Ready" in guide
+    assert "Work in Progress" in guide
+    assert "Business Rule" in guide
+    assert "Scripted REST API" in guide
+    assert "story_sys_id" in guide
+
+
+def test_spm_sidecar_adr_documents_event_driven_story_ready_trigger() -> None:
+    adr = Path("docs/adr/0004-spm-sidecar-work-surface.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Draft to Ready" in adr
+    assert "lifecycle event" in adr
+    assert "Work in Progress" in adr
+    assert "ServiceNow remains the canonical work surface" in adr
+
+
+def test_sprint_fifty_nine_change_log_documents_lifecycle_event_contract() -> None:
+    change_log = Path("docs/sprints/sprint-59-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "LifecycleStateChangeEvent" in change_log
+    assert "Draft to Ready" in change_log
+    assert "Work in Progress" in change_log
+    assert "Business Rule" in change_log
+    assert "Scripted REST API" in change_log
+    assert "no ServiceNow mutation" in change_log

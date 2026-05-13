@@ -1675,6 +1675,123 @@ def test_cli_record_lifecycle_manifest_writes_phase_manifest(
     assert "sys_id" not in json.dumps(manifest)
 
 
+def test_cli_process_external_build_result_writes_writeback_and_delivery_jobs(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    candidate_path = tmp_path / "candidate.json"
+    update_set_path = tmp_path / "STRY0010013.xml"
+    evidence_path = tmp_path / "test-evidence.zip"
+    candidate_path.write_text('{"story_number":"STRY0010013"}', encoding="utf-8")
+    update_set_path.write_text("<unload><sys_update_xml /></unload>", encoding="utf-8")
+    evidence_path.write_text("test evidence", encoding="utf-8")
+    result_path = tmp_path / "build-result.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "story_number": "STRY0010013",
+                "build_reference": "build-20260513-010",
+                "status": "succeeded",
+                "candidate_artifact_path": str(candidate_path),
+                "reviewed_update_set_xml_path": str(update_set_path),
+                "test_evidence_path": str(evidence_path),
+                "build_actor_id": "external-builder",
+            }
+        ),
+        encoding="utf-8",
+    )
+    writeback_root = tmp_path / "writeback-jobs"
+    delivery_root = tmp_path / "delivery-jobs"
+
+    exit_code = main(
+        [
+            "process-external-build-result",
+            "--result-file",
+            str(result_path),
+            "--from-state",
+            "Work in Progress",
+            "--run-id",
+            "external-build-001",
+            "--writeback-job-root",
+            str(writeback_root),
+            "--delivery-job-root",
+            str(delivery_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    writeback_jobs = json.loads((writeback_root / "external-build-001.json").read_text())
+    delivery_jobs = json.loads((delivery_root / "external-build-001.json").read_text())
+
+    assert exit_code == 0
+    assert "writeback_jobs=1" in captured.out
+    assert "reviewed_delivery_jobs=2" in captured.out
+    assert writeback_jobs == [
+        {
+            "story_number": "STRY0010013",
+            "build_reference": "build-20260513-010",
+            "artifact_url": str(candidate_path),
+            "build_status": "succeeded",
+            "from_state": "Work in Progress",
+        }
+    ]
+    assert [job["artifact_kind"] for job in delivery_jobs] == [
+        "update_set_xml",
+        "test_evidence_bundle",
+    ]
+    assert all(job["delivery_contract"] == "reviewed_export" for job in delivery_jobs)
+    assert "sys_id" not in json.dumps({"writeback": writeback_jobs, "delivery": delivery_jobs})
+
+
+def test_cli_process_failed_external_build_result_writes_only_writeback_job(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    candidate_path = tmp_path / "candidate.json"
+    candidate_path.write_text('{"story_number":"STRY0010013"}', encoding="utf-8")
+    result_path = tmp_path / "build-result.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "story_number": "STRY0010013",
+                "build_reference": "build-20260513-010",
+                "status": "failed",
+                "candidate_artifact_path": str(candidate_path),
+                "build_actor_id": "external-builder",
+                "failure_reasons": ["unit tests failed"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    writeback_root = tmp_path / "writeback-jobs"
+    delivery_root = tmp_path / "delivery-jobs"
+
+    exit_code = main(
+        [
+            "process-external-build-result",
+            "--result-file",
+            str(result_path),
+            "--from-state",
+            "Work in Progress",
+            "--run-id",
+            "external-build-001",
+            "--writeback-job-root",
+            str(writeback_root),
+            "--delivery-job-root",
+            str(delivery_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    writeback_jobs = json.loads((writeback_root / "external-build-001.json").read_text())
+
+    assert exit_code == 0
+    assert "writeback_jobs=1" in captured.out
+    assert "reviewed_delivery_jobs=0" in captured.out
+    assert writeback_jobs[0]["build_status"] == "failed"
+    assert not (delivery_root / "external-build-001.json").exists()
+
+
 def test_cli_plan_artifact_handoff_writes_decision_report(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

@@ -6,6 +6,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from jedi_devproject import __version__
 from jedi_devproject.artifact_handoff import (
     ArtifactKind,
@@ -22,6 +24,11 @@ from jedi_devproject.artifacts import (
     write_reviewed_delivery_lifecycle_manifest,
 )
 from jedi_devproject.bootstrap import apply_bootstrap_fields, plan_bootstrap_fields
+from jedi_devproject.external_build import (
+    ExternalBuildPipelineResult,
+    reviewed_delivery_jobs_from_build_result,
+    writeback_job_from_build_result,
+)
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
@@ -156,6 +163,15 @@ def main(argv: list[str] | None = None) -> int:
     lifecycle_manifest.add_argument("--verification-verified", action="store_true")
     lifecycle_manifest.add_argument("--verification-state")
     lifecycle_manifest.add_argument("--manifest-root", type=Path, required=True)
+    process_external_build = subparsers.add_parser(
+        "process-external-build-result",
+        help="Plan downstream jobs from an external build result contract.",
+    )
+    process_external_build.add_argument("--result-file", type=Path, required=True)
+    process_external_build.add_argument("--from-state", required=True)
+    process_external_build.add_argument("--run-id", required=True)
+    process_external_build.add_argument("--writeback-job-root", type=Path, required=True)
+    process_external_build.add_argument("--delivery-job-root", type=Path, required=True)
     handoff = subparsers.add_parser(
         "plan-artifact-handoff",
         help="Write a report describing artifact attachment and link decisions.",
@@ -603,6 +619,49 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    if args.command == "process-external-build-result":
+        try:
+            build_result = ExternalBuildPipelineResult.model_validate(
+                _load_json_object(args.result_file)
+            )
+        except (ValidationError, ValueError) as exc:
+            print(f"external_build_results=0 reason=invalid_build_result detail={exc}")
+            return 1
+
+        writeback_jobs = [
+            writeback_job_from_build_result(build_result, from_state=args.from_state)
+        ]
+        try:
+            external_delivery_jobs = reviewed_delivery_jobs_from_build_result(build_result)
+        except ValueError as exc:
+            if str(exc) != "successful_build_required":
+                print(f"external_build_results=0 reason={exc}")
+                return 1
+            external_delivery_jobs = []
+
+        writeback_path = write_json_artifact_once(
+            args.writeback_job_root,
+            filename=f"{args.run_id}.json",
+            payload=writeback_jobs,
+        )
+        delivery_path = None
+        if external_delivery_jobs:
+            delivery_path = write_json_artifact_once(
+                args.delivery_job_root,
+                filename=f"{args.run_id}.json",
+                payload=external_delivery_jobs,
+            )
+
+        delivery_path_text = "" if delivery_path is None else f" delivery_job_file={delivery_path}"
+        print(
+            "external_build_results=1 "
+            f"writeback_jobs={len(writeback_jobs)} "
+            f"reviewed_delivery_jobs={len(external_delivery_jobs)} "
+            f"writeback_job_file={writeback_path}"
+            f"{delivery_path_text}"
+        )
+        return 0
+
     if args.command == "plan-artifact-handoff":
         report = build_artifact_handoff_report(
             run_id=args.run_id,
@@ -748,10 +807,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             attachment_results.append(
                 {
-                    "artifact_kind": delivery_job["artifact_kind"],
-                    "artifact_path": delivery_job["artifact_path"],
-                    "artifact_sha256": delivery_job["artifact_sha256"],
-                    "attachment_label": delivery_job["attachment_label"],
+                    "artifact_kind": str(delivery_job["artifact_kind"]),
+                    "artifact_path": str(delivery_job["artifact_path"]),
+                    "artifact_sha256": str(delivery_job["artifact_sha256"]),
+                    "attachment_label": str(delivery_job["attachment_label"]),
                     "attachment_sys_id": str(attachment.get("sys_id", "")),
                 }
             )
