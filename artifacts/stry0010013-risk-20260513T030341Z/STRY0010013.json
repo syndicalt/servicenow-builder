@@ -1,0 +1,52 @@
+{
+  "story_number": "STRY0010013",
+  "name": "UPD_STRY0010013_AI_Review_Notes_Field",
+  "eligibility_decision": "eligible",
+  "eligibility_reasons": [
+    "story type allowed: dictionary_form",
+    "operation allowed: update",
+    "table allowed: sys_dictionary",
+    "table allowed: sys_ui_form"
+  ],
+  "confidence": 0.82,
+  "risk_score": 0.12,
+  "status": "Ready for Review",
+  "changes": [
+    {
+      "table": "sys_dictionary",
+      "operation": "insert",
+      "fields": {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+        "column_label": "AI Review Notes",
+        "internal_type": "string",
+        "max_length": "8000",
+        "mandatory": "false"
+      },
+      "sys_id": null,
+      "rationale": "Create the AI Review Notes field on rm_story."
+    },
+    {
+      "table": "sys_ui_form",
+      "operation": "update",
+      "fields": {
+        "table": "rm_story",
+        "field": "u_ai_review_notes",
+        "position_hint": "Notes section below Description"
+      },
+      "sys_id": null,
+      "rationale": "Place the new field on the Story form for reviewer validation."
+    }
+  ],
+  "scripts": [],
+  "retrieval_citations": [],
+  "assumptions": [
+    "The requested field is rm_story.u_ai_review_notes.",
+    "The form placement target is the Story form Notes section below Description."
+  ],
+  "reviewer_notes": [
+    "Review the dictionary field and form layout records before export.",
+    "Confirm max length 8000 is acceptable for the target instance."
+  ],
+  "artifact_hash": "f6ae4d22e53615d1bf1809cbd6e02bd62e23c124aebe673ad311683fbeedee7e"
+}

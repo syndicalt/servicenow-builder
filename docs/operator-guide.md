@@ -1,0 +1,119 @@
+# Operator Guide
+
+## Local Configuration
+
+Create a local `.env` file using `.env.example` as the template:
+
+```bash
+SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com
+SERVICENOW_CLIENT_ID=...
+SERVICENOW_CLIENT_SECRET=...
+```
+
+Never commit `.env`.
+
+## Verification
+
+Run the full local gate:
+
+```bash
+python3 -m ruff check src tests && python3 -m mypy src tests && python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90
+```
+
+## Live Smoke Testing
+
+Live smoke tests should be manual and read-only. They should request an OAuth token and query `rm_story` with `sysparm_limit=1`.
+
+Do not print tokens, secrets, sys_ids, or sensitive story content in user-facing summaries.
+
+## Writeback Planning
+
+Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:
+
+```bash
+python3 -m jedi_devproject.cli check-writeback-capability --env-file .env
+```
+
+The command is read-only. It checks for the instance `Ready for Testing` state value and required structured writeback fields.
+
+Use `plan-writeback` to dry-run the ServiceNow writeback that would follow a successful external build:
+
+```bash
+python3 -m jedi_devproject.cli plan-writeback \
+  --env-file .env \
+  --story-number STRY0010013 \
+  --build-reference build-20260513-001 \
+  --artifact-url artifacts/STRY0010013.json \
+  --from-state Ready
+```
+
+The command discovers the instance `Ready for Testing` state value from `sys_choice`, plans the field updates, and prints a safe summary. It does not apply ServiceNow updates.
+
+The command also verifies required structured writeback fields on `rm_story` through `sys_dictionary`:
+
+- `state`
+- `u_ai_status`
+- `u_ai_build_reference`
+- `u_ai_candidate_artifact`
+
+If any required field is missing, the command fails closed and does not apply any update.
+
+To apply the validated writeback, the operator must pass both `--apply` and a matching `--confirm-story-number` value:
+
+```bash
+python3 -m jedi_devproject.cli plan-writeback \
+  --env-file .env \
+  --story-number STRY0010013 \
+  --build-reference build-20260513-001 \
+  --artifact-url artifacts/STRY0010013.json \
+  --from-state Ready \
+  --apply \
+  --confirm-story-number STRY0010013 \
+  --actor-type service \
+  --actor-id svc-jedi-orchestrator \
+  --execution-id run-20260513-001 \
+  --audit-root artifacts/writeback-audit
+```
+
+The dry-run default is intentional. A mismatch between the fetched story number and `--confirm-story-number` blocks the update.
+
+Apply also requires `--actor-id` and `--audit-root`. Automated orchestration should use `--actor-type service` and set `--actor-id` to the service principal, workload identity, or named integration identity that performed the writeback. Manual runs may use `--actor-type human`.
+
+The command writes a local writeback audit artifact before reporting success. Audit artifacts are write-once and include story number, build reference, actor type, actor id, optional execution id, allowed/applied flags, planned fields, and validation reasons. They do not include the ServiceNow story sys_id.
+
+Automated orchestration should call the application boundary directly through `execute_writeback()` in `jedi_devproject.writeback_orchestration`. The CLI is an operator adapter over that same path, not the product integration surface.
+
+Writeback apply is idempotent by writeback audit artifact and remote writeback state. If an identical story/build audit artifact already exists, `execute_writeback()` treats the retry as already recorded and returns a no-op result without issuing another ServiceNow update. If the audit artifact is missing but the ServiceNow story already has the target state and matching `u_ai_build_reference`, orchestration also returns a no-op result instead of appending duplicate work notes.
+
+Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
+
+For file-based orchestration, provide a writeback job file:
+
+```json
+[
+  {
+    "story_number": "STRY0010013",
+    "build_reference": "build-20260513-001",
+    "artifact_url": "artifacts/STRY0010013.json",
+    "from_state": "Ready"
+  }
+]
+```
+
+Run it with:
+
+```bash
+python3 -m jedi_devproject.cli run-writeback-batch \
+  --env-file .env \
+  --jobs-file artifacts/writeback-jobs.json \
+  --apply \
+  --actor-type service \
+  --actor-id svc-jedi-orchestrator \
+  --execution-id run-20260513-001 \
+  --audit-root artifacts/writeback-audit \
+  --batch-report-root artifacts/writeback-batches
+```
+
+Empty job files are rejected. Each job defaults to a successful external build result unless `build_status` is provided.
+
+Each batch writes a write-once batch report artifact named after `--execution-id`. The report includes capability status, summary counts, and per-story outcome records. It does not include ServiceNow sys_ids.

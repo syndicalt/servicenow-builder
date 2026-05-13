@@ -1,0 +1,59 @@
+{
+  "story_number": "STORY-EXAMPLE-001",
+  "name": "UPD_STORY-EXAMPLE-001_Content_Update",
+  "eligibility_decision": "eligible",
+  "eligibility_reasons": [
+    "story type allowed: content_only",
+    "operation allowed: update",
+    "table allowed: sp_instance"
+  ],
+  "confidence": 0.9,
+  "risk_score": 0.1,
+  "status": "Ready for Review",
+  "changes": [
+    {
+      "table": "sp_instance",
+      "operation": "update",
+      "fields": {
+        "description": "Change the request intake portal help text above the submit button from \"Submit your request when all fields are complete.\" to \"Send your request after confirming all required fields are complete.\" This is a content-only wording change for the existing portal widget instance. The requested update is limited to visible portal copy."
+      },
+      "sys_id": null,
+      "rationale": "Template-only content update candidate for reviewer validation."
+    }
+  ],
+  "scripts": [],
+  "retrieval_citations": [
+    {
+      "source": "local/servicenow-update-set-baseline",
+      "content_hash": "794c50fc8b910536ab1df46c4a0e93d3f0a99fc5c663daaf772c9a168220ef5a",
+      "confidence": 1.0,
+      "version": "local"
+    },
+    {
+      "source": "local/instance-sp-instance",
+      "content_hash": "3e78cfbd8842b8a2a8598bb19bf8a811a54b5d406440440e4710e706355c6c21",
+      "confidence": 1.0,
+      "version": "local"
+    },
+    {
+      "source": "local/project-scope",
+      "content_hash": "376bc068e731944252a3a9397830114c2760e926059ce9a84b6c5ecb64a7f255",
+      "confidence": 1.0,
+      "version": "local"
+    },
+    {
+      "source": "local/compliance-model-use",
+      "content_hash": "ff2175c435586e89ed6413d34512f3003ecca40c7ce6bcca15612092fbf23c8a",
+      "confidence": 1.0,
+      "version": "local"
+    }
+  ],
+  "assumptions": [
+    "Story describes a content-only text change."
+  ],
+  "reviewer_notes": [
+    "Review the proposed content field mapping before export.",
+    "Validate in a ServiceNow development or sandbox instance only."
+  ],
+  "artifact_hash": "402b654abee596a97433441f0ac0d32718da46018109bd0c9e8228110731d895"
+}

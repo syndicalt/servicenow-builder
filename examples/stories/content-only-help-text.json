@@ -1,0 +1,22 @@
+{
+  "sys_id": "example-story-001",
+  "number": "STORY-EXAMPLE-001",
+  "short_description": "Update portal help text on the request intake page",
+  "description": "Change the request intake portal help text above the submit button from \"Submit your request when all fields are complete.\" to \"Send your request after confirming all required fields are complete.\" This is a content-only wording change for the existing portal widget instance. The requested update is limited to visible portal copy.",
+  "story_points": 2,
+  "priority": 3,
+  "state": "Ready",
+  "data_classification": "public",
+  "acceptance_criteria": "Given a requester is viewing the request intake portal page, when the form loads, then the help text above the submit button displays \"Send your request after confirming all required fields are complete.\" Given the text update is reviewed, when the candidate artifact is inspected, then the proposed change is limited to the existing portal widget instance text field.",
+  "business_value": 5,
+  "risk": 1,
+  "effort_estimate": 2,
+  "dependencies": [],
+  "affected_tables": ["sp_instance"],
+  "affected_applications": ["Service Portal"],
+  "additional_context": {
+    "change_type": "content_only",
+    "target_surface": "request intake portal",
+    "review_hint": "Validate the affected widget instance and text field before export."
+  }
+}
