@@ -683,6 +683,15 @@ def main(argv: list[str] | None = None) -> int:
                 f"delivery_attachments_applied=0 reason={exc}"
             )
             return 1
+        for delivery_job in delivery_jobs:
+            artifact_path = Path(delivery_job["artifact_path"])
+            artifact_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+            if artifact_hash != delivery_job["artifact_sha256"]:
+                print(
+                    f"delivery_attachments_planned={len(delivery_jobs)} "
+                    "delivery_attachments_applied=0 reason=artifact_hash_mismatch"
+                )
+                return 1
         if not args.apply:
             print(
                 f"delivery_attachments_planned={len(delivery_jobs)} "
@@ -713,15 +722,6 @@ def main(argv: list[str] | None = None) -> int:
                 "delivery_attachments_applied=0 reason=attachment_audit_already_exists"
             )
             return 1
-        for delivery_job in delivery_jobs:
-            artifact_path = Path(delivery_job["artifact_path"])
-            artifact_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-            if artifact_hash != delivery_job["artifact_sha256"]:
-                print(
-                    f"delivery_attachments_planned={len(delivery_jobs)} "
-                    "delivery_attachments_applied=0 reason=artifact_hash_mismatch"
-                )
-                return 1
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
         if not stories:

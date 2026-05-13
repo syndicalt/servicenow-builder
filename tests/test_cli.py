@@ -2087,6 +2087,71 @@ def test_cli_attach_delivery_artifacts_requires_confirmation_to_apply(
     assert "abc123" not in captured.out
 
 
+def test_cli_attach_delivery_artifacts_dry_run_blocks_hash_mismatch(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    reviewed_hash = _sha256(export_path)
+    export_path.write_text("<unload><mutated /></unload>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
+                        "artifact_sha256": reviewed_hash,
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "reason=artifact_hash_mismatch" in captured.out
+    assert fake_client.attached_files == []
+
+
 def test_cli_attach_delivery_artifacts_blocks_hash_mismatch_before_attachment(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
