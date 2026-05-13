@@ -25,7 +25,7 @@ from jedi_devproject.artifacts import (
 )
 from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
-    build_lifecycle_business_rule_spec,
+    build_lifecycle_webhook_bootstrap_spec,
     plan_bootstrap_fields,
 )
 from jedi_devproject.external_build import (
@@ -1016,7 +1016,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "plan-lifecycle-business-rule":
         try:
-            business_rule_spec = build_lifecycle_business_rule_spec(
+            webhook_bootstrap_spec = build_lifecycle_webhook_bootstrap_spec(
                 endpoint_url=args.endpoint_url,
                 integration_identity=args.integration_identity,
                 draft_state_value=args.draft_state_value,
@@ -1028,9 +1028,14 @@ def main(argv: list[str] | None = None) -> int:
         spec_path = write_json_artifact_once(
             args.spec_root,
             filename=f"{args.run_id}.json",
-            payload=business_rule_spec.model_dump(mode="json"),
+            payload=webhook_bootstrap_spec.model_dump(mode="json"),
         )
-        print(f"lifecycle_business_rule_specs=1 table={business_rule_spec.table} path={spec_path}")
+        print(
+            "lifecycle_business_rule_specs=1 "
+            f"table={webhook_bootstrap_spec.business_rule.table} "
+            f"rest_message={webhook_bootstrap_spec.rest_message.name} "
+            f"path={spec_path}"
+        )
         return 0
 
     if args.command == "run-writeback-batch":

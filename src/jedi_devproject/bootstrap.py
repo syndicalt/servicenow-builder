@@ -45,6 +45,20 @@ class LifecycleBusinessRuleSpec(BaseModel):
     script: str
 
 
+class LifecycleRestMessageSpec(BaseModel):
+    name: str
+    method_name: str
+    endpoint_url: str
+    http_method: str
+    authentication: str
+    content_type: str
+
+
+class LifecycleWebhookBootstrapSpec(BaseModel):
+    rest_message: LifecycleRestMessageSpec
+    business_rule: LifecycleBusinessRuleSpec
+
+
 class BootstrapClient(Protocol):
     def fetch_story_dictionary_fields(self) -> list[StoryDictionaryField]:
         """Fetch active story dictionary fields."""
@@ -135,16 +149,17 @@ def apply_bootstrap_fields(
 
 def build_lifecycle_business_rule_spec(
     *,
-    endpoint_url: str,
     integration_identity: str,
     draft_state_value: str,
     ready_state_value: str,
+    rest_message_name: str = "Jedi DevProject Lifecycle Event API",
+    rest_method_name: str = "post_event",
 ) -> LifecycleBusinessRuleSpec:
-    if not endpoint_url.startswith("https://"):
-        raise ValueError("endpoint_url must use https")
     _require_non_empty("integration_identity", integration_identity)
     _require_non_empty("draft_state_value", draft_state_value)
     _require_non_empty("ready_state_value", ready_state_value)
+    _require_non_empty("rest_message_name", rest_message_name)
+    _require_non_empty("rest_method_name", rest_method_name)
 
     condition = (
         "current.state.changes() && "
@@ -152,9 +167,10 @@ def build_lifecycle_business_rule_spec(
         f"current.state == {_js_string(ready_state_value)}"
     )
     script = f"""(function executeRule(current, previous) {{
-    var request = new sn_ws.RESTMessageV2();
-    request.setEndpoint({_js_string(endpoint_url)});
-    request.setHttpMethod('post');
+    var request = new sn_ws.RESTMessageV2(
+        {_js_string(rest_message_name)},
+        {_js_string(rest_method_name)}
+    );
     request.setRequestHeader('Content-Type', 'application/json');
 
     var eventId = [
@@ -189,6 +205,43 @@ def build_lifecycle_business_rule_spec(
         active=True,
         condition=condition,
         script=script,
+    )
+
+
+def build_lifecycle_webhook_bootstrap_spec(
+    *,
+    endpoint_url: str,
+    integration_identity: str,
+    draft_state_value: str,
+    ready_state_value: str,
+) -> LifecycleWebhookBootstrapSpec:
+    rest_message = build_lifecycle_rest_message_spec(endpoint_url=endpoint_url)
+    business_rule = build_lifecycle_business_rule_spec(
+        integration_identity=integration_identity,
+        draft_state_value=draft_state_value,
+        ready_state_value=ready_state_value,
+        rest_message_name=rest_message.name,
+        rest_method_name=rest_message.method_name,
+    )
+    return LifecycleWebhookBootstrapSpec(
+        rest_message=rest_message,
+        business_rule=business_rule,
+    )
+
+
+def build_lifecycle_rest_message_spec(
+    *,
+    endpoint_url: str,
+) -> LifecycleRestMessageSpec:
+    if not endpoint_url.startswith("https://"):
+        raise ValueError("endpoint_url must use https")
+    return LifecycleRestMessageSpec(
+        name="Jedi DevProject Lifecycle Event API",
+        method_name="post_event",
+        endpoint_url=endpoint_url,
+        http_method="POST",
+        authentication="configured_in_servicenow",
+        content_type="application/json",
     )
 
 

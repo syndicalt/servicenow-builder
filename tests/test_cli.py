@@ -2995,13 +2995,18 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
 
     assert exit_code == 0
     assert "lifecycle_business_rule_specs=1" in captured.out
-    assert payload["table"] == "rm_story"
-    assert payload["when"] == "after"
-    assert payload["action"] == "update"
-    assert "previous.state == '-6'" in payload["condition"]
-    assert "current.state == '1'" in payload["condition"]
-    assert "https://sidecar.example.gov/lifecycle/events" in payload["script"]
-    assert "story_state_changed" in payload["script"]
+    assert payload["rest_message"]["endpoint_url"] == (
+        "https://sidecar.example.gov/lifecycle/events"
+    )
+    assert payload["rest_message"]["method_name"] == "post_event"
+    assert payload["business_rule"]["table"] == "rm_story"
+    assert payload["business_rule"]["when"] == "after"
+    assert payload["business_rule"]["action"] == "update"
+    assert "previous.state == '-6'" in payload["business_rule"]["condition"]
+    assert "current.state == '1'" in payload["business_rule"]["condition"]
+    assert "https://sidecar.example.gov/lifecycle/events" not in payload["business_rule"]["script"]
+    assert "Jedi DevProject Lifecycle Event API" in payload["business_rule"]["script"]
+    assert "story_state_changed" in payload["business_rule"]["script"]
     assert "story_sys_id" not in json.dumps(payload)
 
 

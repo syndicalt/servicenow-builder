@@ -954,3 +954,27 @@ def test_sprint_sixty_three_change_log_documents_business_rule_bootstrap() -> No
     assert "Draft to Ready" in change_log
     assert "story_state_changed" in change_log
     assert "story_sys_id" in change_log
+
+
+def test_operator_guide_documents_lifecycle_rest_message_bootstrap() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Outbound REST Message" in guide
+    assert "rest_message" in guide
+    assert "business_rule" in guide
+    assert "Jedi DevProject Lifecycle Event API" in guide
+    assert "Business Rule references the named REST Message" in guide
+    assert "endpoint URL out of the Business Rule script" in guide
+
+
+def test_sprint_sixty_four_change_log_documents_lifecycle_rest_message_bundle() -> None:
+    change_log = Path("docs/sprints/sprint-64-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Lifecycle webhook bootstrap bundle" in change_log
+    assert "Outbound REST Message" in change_log
+    assert "rest_message" in change_log
+    assert "business_rule" in change_log
+    assert "endpoint URL out of the Business Rule script" in change_log
+    assert "configured_in_servicenow" in change_log

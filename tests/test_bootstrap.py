@@ -1,6 +1,7 @@
 from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
     build_lifecycle_business_rule_spec,
+    build_lifecycle_webhook_bootstrap_spec,
     plan_bootstrap_fields,
 )
 from jedi_devproject.servicenow import StoryDictionaryField
@@ -136,10 +137,11 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
 
 def test_lifecycle_business_rule_spec_emits_draft_to_ready_event_only() -> None:
     spec = build_lifecycle_business_rule_spec(
-        endpoint_url="https://sidecar.example.gov/lifecycle/events",
         integration_identity="jedi-devproject-lifecycle-integration",
         draft_state_value="-6",
         ready_state_value="1",
+        rest_message_name="Jedi DevProject Lifecycle Event API",
+        rest_method_name="post_event",
     )
 
     assert spec.table == "rm_story"
@@ -153,17 +155,38 @@ def test_lifecycle_business_rule_spec_emits_draft_to_ready_event_only() -> None:
     assert "story_state_changed" in spec.script
     assert "servicenow-business-rule" in spec.script
     assert "jedi-devproject-lifecycle-integration" in spec.script
-    assert "https://sidecar.example.gov/lifecycle/events" in spec.script
+    assert "Jedi DevProject Lifecycle Event API" in spec.script
+    assert "post_event" in spec.script
+    assert "https://sidecar.example.gov/lifecycle/events" not in spec.script
     assert "current.number.toString()" in spec.script
     assert "current.sys_id" not in spec.script
     assert "story_sys_id" not in spec.model_dump_json()
 
 
-def test_lifecycle_business_rule_spec_requires_reviewed_endpoint() -> None:
+def test_lifecycle_webhook_bootstrap_spec_includes_rest_message_and_business_rule() -> None:
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    assert spec.rest_message.name == "Jedi DevProject Lifecycle Event API"
+    assert spec.rest_message.endpoint_url == "https://sidecar.example.gov/lifecycle/events"
+    assert spec.rest_message.http_method == "POST"
+    assert spec.rest_message.authentication == "configured_in_servicenow"
+    assert spec.business_rule.table == "rm_story"
+    assert "new sn_ws.RESTMessageV2(" in spec.business_rule.script
+    assert "'Jedi DevProject Lifecycle Event API'" in spec.business_rule.script
+    assert "'post_event'" in spec.business_rule.script
+    assert "story_sys_id" not in spec.model_dump_json()
+
+
+def test_lifecycle_webhook_bootstrap_spec_requires_reviewed_endpoint() -> None:
     import pytest
 
     with pytest.raises(ValueError, match="endpoint_url must use https"):
-        build_lifecycle_business_rule_spec(
+        build_lifecycle_webhook_bootstrap_spec(
             endpoint_url="http://sidecar.example.gov/lifecycle/events",
             integration_identity="jedi-devproject-lifecycle-integration",
             draft_state_value="-6",

@@ -157,7 +157,14 @@ python3 -m jedi_devproject.cli plan-lifecycle-business-rule \
   --spec-root artifacts/lifecycle-bootstrap
 ```
 
-The command writes a local Business Rule spec for `rm_story` after update. It emits `story_state_changed` only when the state changes from the supplied Draft value to the supplied Ready value. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
+The command writes a local lifecycle webhook bootstrap bundle with two reviewed sections:
+
+- `rest_message`: an Outbound REST Message named `Jedi DevProject Lifecycle Event API` with method `post_event`, HTTPS endpoint, JSON content type, and authentication marked `configured_in_servicenow`.
+- `business_rule`: the `rm_story` after-update Business Rule script and condition.
+
+The Business Rule references the named REST Message instead of setting the endpoint directly. This keeps the endpoint URL out of the Business Rule script, lets ServiceNow own authentication configuration, and gives reviewers a clean separation between trigger logic and transport configuration.
+
+The generated Business Rule emits `story_state_changed` only when the state changes from the supplied Draft value to the supplied Ready value. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
 
 Use `process-lifecycle-event` to validate a captured lifecycle event and write a local orchestration plan:
 
