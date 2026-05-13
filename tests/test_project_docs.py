@@ -114,19 +114,20 @@ def test_readme_documents_llm_implementation_packet_architecture() -> None:
     assert "generate_implementation_candidate" in readme
 
 
-def test_readme_documents_sqlite_operational_store() -> None:
+def test_readme_documents_postgres_operational_store() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
-    assert "SQLite operational state" in readme
+    assert "PostgreSQL operational state" in readme
     assert "filesystem artifacts" in readme
 
 
-def test_operator_guide_documents_sqlite_operational_store() -> None:
+def test_operator_guide_documents_postgres_operational_store() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
     assert "Operational Store" in guide
     assert "durable operational state" in guide
-    assert "SQLite" in guide
+    assert "PostgreSQL" in guide
+    assert "SELECT ... FOR UPDATE SKIP LOCKED" in guide
     assert "lifecycle_events" in guide
     assert "fulfillment_jobs" in guide
     assert "job_events" in guide
@@ -143,7 +144,19 @@ def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
     assert "claim_next_fulfillment_job" in change_log
     assert "locked_by" in change_log
     assert "artifact_refs" in change_log
-    assert "SQLite" in change_log
+    assert "PostgreSQL" in change_log
+
+
+def test_sprint_sixty_nine_change_log_documents_postgres_retarget() -> None:
+    change_log = Path("docs/sprints/sprint-69-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "PostgresOperationalStore" in change_log
+    assert "psycopg" in change_log
+    assert "0001_operational_store.sql" in change_log
+    assert "JSONB" in change_log
+    assert "SELECT ... FOR UPDATE SKIP LOCKED" in change_log
 
 
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
@@ -293,12 +306,14 @@ def test_sprint_plan_documents_delivery_lifecycle_roadmap_through_sprint_56() ->
     sprint_plan = Path("SPRINTS.md").read_text(encoding="utf-8")
 
     assert "Sprint 28" in sprint_plan
-    assert "Sprint 56" in sprint_plan
+    assert "Sprint 69" in sprint_plan
     assert "LLM implementation packet" in sprint_plan
     assert "Artifact handoff" in sprint_plan
     assert "Reviewed delivery lifecycle manifest" in sprint_plan
     assert "Next Roadmap Focus" in sprint_plan
-    assert "External build pipeline contract" in sprint_plan
+    assert "PostgreSQL operational store retarget" in sprint_plan
+    assert "local API and worker runtime" in sprint_plan
+    assert "SELECT ... FOR UPDATE SKIP LOCKED" in sprint_plan
 
 
 def test_sprint_one_change_log_documents_schema_work() -> None:

@@ -120,16 +120,16 @@ The smoke runner also writes a lifecycle manifest under `artifacts/lifecycle-smo
 
 ## Operational Store
 
-The runtime uses SQLite for durable operational state and keeps large, reviewable filesystem artifacts as files under the controlled workspace. SQLite is the local MVP store for lifecycle orchestration because it gives the sidecar real transactions, foreign keys, idempotency constraints, and simple backup semantics without introducing an external database before the runtime boundary is approved.
+The runtime uses PostgreSQL for durable operational state and keeps large, reviewable filesystem artifacts as files under the controlled workspace. PostgreSQL is the MVP store for lifecycle orchestration because the API and worker runtime need production-shaped transactions, foreign keys, JSONB event payloads, and row-level worker claims from the start.
 
-The operational schema is initialized by `connect_operational_store()` in `jedi_devproject.operational_store` and includes:
+The operational schema is defined in `db/migrations/0001_operational_store.sql` and initialized by `connect_operational_store(database_url=...)` in `jedi_devproject.operational_store`. It includes:
 
 - `lifecycle_events`: inbound ServiceNow lifecycle events and their preserved original payload.
 - `fulfillment_jobs`: one idempotent fulfillment job per lifecycle event, including status, attempt count, and worker lock metadata.
 - `job_events`: append-only status history for queued, running, completed, blocked, or failed job transitions.
 - `artifact_refs`: references to generated filesystem artifacts with SHA-256 hashes.
 
-The current claim primitive is `claim_next_fulfillment_job(worker_id=...)`. It uses a SQLite transaction to select the oldest queued job, mark it `running`, increment the attempt count, and set `locked_by` and `locked_at`. Later API and worker processes should use this store instead of treating JSON files as a queue.
+The current claim primitive is `claim_next_fulfillment_job(worker_id=...)`. It uses `SELECT ... FOR UPDATE SKIP LOCKED` inside a PostgreSQL transaction to select the oldest queued job, mark it `running`, increment the attempt count, and set `locked_by` and `locked_at`. API and worker processes should use this store instead of treating JSON files as a queue.
 
 ## Lifecycle Event Contract
 

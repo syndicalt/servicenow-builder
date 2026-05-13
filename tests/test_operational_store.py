@@ -1,16 +1,68 @@
 from __future__ import annotations
 
-import sqlite3
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
+from typing import Any
 
 from jedi_devproject.lifecycle_events import (
     LifecycleEventType,
     LifecycleStateChangeEvent,
 )
-from jedi_devproject.operational_store import connect_operational_store
+from jedi_devproject.operational_store import (
+    ArtifactRefRecord,
+    FulfillmentJobRecord,
+    OperationalConnection,
+    PostgresOperationalStore,
+    connect_operational_store,
+)
+
+ScriptedRow = dict[str, object]
+ScriptedResult = ScriptedRow | list[ScriptedRow] | None
+
+
+class ScriptedPostgresConnection:
+    def __init__(self, rows: Sequence[ScriptedResult]) -> None:
+        self._rows = list(rows)
+        self.executed: list[tuple[str, tuple[object, ...]]] = []
+        self.closed = False
+        self.transaction_count = 0
+
+    def execute(self, sql: str, params: tuple[object, ...] = ()) -> None:
+        self.executed.append((sql, params))
+
+    def fetch_one(
+        self,
+        sql: str,
+        params: tuple[object, ...] = (),
+    ) -> dict[str, object] | None:
+        self.executed.append((sql, params))
+        row = self._rows.pop(0)
+        assert not isinstance(row, list)
+        return row
+
+    def fetch_all(
+        self,
+        sql: str,
+        params: tuple[object, ...] = (),
+    ) -> list[ScriptedRow]:
+        self.executed.append((sql, params))
+        row = self._rows.pop(0)
+        assert isinstance(row, list)
+        return row
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        self.transaction_count += 1
+        yield
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _store(connection: OperationalConnection) -> PostgresOperationalStore:
+    return PostgresOperationalStore(connection)
 
 
 def _lifecycle_event(
@@ -32,115 +84,131 @@ def _lifecycle_event(
     )
 
 
-def test_operational_store_initializes_schema(tmp_path: Path) -> None:
-    db_path = tmp_path / "runtime" / "operational.sqlite3"
-
-    with connect_operational_store(db_path) as store:
-        table_names = store.table_names()
-
-    assert table_names >= {
-        "lifecycle_events",
-        "fulfillment_jobs",
-        "job_events",
-        "artifact_refs",
+def _job_row(*, status: str = "queued", attempt_count: int = 0) -> dict[str, object]:
+    return {
+        "job_id": "job-evt-job",
+        "event_id": "evt-job",
+        "story_number": "STRY0010013",
+        "status": status,
+        "attempt_count": attempt_count,
+        "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+        "updated_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+        "locked_by": "worker-local-1" if status == "running" else None,
+        "locked_at": datetime(2026, 5, 13, 15, 1, tzinfo=UTC)
+        if status == "running"
+        else None,
+        "last_error": None,
     }
 
 
-def test_record_lifecycle_event_is_idempotent_and_preserves_original_payload(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "operational.sqlite3"
+def test_postgres_migration_defines_operational_schema() -> None:
+    migration = Path("db/migrations/0001_operational_store.sql").read_text(
+        encoding="utf-8"
+    )
 
-    with connect_operational_store(db_path) as store:
-        first_record = store.record_lifecycle_event(
-            _lifecycle_event(event_id="evt-dup", story_number="STRY0010013")
-        )
-        duplicate_record = store.record_lifecycle_event(
-            _lifecycle_event(event_id="evt-dup", story_number="STRY9999999")
-        )
-
-    assert duplicate_record == first_record
-    assert duplicate_record.story_number == "STRY0010013"
-    assert "STRY9999999" not in duplicate_record.payload_json
-
-
-def test_enqueue_fulfillment_job_is_idempotent_and_records_job_event(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "operational.sqlite3"
-
-    with connect_operational_store(db_path) as store:
-        event = store.record_lifecycle_event(_lifecycle_event(event_id="evt-job"))
-
-        first_job = store.enqueue_fulfillment_job(
-            event_id=event.event_id,
-            story_number=event.story_number,
-        )
-        duplicate_job = store.enqueue_fulfillment_job(
-            event_id=event.event_id,
-            story_number=event.story_number,
-        )
-        job_events = store.job_events_for_job(first_job.job_id)
-
-    assert duplicate_job == first_job
-    assert first_job.job_id == "job-evt-job"
-    assert first_job.status == "queued"
-    assert first_job.attempt_count == 0
-    assert [job_event.status for job_event in job_events] == ["queued"]
+    assert "CREATE TABLE IF NOT EXISTS lifecycle_events" in migration
+    assert "payload_json JSONB NOT NULL" in migration
+    assert "received_at TIMESTAMPTZ NOT NULL" in migration
+    assert "CREATE TABLE IF NOT EXISTS fulfillment_jobs" in migration
+    assert "event_id TEXT NOT NULL UNIQUE" in migration
+    assert "locked_by TEXT" in migration
+    assert "locked_at TIMESTAMPTZ" in migration
+    assert "CREATE TABLE IF NOT EXISTS job_events" in migration
+    assert "BIGSERIAL PRIMARY KEY" in migration
+    assert "CREATE TABLE IF NOT EXISTS artifact_refs" in migration
 
 
-def test_claim_next_fulfillment_job_marks_running_with_worker_lock(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "operational.sqlite3"
+def test_connect_operational_store_requires_postgres_database_url() -> None:
+    assert connect_operational_store.__annotations__["database_url"] == "str"
 
-    with connect_operational_store(db_path) as store:
-        event = store.record_lifecycle_event(_lifecycle_event(event_id="evt-claim"))
-        store.enqueue_fulfillment_job(
-            event_id=event.event_id,
-            story_number=event.story_number,
-        )
 
-        claimed_job = store.claim_next_fulfillment_job(worker_id="worker-local-1")
-        no_second_claim = store.claim_next_fulfillment_job(worker_id="worker-local-2")
-        job_events = store.job_events_for_job("job-evt-claim")
+def test_record_lifecycle_event_uses_postgres_idempotency() -> None:
+    connection = ScriptedPostgresConnection(
+        rows=[
+            {
+                "event_id": "evt-job",
+                "event_type": "story_state_changed",
+                "story_number": "STRY0010013",
+                "payload_json": {"event_id": "evt-job", "story_number": "STRY0010013"},
+                "received_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+                "validation_status": "accepted",
+            }
+        ]
+    )
+    store = _store(connection)
 
+    record = store.record_lifecycle_event(_lifecycle_event(event_id="evt-job"))
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "ON CONFLICT (event_id) DO NOTHING" in joined_sql
+    assert "%s" in joined_sql
+    assert "?" not in joined_sql
+    assert record.event_id == "evt-job"
+    assert record.story_number == "STRY0010013"
+
+
+def test_enqueue_fulfillment_job_uses_postgres_idempotency_and_job_event() -> None:
+    connection = ScriptedPostgresConnection(rows=[_job_row()])
+    store = _store(connection)
+
+    job = store.enqueue_fulfillment_job(
+        event_id="evt-job",
+        story_number="STRY0010013",
+    )
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "ON CONFLICT (event_id) DO NOTHING" in joined_sql
+    assert "INSERT INTO job_events" in joined_sql
+    assert job == FulfillmentJobRecord.model_validate(_job_row())
+
+
+def test_claim_next_fulfillment_job_uses_skip_locked_worker_claim() -> None:
+    connection = ScriptedPostgresConnection(rows=[_job_row(status="running", attempt_count=1)])
+    store = _store(connection)
+
+    claimed_job = store.claim_next_fulfillment_job(worker_id="worker-local-1")
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "FOR UPDATE SKIP LOCKED" in joined_sql
+    assert "UPDATE fulfillment_jobs" in joined_sql
+    assert "RETURNING" in joined_sql
+    assert connection.transaction_count == 1
     assert claimed_job is not None
     assert claimed_job.status == "running"
     assert claimed_job.attempt_count == 1
     assert claimed_job.locked_by == "worker-local-1"
-    assert claimed_job.locked_at is not None
-    assert no_second_claim is None
-    assert [job_event.status for job_event in job_events] == ["queued", "running"]
 
 
-def test_record_artifact_ref_requires_existing_job(tmp_path: Path) -> None:
-    db_path = tmp_path / "operational.sqlite3"
+def test_claim_next_fulfillment_job_returns_none_when_no_job_is_available() -> None:
+    connection = ScriptedPostgresConnection(rows=[None])
+    store = _store(connection)
 
-    with connect_operational_store(db_path) as store:
-        event = store.record_lifecycle_event(_lifecycle_event(event_id="evt-artifact"))
-        job = store.enqueue_fulfillment_job(
-            event_id=event.event_id,
-            story_number=event.story_number,
-        )
-        artifact_ref = store.record_artifact_ref(
-            job_id=job.job_id,
-            artifact_kind="implementation_packet",
-            path="artifacts/implementation-packets/packet.json",
-            sha256="a" * 64,
-        )
-        artifact_refs = store.artifact_refs_for_job(job.job_id)
+    claimed_job = store.claim_next_fulfillment_job(worker_id="worker-local-1")
 
-        with pytest.raises(sqlite3.IntegrityError):
-            store.record_artifact_ref(
-                job_id="missing-job",
-                artifact_kind="implementation_packet",
-                path="artifacts/missing.json",
-                sha256="b" * 64,
-            )
+    assert claimed_job is None
+    assert connection.transaction_count == 1
 
-    assert artifact_ref.job_id == job.job_id
-    assert artifact_ref.artifact_kind == "implementation_packet"
-    assert [record.path for record in artifact_refs] == [
-        "artifacts/implementation-packets/packet.json"
-    ]
+
+def test_record_artifact_ref_uses_postgres_returning_row() -> None:
+    row: dict[str, Any] = {
+        "id": 1,
+        "job_id": "job-evt-job",
+        "artifact_kind": "implementation_packet",
+        "path": "artifacts/implementation-packets/packet.json",
+        "sha256": "a" * 64,
+        "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+    }
+    connection = ScriptedPostgresConnection(rows=[row])
+    store = _store(connection)
+
+    artifact_ref = store.record_artifact_ref(
+        job_id="job-evt-job",
+        artifact_kind="implementation_packet",
+        path="artifacts/implementation-packets/packet.json",
+        sha256="a" * 64,
+    )
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "INSERT INTO artifact_refs" in joined_sql
+    assert "RETURNING" in joined_sql
+    assert artifact_ref == ArtifactRefRecord.model_validate(row)

@@ -304,20 +304,35 @@ The project continued beyond the original Sprint 0-9 baseline to close the SPM-a
 | Sprint 54 | Missing delivery artifact fail-closed preflight |
 | Sprint 55 | Reviewed Update Set XML `sys_update_xml` marker gate |
 | Sprint 56 | Reviewed delivery lifecycle manifest |
+| Sprint 57 | Roadmap refresh through reviewed delivery lifecycle |
+| Sprint 58 | External build pipeline result contract |
+| Sprint 59 | ServiceNow lifecycle event contract |
+| Sprint 60 | Local lifecycle event processor CLI |
+| Sprint 61 | Build claim writeback planner |
+| Sprint 62 | Build claim writeback execution |
+| Sprint 63 | Lifecycle Business Rule bootstrap planning |
+| Sprint 64 | Lifecycle webhook bootstrap bundle |
+| Sprint 65 | Lifecycle ServiceNow record plan |
+| Sprint 66 | Lifecycle webhook apply |
+| Sprint 67 | Lifecycle webhook verification |
+| Sprint 68 | Durable operational store boundary |
+| Sprint 69 | PostgreSQL operational store retarget |
 
-Controlled story writeback is now explicitly scoped to external build completion evidence and `Ready for Testing` transition handling. Direct Update Set imports, deployments, production promotion, and unvalidated ServiceNow mutation remain out of scope.
+Controlled story writeback is now explicitly scoped to build claim, external build completion evidence, and `Ready for Testing` transition handling. Direct Update Set imports, deployments, production promotion, and unvalidated ServiceNow mutation remain out of scope.
 
 ## Next Roadmap Focus
 
-The next product boundary is the External build pipeline contract. The sidecar can already prepare implementation packets, validate implementation candidates, record controlled writeback, and manage reviewed delivery handoff artifacts. What remains is to define the formal contract with the external build system:
+The next product boundary is the local API and worker runtime. The sidecar can already prepare implementation packets, validate implementation candidates, bootstrap lifecycle webhook records, verify ServiceNow lifecycle records, record controlled writeback, and manage reviewed delivery handoff artifacts. The operational store now targets PostgreSQL so the runtime can use database-backed event intake and worker claiming from the start.
 
-- Inputs: story number, implementation candidate, allowed tables, test plan, rollback notes, and compliance context references.
-- Outputs: build status, build reference, reviewed Update Set XML path, test evidence path, failure reasons, and reviewer/build actor identity.
-- Gates: no ServiceNow state advancement or attachment apply unless writeback capability, reviewed export, test evidence, hash, actor, and audit checks pass.
-- Evidence: one lifecycle manifest tying implementation packet, candidate, build result, writeback audit, reviewed delivery job, handoff report, and delivery attachment plan.
+- API: receive ServiceNow lifecycle webhook events, validate payloads, persist `lifecycle_events`, enqueue `fulfillment_jobs`, and return fast acknowledgements.
+- Worker: claim queued jobs using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`, run evaluation/build orchestration asynchronously, and write state transitions back to ServiceNow through existing guarded boundaries.
+- Runtime: package the API, worker, and PostgreSQL dependency for local container deployment with explicit environment variables and health checks.
+- Evidence: preserve lifecycle manifests, implementation packets, candidate artifacts, build results, writeback audits, reviewed delivery jobs, handoff reports, and delivery attachment plans.
 
-After the build contract is explicit, the following roadmap items should be prioritized:
+The following roadmap items should be prioritized:
 
-1. Test Evidence Bundle review and attachment path.
-2. Full lifecycle smoke from PDI story fetch through reviewed delivery handoff.
-3. ATO evidence refresh: data flow, threat model, control mapping, residual risk register, and sprint evidence index.
+1. API webhook endpoint backed by PostgreSQL event/job persistence.
+2. Worker process that claims and executes fulfillment jobs without blocking the webhook request.
+3. Containerized local runtime with API, worker, and PostgreSQL.
+4. Full lifecycle smoke from PDI `Draft to Ready` through build claim and controlled writeback.
+5. ATO evidence refresh: data flow, threat model, control mapping, residual risk register, and sprint evidence index.

@@ -2,11 +2,11 @@
 
 ## Goal
 
-Create a production-shaped local operational store before adding the webhook API and worker runtime.
+Create a durable operational-store boundary before adding the webhook API and worker runtime.
 
 ## Changes
 
-- Added `jedi_devproject.operational_store` with a SQLite-backed schema initializer.
+- Added `jedi_devproject.operational_store` with an initial SQLite-backed schema initializer.
 - Added durable tables for `lifecycle_events`, `fulfillment_jobs`, `job_events`, and `artifact_refs`.
 - Added idempotent lifecycle-event recording that preserves the original payload for duplicate `event_id` values.
 - Added idempotent fulfillment-job enqueueing with one queued `job_events` entry per new job.
@@ -20,4 +20,4 @@ Create a production-shaped local operational store before adding the webhook API
 
 ## Architecture Notes
 
-SQLite is the MVP operational store. It is appropriate for the local runtime and the near-term containerized API plus worker topology. Generated packets, candidates, reports, and delivery evidence remain filesystem artifacts because reviewers need inspectable files and hashes.
+Sprint 69 supersedes the SQLite storage choice with PostgreSQL as the required operational store. Generated packets, candidates, reports, and delivery evidence remain filesystem artifacts because reviewers need inspectable files and hashes.
