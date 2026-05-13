@@ -7,7 +7,11 @@ from pathlib import Path
 
 from jedi_devproject import __version__
 from jedi_devproject.artifacts import write_json_artifact_once
-from jedi_devproject.models import Story
+from jedi_devproject.implementation_packet import (
+    IMPLEMENTATION_PACKET_TASK,
+    build_implementation_packet,
+)
+from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus, Story
 from jedi_devproject.pipeline import PipelineInputs, run_pipeline
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy, StoryType
@@ -38,6 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     run_pdi.add_argument("--limit", type=int, default=5)
     run_pdi.add_argument("--project-sys-id")
     run_pdi.add_argument("--sysparm-query")
+    build_packet = subparsers.add_parser(
+        "build-implementation-packet",
+        help="Build reviewable LLM implementation packet artifacts from local stories.",
+    )
+    build_packet.add_argument("--sample-file", type=Path, required=True)
+    build_packet.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    build_packet.add_argument("--run-id", required=True)
     plan_writeback = subparsers.add_parser(
         "plan-writeback",
         help="Plan ServiceNow writeback for an external build result without applying it.",
@@ -124,6 +135,24 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         print(_render_summary(result.summary))
+        return 0
+
+    if args.command == "build-implementation-packet":
+        stories = _load_sample_stories(args.sample_file)
+        artifact_dir = args.artifact_root / args.run_id
+        for story in stories:
+            packet = build_implementation_packet(
+                story=story,
+                policy=_default_policy(),
+                provider_policy=_default_implementation_provider_policy(),
+                rags=_default_rags(),
+            )
+            write_json_artifact_once(
+                artifact_dir,
+                filename=f"{story.number}.json",
+                payload=packet.to_model_payload(),
+            )
+        print(f"implementation_packets={len(stories)} run_id={args.run_id}")
         return 0
 
     if args.command == "plan-writeback":
@@ -222,31 +251,56 @@ def _default_policy() -> AllowlistPolicy:
     )
 
 
+def _default_implementation_provider_policy() -> ProviderPolicy:
+    return ProviderPolicy(
+        provider_id="now-assist-native",
+        deployment_boundary="servicenow-federal-boundary",
+        authorization_level="fedramp-aligned-evaluation",
+        allowed_data_classes={DataClassification.PUBLIC},
+        allowed_tasks={IMPLEMENTATION_PACKET_TASK},
+        max_context_policy="implementation-packet-v1",
+        retention_policy="customer-boundary",
+        status=ProviderStatus.APPROVED,
+    )
+
+
 def _default_rags() -> SpecializedRags:
     return SpecializedRags.from_documents(
         [
             Document(
                 domain=RagDomain.SERVICENOW_PLATFORM,
                 source="local/servicenow-update-set-baseline",
-                content="Portal update sets capture configuration updates.",
+                content=(
+                    "Portal and dictionary form update sets capture configuration "
+                    "updates for ServiceNow tables and fields."
+                ),
                 version="local",
             ),
             Document(
                 domain=RagDomain.INSTANCE_METADATA,
                 source="local/instance-sp-instance",
-                content="sp_instance stores portal widget instance text.",
+                content=(
+                    "sp_instance stores portal widget instance text. rm_story field "
+                    "changes use sys_dictionary and story form placement uses sys_ui_form."
+                ),
                 version="local",
             ),
             Document(
                 domain=RagDomain.PROJECT_CONTEXT,
                 source="local/project-scope",
-                content="Portal help text changes are in scope.",
+                content=(
+                    "Portal help text changes and low-risk rm_story dictionary/form "
+                    "field changes are in scope."
+                ),
                 version="local",
             ),
             Document(
                 domain=RagDomain.COMPLIANCE,
                 source="local/compliance-model-use",
-                content="Portal candidates must be generated without public AI endpoints.",
+                content=(
+                    "Portal and dictionary form candidates must be generated without "
+                    "public AI endpoints."
+                ),
                 version="local",
             ),
         ]

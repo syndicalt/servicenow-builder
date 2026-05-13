@@ -26,6 +26,16 @@ def test_operator_guide_documents_plan_writeback_dry_run() -> None:
     assert "check-writeback-capability" in guide
 
 
+def test_operator_guide_documents_implementation_packet_artifact() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "build-implementation-packet" in guide
+    assert "implementation packet" in guide
+    assert "Now Assist" in guide
+    assert "does not call a model" in guide
+    assert "sys_id" in guide
+
+
 def test_readme_documents_controlled_story_writeback_scope() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
@@ -42,6 +52,17 @@ def test_readme_documents_llm_implementation_packet_architecture() -> None:
     assert "rules are gates" in readme
     assert "Now Assist" in readme
     assert "generate_implementation_candidate" in readme
+
+
+def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
+    change_log = Path("docs/sprints/sprint-29-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "build-implementation-packet" in change_log
+    assert "reviewable implementation packet artifact" in change_log
+    assert "Now Assist" in change_log
+    assert "no model call" in change_log
 
 
 def test_sprint_zero_governance_documents_are_present() -> None:

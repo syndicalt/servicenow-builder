@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -111,6 +112,69 @@ def test_cli_run_local_accepts_single_story_object(
     assert exit_code == 0
     assert "stories_processed=1" in capsys.readouterr().out
     assert (artifact_root / "run-001" / "STORY0010001.json").exists()
+
+
+def test_cli_build_implementation_packet_writes_safe_review_artifact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sample_path = tmp_path / "story.json"
+    artifact_root = tmp_path / "implementation-packets"
+    sample_payload = {
+        "sys_id": "abc123",
+        "number": "STRY0010013",
+        "short_description": "Add implementation notes to the story form",
+        "description": (
+            "Create a string field named u_ai_review_notes on rm_story and place it "
+            "on the default story form so release coordinators can see automation "
+            "notes before testing."
+        ),
+        "story_points": 3,
+        "priority": 4,
+        "state": "Ready",
+        "data_classification": "public",
+        "acceptance_criteria": (
+            "The rm_story table has an active u_ai_review_notes string field labeled "
+            "AI Review Notes. The field appears on the default story form below "
+            "Acceptance criteria. Existing stories are not modified."
+        ),
+        "affected_tables": ["sys_dictionary", "sys_ui_form"],
+        "additional_context": {
+            "target_table": "rm_story",
+            "field_name": "u_ai_review_notes",
+        },
+    }
+    sample_path.write_text(json.dumps(sample_payload), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "build-implementation-packet",
+            "--sample-file",
+            str(sample_path),
+            "--artifact-root",
+            str(artifact_root),
+            "--run-id",
+            "packet-run-001",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    artifact_path = artifact_root / "packet-run-001" / "STRY0010013.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    serialized_artifact = json.dumps(artifact)
+
+    assert exit_code == 0
+    assert "implementation_packets=1" in captured.out
+    assert "abc123" not in captured.out
+    assert artifact_path.exists()
+    assert artifact["task"] == "generate_implementation_candidate"
+    assert artifact["provider_id"] == "now-assist-native"
+    assert artifact["story"]["number"] == "STRY0010013"
+    assert "controls" in artifact
+    assert artifact["output_contract"]["must_include_test_plan"] is True
+    assert "sys_dictionary" in artifact["controls"]["allowed_tables"]
+    assert "compliance" in artifact["context"]
+    assert "abc123" not in serialized_artifact
 
 
 class FakeServiceNowClient:

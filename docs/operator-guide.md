@@ -26,6 +26,21 @@ Live smoke tests should be manual and read-only. They should request an OAuth to
 
 Do not print tokens, secrets, sys_ids, or sensitive story content in user-facing summaries.
 
+## Implementation Packet Review
+
+Use `build-implementation-packet` to produce a reviewable implementation packet artifact before any model integration is called:
+
+```bash
+python3 -m jedi_devproject.cli build-implementation-packet \
+  --sample-file artifacts/stories/STRY0010013.json \
+  --artifact-root artifacts/implementation-packets \
+  --run-id packet-run-20260513-001
+```
+
+The command runs deterministic safety, risk, provider-policy, and specialized RAG context gates, then writes one packet JSON file per story. The packet is shaped for the Now Assist implementation path, but this command does not call a model.
+
+Packet artifacts exclude the ServiceNow story `sys_id`. They include the story number, minimized story text, allowed tables, allowed operations, citations, compliance context, risk score, and the required model output contract.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:
