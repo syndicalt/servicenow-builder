@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -57,3 +58,48 @@ def write_json_artifact_once(
         raise ArtifactWriteError(f"json artifact already exists: {path}")
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return path
+
+
+def write_lifecycle_manifest(
+    root: Path,
+    *,
+    run_id: str,
+    story_number: str,
+    build_reference: str,
+    packet_path: Path,
+    candidate_path: Path,
+    candidate_batch_path: Path | None = None,
+    writeback_audit_path: Path | None,
+    verification: dict[str, Any],
+    writeback: dict[str, Any] | None = None,
+) -> Path:
+    artifacts: dict[str, dict[str, str]] = {
+        "implementation_packet": _artifact_reference(packet_path),
+        "implementation_candidate": _artifact_reference(candidate_path),
+    }
+    if candidate_batch_path is not None:
+        artifacts["implementation_candidate_batch"] = _artifact_reference(
+            candidate_batch_path
+        )
+    if writeback_audit_path is not None:
+        artifacts["writeback_audit"] = _artifact_reference(writeback_audit_path)
+
+    return write_json_artifact_once(
+        root,
+        filename=f"{run_id}.json",
+        payload={
+            "run_id": run_id,
+            "story_number": story_number,
+            "build_reference": build_reference,
+            "artifacts": artifacts,
+            "writeback": writeback or {},
+            "verification": verification,
+        },
+    )
+
+
+def _artifact_reference(path: Path) -> dict[str, str]:
+    return {
+        "path": str(path),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }

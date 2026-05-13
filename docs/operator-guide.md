@@ -116,6 +116,8 @@ python3 -m jedi_devproject.cli run-lifecycle-smoke \
 
 The smoke runner writes an implementation packet, validated candidate artifact, candidate batch report, and writeback plan summary. It does not mutate ServiceNow. Missing stories fail closed before artifact creation.
 
+The smoke runner also writes a lifecycle manifest under `artifacts/lifecycle-smoke/lifecycle-manifests/<run-id>.json`. The manifest is a single audit index for the run and includes SHA-256 hashes for the implementation packet, implementation candidate, candidate batch report, and writeback outcome. It does not include ServiceNow sys_ids.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:
@@ -213,6 +215,23 @@ python3 -m jedi_devproject.cli verify-writeback \
 ```
 
 The command is read-only. It discovers the instance `Ready for Testing` state value, fetches the story, and compares `state`, `u_ai_status`, `u_ai_build_reference`, and `u_ai_candidate_artifact`. It prints `verified=True` only when all expected fields match.
+
+For a controlled apply run, use `record-lifecycle-manifest` to tie together artifacts that were produced by separate commands:
+
+```bash
+python3 -m jedi_devproject.cli record-lifecycle-manifest \
+  --run-id lifecycle-20260513-001 \
+  --story-number STRY0010013 \
+  --build-reference build-20260513-001 \
+  --packet-path artifacts/lifecycle-smoke/implementation-packets/lifecycle-20260513-001/STRY0010013.json \
+  --candidate-path artifacts/lifecycle-smoke/implementation-candidates/lifecycle-20260513-001/STRY0010013.json \
+  --writeback-audit-path artifacts/writeback-audit/STRY0010013-build-20260513-001.json \
+  --verification-verified \
+  --verification-state -7 \
+  --manifest-root artifacts/lifecycle-manifests
+```
+
+Lifecycle manifest files are write-once. They are intended for audit review and should reference artifacts by path and hash, not by ServiceNow sys_id.
 
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 

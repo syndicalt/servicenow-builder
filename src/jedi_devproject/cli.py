@@ -6,7 +6,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from jedi_devproject import __version__
-from jedi_devproject.artifacts import write_candidate_artifact, write_json_artifact_once
+from jedi_devproject.artifacts import (
+    write_candidate_artifact,
+    write_json_artifact_once,
+    write_lifecycle_manifest,
+)
 from jedi_devproject.bootstrap import apply_bootstrap_fields, plan_bootstrap_fields
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
@@ -123,6 +127,19 @@ def main(argv: list[str] | None = None) -> int:
     verify_writeback_parser.add_argument("--story-number", required=True)
     verify_writeback_parser.add_argument("--build-reference", required=True)
     verify_writeback_parser.add_argument("--artifact-url")
+    lifecycle_manifest = subparsers.add_parser(
+        "record-lifecycle-manifest",
+        help="Write a manifest tying lifecycle phase artifacts together.",
+    )
+    lifecycle_manifest.add_argument("--run-id", required=True)
+    lifecycle_manifest.add_argument("--story-number", required=True)
+    lifecycle_manifest.add_argument("--build-reference", required=True)
+    lifecycle_manifest.add_argument("--packet-path", type=Path, required=True)
+    lifecycle_manifest.add_argument("--candidate-path", type=Path, required=True)
+    lifecycle_manifest.add_argument("--writeback-audit-path", type=Path)
+    lifecycle_manifest.add_argument("--verification-verified", action="store_true")
+    lifecycle_manifest.add_argument("--verification-state")
+    lifecycle_manifest.add_argument("--manifest-root", type=Path, required=True)
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -334,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
             candidate=candidate,
         )
         summary = {"total": 1, "built": 1, "blocked": 0}
-        write_json_artifact_once(
+        candidate_batch_path = write_json_artifact_once(
             args.artifact_root / "implementation-candidate-batches",
             filename=f"{args.run_id}.json",
             payload={
@@ -360,6 +377,28 @@ def main(argv: list[str] | None = None) -> int:
                 apply=False,
                 execution_id=args.run_id,
             ),
+        )
+        write_lifecycle_manifest(
+            args.artifact_root / "lifecycle-manifests",
+            run_id=args.run_id,
+            story_number=story.number,
+            build_reference=args.build_reference,
+            packet_path=packet_root / f"{story.number}.json",
+            candidate_path=candidate_path,
+            candidate_batch_path=candidate_batch_path,
+            writeback_audit_path=writeback_result.audit_path,
+            writeback={
+                "allowed": writeback_result.allowed,
+                "applied": writeback_result.applied,
+                "idempotent": writeback_result.idempotent,
+                "reasons": writeback_result.reasons or writeback_result.plan.reasons,
+            },
+            verification={
+                "verified": False,
+                "expected_state": None,
+                "actual_fields": {},
+                "reasons": ["dry_run_not_verified"],
+            },
         )
         print(
             "packet_built=1 candidate_built=1 "
@@ -441,6 +480,32 @@ def main(argv: list[str] | None = None) -> int:
             f"{printable_fields} {printable_reasons}".strip()
         )
         return 0 if verification.verified else 1
+
+    if args.command == "record-lifecycle-manifest":
+        manifest_path = write_lifecycle_manifest(
+            args.manifest_root,
+            run_id=args.run_id,
+            story_number=args.story_number,
+            build_reference=args.build_reference,
+            packet_path=args.packet_path,
+            candidate_path=args.candidate_path,
+            writeback_audit_path=args.writeback_audit_path,
+            verification={
+                "verified": args.verification_verified,
+                "expected_state": args.verification_state,
+                "actual_fields": (
+                    {"state": args.verification_state}
+                    if args.verification_state is not None
+                    else {}
+                ),
+                "reasons": [] if args.verification_verified else ["not_verified"],
+            },
+        )
+        print(
+            "lifecycle_manifest_written=True "
+            f"story_number={args.story_number} path={manifest_path}"
+        )
+        return 0
 
     if args.command == "plan-bootstrap-fields":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

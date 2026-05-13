@@ -868,6 +868,20 @@ def test_cli_run_lifecycle_smoke_builds_artifacts_and_plans_writeback(
         / "implementation-candidate-batches"
         / "lifecycle-smoke-001.json"
     ).exists()
+    manifest_path = (
+        artifact_root
+        / "lifecycle-manifests"
+        / "lifecycle-smoke-001.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["story_number"] == "STORY0010001"
+    assert manifest["build_reference"] == "build-lifecycle-smoke-001"
+    assert "implementation_packet" in manifest["artifacts"]
+    assert "implementation_candidate" in manifest["artifacts"]
+    assert "implementation_candidate_batch" in manifest["artifacts"]
+    assert manifest["writeback"]["allowed"] is True
+    assert manifest["writeback"]["applied"] is False
+    assert "abc123" not in json.dumps(manifest)
 
 
 def test_cli_run_lifecycle_smoke_fails_closed_when_story_missing(
@@ -1494,6 +1508,56 @@ def test_cli_verify_writeback_reports_verified_remote_story(
     assert "u_ai_status=Ready for Testing" in captured.out
     assert "abc123" not in captured.out
     assert "client-secret" not in captured.out
+
+
+def test_cli_record_lifecycle_manifest_writes_phase_manifest(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    packet_path = tmp_path / "packet.json"
+    candidate_path = tmp_path / "candidate.json"
+    audit_path = tmp_path / "audit.json"
+    for path, payload in [
+        (packet_path, {"story": {"number": "STRY0010013"}}),
+        (candidate_path, {"story_number": "STRY0010013", "artifact_hash": "abc"}),
+        (audit_path, {"story_number": "STRY0010013", "applied": True}),
+    ]:
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    manifest_root = tmp_path / "lifecycle-manifests"
+
+    exit_code = main(
+        [
+            "record-lifecycle-manifest",
+            "--run-id",
+            "lifecycle-001",
+            "--story-number",
+            "STRY0010013",
+            "--build-reference",
+            "build-20260513-001",
+            "--packet-path",
+            str(packet_path),
+            "--candidate-path",
+            str(candidate_path),
+            "--writeback-audit-path",
+            str(audit_path),
+            "--verification-verified",
+            "--verification-state",
+            "-7",
+            "--manifest-root",
+            str(manifest_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    manifest_path = manifest_root / "lifecycle-001.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "lifecycle_manifest_written=True" in captured.out
+    assert "STRY0010013" in captured.out
+    assert manifest["artifacts"]["implementation_packet"]["sha256"]
+    assert manifest["verification"]["verified"] is True
+    assert "sys_id" not in json.dumps(manifest)
 
 
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
