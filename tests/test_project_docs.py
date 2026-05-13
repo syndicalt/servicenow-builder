@@ -68,6 +68,17 @@ def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
     assert "no model call" in change_log
 
 
+def test_sprint_thirty_change_log_documents_model_contract_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-30-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "implementation output contract" in change_log
+    assert "test_plan" in change_log
+    assert "rollback_notes" in change_log
+    assert "ModelResponseError" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),

@@ -5,7 +5,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from jedi_devproject.models import ProviderPolicy, RetrievalCitation, Story
-from jedi_devproject.providers import ModelProvider, ProviderBlocked, _validate_response
+from jedi_devproject.providers import (
+    ModelProvider,
+    ModelResponseError,
+    ProviderBlocked,
+    _validate_response,
+)
 from jedi_devproject.rag import SpecializedRags
 from jedi_devproject.risk import RiskInput, calculate_risk_score
 from jedi_devproject.safety import AllowlistPolicy, evaluate_story
@@ -157,4 +162,12 @@ def generate_implementation_candidate(
         allowed_operations=policy.operations,
         allowed_sys_ids=set(),
     )
+    _validate_implementation_contract(response)
     return response
+
+
+def _validate_implementation_contract(response: dict[str, Any]) -> None:
+    for field_name in ["test_plan", "rollback_notes"]:
+        value = response.get(field_name)
+        if not isinstance(value, list) or not value:
+            raise ModelResponseError(f"{field_name} must be a non-empty list")

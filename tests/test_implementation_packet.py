@@ -9,17 +9,14 @@ from jedi_devproject.models import (
     ProviderStatus,
     Story,
 )
+from jedi_devproject.providers import ModelResponseError
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy, StoryType
 
 
 class RecordingImplementationProvider:
-    def __init__(self) -> None:
-        self.payloads: list[dict[str, object]] = []
-
-    def generate(self, payload: dict[str, object]) -> dict[str, object]:
-        self.payloads.append(payload)
-        return {
+    def __init__(self, response: dict[str, object] | None = None) -> None:
+        self.response = response or {
             "changes": [
                 {
                     "table": "sys_dictionary",
@@ -33,6 +30,11 @@ class RecordingImplementationProvider:
             "test_plan": ["Confirm field appears on Story form."],
             "rollback_notes": ["Remove field from form and dictionary."],
         }
+        self.payloads: list[dict[str, object]] = []
+
+    def generate(self, payload: dict[str, object]) -> dict[str, object]:
+        self.payloads.append(payload)
+        return self.response
 
 
 def _story() -> Story:
@@ -160,3 +162,65 @@ def test_generate_implementation_candidate_sends_packet_to_approved_provider() -
     assert response["changes"][0]["table"] == "sys_dictionary"
     assert provider.payloads[0]["task"] == IMPLEMENTATION_PACKET_TASK
     assert "story-sys-id" not in repr(provider.payloads[0])
+
+
+def test_generate_implementation_candidate_rejects_missing_test_plan() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sys_dictionary",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                    },
+                }
+            ],
+            "rollback_notes": ["Remove field from form and dictionary."],
+        }
+    )
+
+    try:
+        generate_implementation_candidate(
+            story=_story(),
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+        )
+    except ModelResponseError as exc:
+        assert "test_plan must be a non-empty list" in str(exc)
+    else:
+        raise AssertionError("missing test_plan was accepted")
+
+
+def test_generate_implementation_candidate_rejects_missing_rollback_notes() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sys_dictionary",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                    },
+                }
+            ],
+            "test_plan": ["Confirm field appears on Story form."],
+        }
+    )
+
+    try:
+        generate_implementation_candidate(
+            story=_story(),
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+        )
+    except ModelResponseError as exc:
+        assert "rollback_notes must be a non-empty list" in str(exc)
+    else:
+        raise AssertionError("missing rollback_notes was accepted")
