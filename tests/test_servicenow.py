@@ -769,6 +769,78 @@ def test_servicenow_client_upsert_updates_existing_table_record() -> None:
     assert update_request.body == {"active": True, "when": "after"}
 
 
+def test_servicenow_client_fetches_table_record_by_lookup() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "rest-message-sys-id",
+                            "name": "Jedi DevProject Lifecycle Event API",
+                        }
+                    ]
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    record = client.fetch_table_record(
+        table="sys_rest_message",
+        lookup={"name": "Jedi DevProject Lifecycle Event API"},
+    )
+
+    request = transport.requests[1]
+    assert record == {
+        "sys_id": "rest-message-sys-id",
+        "name": "Jedi DevProject Lifecycle Event API",
+    }
+    assert request.method == "GET"
+    assert request.url.endswith("/api/now/table/sys_rest_message")
+    assert request.params["sysparm_query"] == (
+        "name=Jedi DevProject Lifecycle Event API"
+    )
+    assert request.params["sysparm_limit"] == "1"
+
+
+def test_servicenow_client_fetch_table_record_returns_none_when_missing() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(status_code=200, json_body={"result": []}),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    record = client.fetch_table_record(
+        table="sys_script",
+        lookup={"name": "Jedi DevProject lifecycle event emitter"},
+    )
+
+    assert record is None
+
+
 def test_servicenow_client_uploads_story_attachment_with_binary_body(
     tmp_path: Path,
 ) -> None:

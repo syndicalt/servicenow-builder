@@ -30,6 +30,7 @@ from jedi_devproject.bootstrap import (
     build_lifecycle_webhook_bootstrap_spec,
     lifecycle_webhook_servicenow_record_plan,
     plan_bootstrap_fields,
+    verify_lifecycle_webhook_records,
 )
 from jedi_devproject.external_build import (
     ExternalBuildPipelineResult,
@@ -285,6 +286,14 @@ def main(argv: list[str] | None = None) -> int:
     apply_lifecycle_webhook.add_argument("--confirm-records", action="store_true")
     apply_lifecycle_webhook.add_argument("--audit-root", type=Path, required=True)
     apply_lifecycle_webhook.add_argument("--run-id", default="lifecycle-webhook")
+    verify_lifecycle_webhook = subparsers.add_parser(
+        "verify-lifecycle-webhook",
+        help="Verify installed ServiceNow lifecycle webhook records.",
+    )
+    verify_lifecycle_webhook.add_argument("--env-file", type=Path, default=Path(".env"))
+    verify_lifecycle_webhook.add_argument("--spec-file", type=Path, required=True)
+    verify_lifecycle_webhook.add_argument("--report-root", type=Path, required=True)
+    verify_lifecycle_webhook.add_argument("--run-id", required=True)
     run_writeback = subparsers.add_parser(
         "run-writeback-batch",
         help="Run structured writeback jobs from a JSON file.",
@@ -1089,6 +1098,39 @@ def main(argv: list[str] | None = None) -> int:
             f"{reasons}".strip()
         )
         return 0 if lifecycle_apply_result.applied or not lifecycle_apply_result.reasons else 1
+
+    if args.command == "verify-lifecycle-webhook":
+        try:
+            spec = LifecycleWebhookBootstrapSpec.model_validate(
+                _load_json_object(args.spec_file)
+            )
+        except (ValidationError, ValueError) as exc:
+            print(
+                "lifecycle_webhook_verified=False "
+                f"reason=invalid_lifecycle_webhook_spec detail={exc}"
+            )
+            return 1
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        lifecycle_webhook_verification = verify_lifecycle_webhook_records(
+            client,
+            spec=spec,
+        )
+        report_path = write_json_artifact_once(
+            args.report_root,
+            filename=f"{args.run_id}.json",
+            payload=lifecycle_webhook_verification.model_dump(mode="json"),
+        )
+        reasons = " ".join(
+            f"reason={reason}" for reason in lifecycle_webhook_verification.reasons
+        )
+        print(
+            f"lifecycle_webhook_verified={lifecycle_webhook_verification.verified} "
+            f"matched_records={len(lifecycle_webhook_verification.matched_records)} "
+            f"missing_records={len(lifecycle_webhook_verification.missing_records)} "
+            f"path={report_path} "
+            f"{reasons}".strip()
+        )
+        return 0 if lifecycle_webhook_verification.verified else 1
 
     if args.command == "run-writeback-batch":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

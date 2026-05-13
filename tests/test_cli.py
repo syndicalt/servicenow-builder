@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -956,6 +957,7 @@ class FakeServiceNowClient:
         self.updated_fields: list[dict[str, object]] = []
         self.created_dictionary_fields: list[dict[str, object]] = []
         self.upserted_table_records: list[dict[str, object]] = []
+        self.table_records: dict[str, dict[str, object]] = {}
         self.attached_files: list[dict[str, object]] = []
         self.ai_status = "Ready for Testing"
         self.build_reference = "build-20260513-001"
@@ -1091,6 +1093,18 @@ class FakeServiceNowClient:
         }
         self.upserted_table_records.append(payload)
         return {"sys_id": f"{table}-sys-id"}
+
+    def fetch_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+    ) -> dict[str, object] | None:
+        for key, record in self.table_records.items():
+            key_table, _, key_lookup = key.partition(":")
+            if key_table == table and ast.literal_eval(key_lookup) == lookup:
+                return record
+        return None
 
     def attach_story_file(
         self,
@@ -3171,6 +3185,144 @@ def test_cli_apply_lifecycle_webhook_upserts_records_and_writes_audit(
     ]
     assert "story_sys_id" not in json.dumps(audit)
     assert "client-secret" not in captured.out
+
+
+def test_cli_verify_lifecycle_webhook_reports_matching_records(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_root = tmp_path / "lifecycle-bootstrap"
+    main(
+        [
+            "plan-lifecycle-business-rule",
+            "--endpoint-url",
+            "https://sidecar.example.gov/lifecycle/events",
+            "--integration-identity",
+            "jedi-devproject-lifecycle-integration",
+            "--draft-state-value",
+            "-6",
+            "--ready-state-value",
+            "1",
+            "--run-id",
+            "lifecycle-business-rule-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+    spec_path = spec_root / "lifecycle-business-rule-001.json"
+    payload = json.loads(spec_path.read_text(encoding="utf-8"))
+    fake_client = FakeServiceNowClient()
+    for record in payload["servicenow_records"]:
+        fake_client.table_records[f"{record['table']}:{record['lookup']}"] = {
+            **record["fields"],
+            "sys_id": f"{record['table']}-sys-id",
+        }
+    report_root = tmp_path / "verification"
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "verify-lifecycle-webhook",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_path),
+                "--report-root",
+                str(report_root),
+                "--run-id",
+                "lifecycle-webhook-verify-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    report = json.loads((report_root / "lifecycle-webhook-verify-001.json").read_text())
+
+    assert exit_code == 0
+    assert "lifecycle_webhook_verified=True" in captured.out
+    assert "matched_records=3" in captured.out
+    assert report["verified"] is True
+    assert report["matched_records"] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
+    assert "story_sys_id" not in json.dumps(report)
+
+
+def test_cli_verify_lifecycle_webhook_reports_mismatches(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_root = tmp_path / "lifecycle-bootstrap"
+    main(
+        [
+            "plan-lifecycle-business-rule",
+            "--endpoint-url",
+            "https://sidecar.example.gov/lifecycle/events",
+            "--integration-identity",
+            "jedi-devproject-lifecycle-integration",
+            "--draft-state-value",
+            "-6",
+            "--ready-state-value",
+            "1",
+            "--run-id",
+            "lifecycle-business-rule-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+    spec_path = spec_root / "lifecycle-business-rule-001.json"
+    payload = json.loads(spec_path.read_text(encoding="utf-8"))
+    fake_client = FakeServiceNowClient()
+    first_record = payload["servicenow_records"][0]
+    fake_client.table_records[f"{first_record['table']}:{first_record['lookup']}"] = {
+        **first_record["fields"],
+        "endpoint": "https://wrong.example.gov/lifecycle/events",
+    }
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "verify-lifecycle-webhook",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_path),
+                "--report-root",
+                str(tmp_path / "verification"),
+                "--run-id",
+                "lifecycle-webhook-verify-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "lifecycle_webhook_verified=False" in captured.out
+    assert "reason=record_missing" in captured.out
+    assert "reason=field_mismatch" in captured.out
 
 
 def test_cli_run_writeback_batch_processes_job_file(

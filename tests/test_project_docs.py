@@ -1025,3 +1025,25 @@ def test_sprint_sixty_six_change_log_documents_lifecycle_apply() -> None:
     assert "sys_rest_message_fn" in change_log
     assert "sys_script" in change_log
     assert "lifecycle_webhook_confirmation_required" in change_log
+
+
+def test_operator_guide_documents_lifecycle_webhook_verification() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "verify-lifecycle-webhook" in guide
+    assert "read-only" in guide
+    assert "record_missing" in guide
+    assert "field_mismatch" in guide
+    assert "verification report" in guide
+
+
+def test_sprint_sixty_seven_change_log_documents_lifecycle_verification() -> None:
+    change_log = Path("docs/sprints/sprint-67-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "verify_lifecycle_webhook_records" in change_log
+    assert "verify-lifecycle-webhook" in change_log
+    assert "record_missing" in change_log
+    assert "field_mismatch" in change_log
+    assert "read-only" in change_log

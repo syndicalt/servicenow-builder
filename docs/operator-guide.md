@@ -188,6 +188,18 @@ python3 -m jedi_devproject.cli apply-lifecycle-webhook \
 
 The command upserts the planned `insert_or_update` records and writes a lifecycle webhook audit artifact. It refuses to call ServiceNow unless `--confirm-table rm_story` and `--confirm-records` are both supplied.
 
+Use `verify-lifecycle-webhook` after apply to perform a read-only comparison between ServiceNow and the reviewed spec:
+
+```bash
+python3 -m jedi_devproject.cli verify-lifecycle-webhook \
+  --env-file .env \
+  --spec-file artifacts/lifecycle-bootstrap/lifecycle-business-rule-20260513-001.json \
+  --report-root artifacts/lifecycle-webhook-verification \
+  --run-id lifecycle-webhook-verify-20260513-001
+```
+
+The command writes a verification report and returns nonzero when expected records are absent or changed. Missing records report `record_missing`; changed fields report `field_mismatch`.
+
 Use `process-lifecycle-event` to validate a captured lifecycle event and write a local orchestration plan:
 
 ```bash

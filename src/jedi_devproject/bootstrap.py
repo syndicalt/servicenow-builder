@@ -41,6 +41,14 @@ class LifecycleWebhookApplyResult(BaseModel):
     reasons: list[str]
 
 
+class LifecycleWebhookVerificationResult(BaseModel):
+    verified: bool
+    matched_records: list[str]
+    missing_records: list[str]
+    mismatched_fields: dict[str, list[str]]
+    reasons: list[str]
+
+
 class LifecycleBusinessRuleSpec(BaseModel):
     name: str
     table: str
@@ -89,6 +97,16 @@ class LifecycleWebhookClient(Protocol):
         fields: dict[str, Any],
     ) -> dict[str, Any]:
         """Create or update a ServiceNow table record."""
+
+
+class LifecycleWebhookReadClient(Protocol):
+    def fetch_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+    ) -> dict[str, Any] | None:
+        """Fetch one ServiceNow table record by lookup fields."""
 
 
 REQUIRED_BOOTSTRAP_FIELDS = [
@@ -342,6 +360,50 @@ def apply_lifecycle_webhook_records(
         applied=bool(upserted_records),
         upserted_records=upserted_records,
         reasons=[],
+    )
+
+
+def verify_lifecycle_webhook_records(
+    client: LifecycleWebhookReadClient,
+    *,
+    spec: LifecycleWebhookBootstrapSpec,
+) -> LifecycleWebhookVerificationResult:
+    matched_records: list[str] = []
+    missing_records: list[str] = []
+    mismatched_fields: dict[str, list[str]] = {}
+
+    for planned_record in lifecycle_webhook_servicenow_record_plan(spec):
+        table = str(planned_record["table"])
+        actual_record = client.fetch_table_record(
+            table=table,
+            lookup=planned_record["lookup"],
+        )
+        if actual_record is None:
+            missing_records.append(table)
+            continue
+
+        expected_fields = planned_record["fields"]
+        mismatches = [
+            field_name
+            for field_name, expected_value in expected_fields.items()
+            if actual_record.get(field_name) != expected_value
+        ]
+        if mismatches:
+            mismatched_fields[table] = mismatches
+        else:
+            matched_records.append(table)
+
+    reasons: list[str] = []
+    if missing_records:
+        reasons.append("record_missing")
+    if mismatched_fields:
+        reasons.append("field_mismatch")
+    return LifecycleWebhookVerificationResult(
+        verified=not reasons,
+        matched_records=matched_records,
+        missing_records=missing_records,
+        mismatched_fields=mismatched_fields,
+        reasons=reasons,
     )
 
 

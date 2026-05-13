@@ -39,6 +39,7 @@ class FakeBootstrapClient:
 class FakeLifecycleWebhookClient:
     def __init__(self) -> None:
         self.upserts: list[dict[str, object]] = []
+        self.records: dict[str, dict[str, object]] = {}
 
     def upsert_table_record(
         self,
@@ -49,6 +50,14 @@ class FakeLifecycleWebhookClient:
     ) -> dict[str, object]:
         self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
         return {"sys_id": f"{table}-sys-id"}
+
+    def fetch_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+    ) -> dict[str, object] | None:
+        return self.records.get(f"{table}:{lookup}")
 
 
 def test_bootstrap_plan_only_includes_missing_custom_writeback_fields() -> None:
@@ -294,3 +303,59 @@ def test_apply_lifecycle_webhook_records_upserts_planned_records() -> None:
         "sys_rest_message_fn",
         "sys_script",
     ]
+
+
+def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
+    from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
+
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+    for record in lifecycle_webhook_servicenow_record_plan(spec):
+        client.records[f"{record['table']}:{record['lookup']}"] = {
+            **record["fields"],
+            "sys_id": f"{record['table']}-sys-id",
+        }
+
+    result = verify_lifecycle_webhook_records(client, spec=spec)
+
+    assert result.verified is True
+    assert result.matched_records == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
+    assert result.missing_records == []
+    assert result.mismatched_fields == {}
+    assert result.reasons == []
+
+
+def test_verify_lifecycle_webhook_records_reports_missing_and_mismatched_records() -> None:
+    from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
+
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+    plan = lifecycle_webhook_servicenow_record_plan(spec)
+    client.records[f"{plan[0]['table']}:{plan[0]['lookup']}"] = {
+        **plan[0]["fields"],
+        "endpoint": "https://wrong.example.gov/lifecycle/events",
+    }
+
+    result = verify_lifecycle_webhook_records(client, spec=spec)
+
+    assert result.verified is False
+    assert result.missing_records == ["sys_rest_message_fn", "sys_script"]
+    assert result.mismatched_fields == {
+        "sys_rest_message": ["endpoint"],
+    }
+    assert "record_missing" in result.reasons
+    assert "field_mismatch" in result.reasons
