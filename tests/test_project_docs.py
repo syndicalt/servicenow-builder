@@ -1002,3 +1002,26 @@ def test_sprint_sixty_five_change_log_documents_lifecycle_record_plan() -> None:
     assert "sys_script" in change_log
     assert "insert_or_update" in change_log
     assert "no live ServiceNow apply" in change_log
+
+
+def test_operator_guide_documents_lifecycle_webhook_apply() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "apply-lifecycle-webhook" in guide
+    assert "--confirm-records" in guide
+    assert "--confirm-table rm_story" in guide
+    assert "lifecycle webhook audit" in guide
+    assert "insert_or_update" in guide
+
+
+def test_sprint_sixty_six_change_log_documents_lifecycle_apply() -> None:
+    change_log = Path("docs/sprints/sprint-66-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "apply-lifecycle-webhook" in change_log
+    assert "upsert_table_record" in change_log
+    assert "sys_rest_message" in change_log
+    assert "sys_rest_message_fn" in change_log
+    assert "sys_script" in change_log
+    assert "lifecycle_webhook_confirmation_required" in change_log

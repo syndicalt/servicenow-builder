@@ -35,6 +35,12 @@ class BootstrapApplyResult(BaseModel):
     reasons: list[str]
 
 
+class LifecycleWebhookApplyResult(BaseModel):
+    applied: bool
+    upserted_records: list[dict[str, Any]]
+    reasons: list[str]
+
+
 class LifecycleBusinessRuleSpec(BaseModel):
     name: str
     table: str
@@ -72,6 +78,17 @@ class BootstrapClient(Protocol):
         max_length: int | None,
     ) -> dict[str, object]:
         """Create a dictionary field on rm_story."""
+
+
+class LifecycleWebhookClient(Protocol):
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create or update a ServiceNow table record."""
 
 
 REQUIRED_BOOTSTRAP_FIELDS = [
@@ -290,6 +307,42 @@ def lifecycle_webhook_servicenow_record_plan(
             },
         },
     ]
+
+
+def apply_lifecycle_webhook_records(
+    client: LifecycleWebhookClient,
+    *,
+    spec: LifecycleWebhookBootstrapSpec,
+    confirm_table: str | None,
+    confirm_records: bool,
+) -> LifecycleWebhookApplyResult:
+    if confirm_table != BOOTSTRAP_TABLE or not confirm_records:
+        return LifecycleWebhookApplyResult(
+            applied=False,
+            upserted_records=[],
+            reasons=["lifecycle_webhook_confirmation_required"],
+        )
+
+    upserted_records: list[dict[str, Any]] = []
+    for record in lifecycle_webhook_servicenow_record_plan(spec):
+        result = client.upsert_table_record(
+            table=str(record["table"]),
+            lookup=record["lookup"],
+            fields=record["fields"],
+        )
+        upserted_records.append(
+            {
+                "table": record["table"],
+                "lookup": record["lookup"],
+                "sys_id": result.get("sys_id"),
+            }
+        )
+
+    return LifecycleWebhookApplyResult(
+        applied=bool(upserted_records),
+        upserted_records=upserted_records,
+        reasons=[],
+    )
 
 
 def _require_non_empty(field_name: str, value: str) -> None:

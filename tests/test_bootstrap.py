@@ -1,5 +1,6 @@
 from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
+    apply_lifecycle_webhook_records,
     build_lifecycle_business_rule_spec,
     build_lifecycle_webhook_bootstrap_spec,
     lifecycle_webhook_servicenow_record_plan,
@@ -33,6 +34,21 @@ class FakeBootstrapClient:
             }
         )
         return {"element": element}
+
+
+class FakeLifecycleWebhookClient:
+    def __init__(self) -> None:
+        self.upserts: list[dict[str, object]] = []
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, object],
+    ) -> dict[str, object]:
+        self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+        return {"sys_id": f"{table}-sys-id"}
 
 
 def test_bootstrap_plan_only_includes_missing_custom_writeback_fields() -> None:
@@ -226,3 +242,55 @@ def test_lifecycle_webhook_servicenow_record_plan_has_explicit_tables() -> None:
     assert plan[2]["fields"]["action_update"] is True
     assert "story_state_changed" in str(plan[2]["fields"]["script"])
     assert "story_sys_id" not in str(plan)
+
+
+def test_apply_lifecycle_webhook_records_requires_confirmation() -> None:
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    result = apply_lifecycle_webhook_records(
+        client,
+        spec=spec,
+        confirm_table=None,
+        confirm_records=False,
+    )
+
+    assert result.applied is False
+    assert result.upserted_records == []
+    assert result.reasons == ["lifecycle_webhook_confirmation_required"]
+    assert client.upserts == []
+
+
+def test_apply_lifecycle_webhook_records_upserts_planned_records() -> None:
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    result = apply_lifecycle_webhook_records(
+        client,
+        spec=spec,
+        confirm_table="rm_story",
+        confirm_records=True,
+    )
+
+    assert result.applied is True
+    assert result.reasons == []
+    assert [record["table"] for record in result.upserted_records] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]

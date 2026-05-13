@@ -955,6 +955,7 @@ class FakeServiceNowClient:
         self.calls: list[dict[str, object]] = []
         self.updated_fields: list[dict[str, object]] = []
         self.created_dictionary_fields: list[dict[str, object]] = []
+        self.upserted_table_records: list[dict[str, object]] = []
         self.attached_files: list[dict[str, object]] = []
         self.ai_status = "Ready for Testing"
         self.build_reference = "build-20260513-001"
@@ -1075,6 +1076,21 @@ class FakeServiceNowClient:
                 },
             }
         )
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, object],
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "table": table,
+            "lookup": lookup,
+            "fields": fields,
+        }
+        self.upserted_table_records.append(payload)
+        return {"sys_id": f"{table}-sys-id"}
 
     def attach_story_file(
         self,
@@ -3013,6 +3029,148 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
     assert "Jedi DevProject Lifecycle Event API" in payload["business_rule"]["script"]
     assert "story_state_changed" in payload["business_rule"]["script"]
     assert "story_sys_id" not in json.dumps(payload)
+
+
+def test_cli_apply_lifecycle_webhook_requires_confirmation_without_mutation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_path = tmp_path / "lifecycle-bootstrap.json"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "rest_message": {
+                    "name": "Jedi DevProject Lifecycle Event API",
+                    "method_name": "post_event",
+                    "endpoint_url": "https://sidecar.example.gov/lifecycle/events",
+                    "http_method": "POST",
+                    "authentication": "configured_in_servicenow",
+                    "content_type": "application/json",
+                },
+                "business_rule": {
+                    "name": "Jedi DevProject lifecycle event emitter",
+                    "table": "rm_story",
+                    "when": "after",
+                    "action": "update",
+                    "active": True,
+                    "condition": "current.state.changes()",
+                    "script": "(function executeRule(current, previous) {})(current, previous);",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "apply-lifecycle-webhook",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_path),
+                "--audit-root",
+                str(tmp_path / "bootstrap-audit"),
+                "--run-id",
+                "lifecycle-webhook-apply-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "lifecycle_webhook_applied=False" in captured.out
+    assert "reason=lifecycle_webhook_confirmation_required" in captured.out
+    assert fake_client.upserted_table_records == []
+    assert not (tmp_path / "bootstrap-audit" / "lifecycle-webhook-apply-001.json").exists()
+
+
+def test_cli_apply_lifecycle_webhook_upserts_records_and_writes_audit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_root = tmp_path / "lifecycle-bootstrap"
+    main(
+        [
+            "plan-lifecycle-business-rule",
+            "--endpoint-url",
+            "https://sidecar.example.gov/lifecycle/events",
+            "--integration-identity",
+            "jedi-devproject-lifecycle-integration",
+            "--draft-state-value",
+            "-6",
+            "--ready-state-value",
+            "1",
+            "--run-id",
+            "lifecycle-business-rule-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+    spec_path = spec_root / "lifecycle-business-rule-001.json"
+    fake_client = FakeServiceNowClient()
+    audit_root = tmp_path / "bootstrap-audit"
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "apply-lifecycle-webhook",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_path),
+                "--confirm-table",
+                "rm_story",
+                "--confirm-records",
+                "--audit-root",
+                str(audit_root),
+                "--run-id",
+                "lifecycle-webhook-apply-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    audit_path = audit_root / "lifecycle-webhook-apply-001.json"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "lifecycle_webhook_applied=True" in captured.out
+    assert "upserted_records=3" in captured.out
+    assert [record["table"] for record in fake_client.upserted_table_records] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
+    assert [record["table"] for record in audit["upserted_records"]] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+        "sys_script",
+    ]
+    assert "story_sys_id" not in json.dumps(audit)
+    assert "client-secret" not in captured.out
 
 
 def test_cli_run_writeback_batch_processes_job_file(

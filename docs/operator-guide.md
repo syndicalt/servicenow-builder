@@ -174,6 +174,20 @@ The artifact also includes `servicenow_records`, a deterministic plan for the Se
 
 Each record includes an `insert_or_update` operation, lookup keys, and the fields to write. The planning command does not apply those records. Live apply must use this record plan, require explicit confirmation, and write audit evidence before making ServiceNow changes.
 
+Use `apply-lifecycle-webhook` only after reviewing the generated lifecycle bootstrap artifact:
+
+```bash
+python3 -m jedi_devproject.cli apply-lifecycle-webhook \
+  --env-file .env \
+  --spec-file artifacts/lifecycle-bootstrap/lifecycle-business-rule-20260513-001.json \
+  --confirm-table rm_story \
+  --confirm-records \
+  --audit-root artifacts/bootstrap-audit \
+  --run-id lifecycle-webhook-apply-20260513-001
+```
+
+The command upserts the planned `insert_or_update` records and writes a lifecycle webhook audit artifact. It refuses to call ServiceNow unless `--confirm-table rm_story` and `--confirm-records` are both supplied.
+
 Use `process-lifecycle-event` to validate a captured lifecycle event and write a local orchestration plan:
 
 ```bash

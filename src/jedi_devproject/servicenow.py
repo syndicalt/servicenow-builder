@@ -316,6 +316,70 @@ class ServiceNowClient:
         result = response.json_body.get("result", {})
         return result if isinstance(result, dict) else {}
 
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, Any],
+    ) -> dict[str, Any]:
+        query = "^".join(f"{key}={value}" for key, value in lookup.items())
+        lookup_response = self._transport.send(
+            HttpRequest(
+                method="GET",
+                url=f"{self._settings.base_url}/api/now/table/{table}",
+                headers={
+                    "Authorization": self._auth.authorization_header(),
+                    "Accept": "application/json",
+                },
+                params={
+                    "sysparm_query": query,
+                    "sysparm_limit": "1",
+                },
+            )
+        )
+        if lookup_response.status_code >= 400:
+            raise ServiceNowApiError(
+                f"ServiceNow API failed with status {lookup_response.status_code}: "
+                f"{redact_secrets(lookup_response.json_body)}"
+            )
+
+        existing_records = lookup_response.json_body.get("result", [])
+        if isinstance(existing_records, list) and existing_records:
+            sys_id = str(existing_records[0].get("sys_id", ""))
+            response = self._transport.send(
+                HttpRequest(
+                    method="PATCH",
+                    url=f"{self._settings.base_url}/api/now/table/{table}/{sys_id}",
+                    headers={
+                        "Authorization": self._auth.authorization_header(),
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                    body=fields,
+                )
+            )
+        else:
+            response = self._transport.send(
+                HttpRequest(
+                    method="POST",
+                    url=f"{self._settings.base_url}/api/now/table/{table}",
+                    headers={
+                        "Authorization": self._auth.authorization_header(),
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                    body=fields,
+                )
+            )
+        if response.status_code >= 400:
+            raise ServiceNowApiError(
+                f"ServiceNow API failed with status {response.status_code}: "
+                f"{redact_secrets(response.json_body)}"
+            )
+        result = response.json_body.get("result", {})
+        return result if isinstance(result, dict) else {}
+
     def attach_story_file(
         self,
         story_sys_id: str,

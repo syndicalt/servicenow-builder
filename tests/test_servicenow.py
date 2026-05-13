@@ -683,6 +683,92 @@ def test_servicenow_client_updates_story_fields_with_patch_without_secret_leakag
     assert "client-secret" not in repr(request.sanitized())
 
 
+def test_servicenow_client_upserts_table_record_with_lookup_query() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(status_code=200, json_body={"result": []}),
+            HttpResponse(
+                status_code=201,
+                json_body={"result": {"sys_id": "rest-message-sys-id"}},
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    result = client.upsert_table_record(
+        table="sys_rest_message",
+        lookup={"name": "Jedi DevProject Lifecycle Event API"},
+        fields={
+            "name": "Jedi DevProject Lifecycle Event API",
+            "endpoint": "https://sidecar.example.gov/lifecycle/events",
+        },
+    )
+
+    lookup_request = transport.requests[1]
+    create_request = transport.requests[2]
+    assert result == {"sys_id": "rest-message-sys-id"}
+    assert lookup_request.method == "GET"
+    assert lookup_request.url.endswith("/api/now/table/sys_rest_message")
+    assert lookup_request.params["sysparm_query"] == (
+        "name=Jedi DevProject Lifecycle Event API"
+    )
+    assert lookup_request.params["sysparm_limit"] == "1"
+    assert create_request.method == "POST"
+    assert create_request.url.endswith("/api/now/table/sys_rest_message")
+    assert create_request.body["endpoint"] == "https://sidecar.example.gov/lifecycle/events"
+    assert "client-secret" not in repr(create_request.sanitized())
+
+
+def test_servicenow_client_upsert_updates_existing_table_record() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": [{"sys_id": "script-sys-id"}]},
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": {"sys_id": "script-sys-id"}},
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    client.upsert_table_record(
+        table="sys_script",
+        lookup={
+            "name": "Jedi DevProject lifecycle event emitter",
+            "collection": "rm_story",
+        },
+        fields={"active": True, "when": "after"},
+    )
+
+    update_request = transport.requests[2]
+    assert update_request.method == "PATCH"
+    assert update_request.url.endswith("/api/now/table/sys_script/script-sys-id")
+    assert update_request.body == {"active": True, "when": "after"}
+
+
 def test_servicenow_client_uploads_story_attachment_with_binary_body(
     tmp_path: Path,
 ) -> None:
