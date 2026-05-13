@@ -79,6 +79,18 @@ def test_sprint_thirty_change_log_documents_model_contract_hardening() -> None:
     assert "ModelResponseError" in change_log
 
 
+def test_sprint_thirty_one_change_log_documents_candidate_handoff() -> None:
+    change_log = Path("docs/sprints/sprint-31-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "UpdateSetCandidate" in change_log
+    assert "generate_implementation_update_set_candidate" in change_log
+    assert "artifact_hash" in change_log
+    assert "reviewable handoff" in change_log
+    assert "manual-review" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),

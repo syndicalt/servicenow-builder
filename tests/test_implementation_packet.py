@@ -2,8 +2,10 @@ from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
     generate_implementation_candidate,
+    generate_implementation_update_set_candidate,
 )
 from jedi_devproject.models import (
+    CandidateStatus,
     DataClassification,
     ProviderPolicy,
     ProviderStatus,
@@ -35,6 +37,11 @@ class RecordingImplementationProvider:
     def generate(self, payload: dict[str, object]) -> dict[str, object]:
         self.payloads.append(payload)
         return self.response
+
+
+class FailingImplementationProvider:
+    def generate(self, payload: dict[str, object]) -> dict[str, object]:
+        raise AssertionError("provider should not be called")
 
 
 def _story() -> Story:
@@ -224,3 +231,42 @@ def test_generate_implementation_candidate_rejects_missing_rollback_notes() -> N
         assert "rollback_notes must be a non-empty list" in str(exc)
     else:
         raise AssertionError("missing rollback_notes was accepted")
+
+
+def test_generate_implementation_update_set_candidate_maps_validated_model_response() -> None:
+    provider = RecordingImplementationProvider()
+
+    candidate = generate_implementation_update_set_candidate(
+        story=_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        provider=provider,
+    )
+
+    assert candidate.story_number == "STRY0010013"
+    assert candidate.status is CandidateStatus.READY_FOR_REVIEW
+    assert candidate.eligibility_decision == "eligible"
+    assert candidate.changes[0].table == "sys_dictionary"
+    assert candidate.retrieval_citations
+    assert candidate.artifact_hash
+    assert "Confirm field appears" in candidate.reviewer_notes[0]
+    assert "Rollback:" in candidate.reviewer_notes[-1]
+    assert "story-sys-id" not in candidate.model_dump_json()
+
+
+def test_generate_implementation_update_set_candidate_skips_provider_for_manual_review() -> None:
+    manual_review_story = _story().model_copy(update={"story_points": 8})
+
+    candidate = generate_implementation_update_set_candidate(
+        story=manual_review_story,
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        provider=FailingImplementationProvider(),
+    )
+
+    assert candidate.status is CandidateStatus.MANUAL_BUILD
+    assert candidate.eligibility_decision == "manual_review"
+    assert candidate.changes == []
+    assert "deterministic safety gate" in candidate.reviewer_notes[0]
