@@ -258,6 +258,35 @@ Delivery evidence:
 
 These artifacts can be attached to the story after human approval or generated test evidence approval. They are the artifacts a tester, reviewer, or release coordinator may need from ServiceNow. This attachment stage happens after candidate review/export, not during implementation packet generation or Ready for Testing writeback.
 
+Use `plan-artifact-handoff` to produce a write-once handoff report for a story:
+
+```bash
+python3 -m jedi_devproject.cli plan-artifact-handoff \
+  --run-id handoff-20260513-001 \
+  --story-number STRY0010013 \
+  --jobs-file artifacts/artifact-handoff-jobs.json \
+  --report-root artifacts/artifact-handoff-reports
+```
+
+The jobs file is a JSON list:
+
+```json
+[
+  {
+    "artifact_kind": "implementation_candidate",
+    "artifact_path": "artifacts/implementation-candidates/run/STRY0010013.json",
+    "approved_for_delivery": false
+  },
+  {
+    "artifact_kind": "update_set_xml",
+    "artifact_path": "artifacts/exports/STRY0010013.xml",
+    "approved_for_delivery": true
+  }
+]
+```
+
+The handoff report records one decision per artifact, including `attach_to_servicenow`, `write_story_link`, `required_before_ready_for_testing`, exposure category, and attachment label when applicable. It is a planning artifact only; it does not attach files to ServiceNow.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

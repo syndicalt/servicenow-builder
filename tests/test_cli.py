@@ -1652,6 +1652,58 @@ def test_cli_record_lifecycle_manifest_writes_phase_manifest(
     assert "sys_id" not in json.dumps(manifest)
 
 
+def test_cli_plan_artifact_handoff_writes_decision_report(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    jobs_path = tmp_path / "handoff-jobs.json"
+    jobs_path.write_text(
+        json.dumps(
+            [
+                {
+                    "artifact_kind": "implementation_candidate",
+                    "artifact_path": "artifacts/candidates/STRY0010013.json",
+                    "approved_for_delivery": False,
+                },
+                {
+                    "artifact_kind": "update_set_xml",
+                    "artifact_path": "artifacts/exports/STRY0010013.xml",
+                    "approved_for_delivery": True,
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report_root = tmp_path / "handoff-reports"
+
+    exit_code = main(
+        [
+            "plan-artifact-handoff",
+            "--run-id",
+            "handoff-001",
+            "--story-number",
+            "STRY0010013",
+            "--jobs-file",
+            str(jobs_path),
+            "--report-root",
+            str(report_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report_path = report_root / "handoff-001.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "handoff_plans=2" in captured.out
+    assert "attach_to_servicenow=1" in captured.out
+    assert report["summary"]["delivery_evidence"] == 1
+    assert report["decisions"][1]["service_now_attachment_label"] == (
+        "Approved Update Set XML"
+    )
+    assert "sys_id" not in json.dumps(report)
+
+
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

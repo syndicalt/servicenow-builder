@@ -62,6 +62,8 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "Approved Update Set XML" in guide
     assert "Test Evidence Bundle" in guide
     assert "attach" in guide
+    assert "plan-artifact-handoff" in guide
+    assert "handoff report" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -595,3 +597,14 @@ def test_sprint_forty_two_change_log_documents_artifact_handoff_contract() -> No
     assert "Approved Update Set XML" in change_log
     assert "Test Evidence Bundle" in change_log
     assert "internal audit evidence" in change_log
+
+
+def test_sprint_forty_three_change_log_documents_handoff_report() -> None:
+    change_log = Path("docs/sprints/sprint-43-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "plan-artifact-handoff" in change_log
+    assert "handoff report" in change_log
+    assert "attach_to_servicenow" in change_log
+    assert "delivery_evidence" in change_log

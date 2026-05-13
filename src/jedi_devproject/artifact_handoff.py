@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, field_validator
 
@@ -80,3 +81,41 @@ def plan_artifact_handoff(
         required_before_ready_for_testing=False,
         rationale=approval_reason,
     )
+
+
+def build_artifact_handoff_report(
+    *,
+    run_id: str,
+    story_number: str,
+    artifacts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    decisions = [
+        plan_artifact_handoff(
+            story_number=story_number,
+            artifact_kind=ArtifactKind(str(artifact["artifact_kind"])),
+            artifact_path=str(artifact["artifact_path"]),
+            approved_for_delivery=bool(artifact["approved_for_delivery"]),
+        ).model_dump(mode="json")
+        for artifact in artifacts
+    ]
+    return {
+        "run_id": run_id,
+        "story_number": story_number,
+        "summary": {
+            "total": len(decisions),
+            "attach_to_servicenow": sum(
+                1 for decision in decisions if decision["attach_to_servicenow"]
+            ),
+            "internal_evidence": sum(
+                1
+                for decision in decisions
+                if decision["exposure"] == ArtifactExposure.INTERNAL_EVIDENCE.value
+            ),
+            "delivery_evidence": sum(
+                1
+                for decision in decisions
+                if decision["exposure"] == ArtifactExposure.DELIVERY_EVIDENCE.value
+            ),
+        },
+        "decisions": decisions,
+    }

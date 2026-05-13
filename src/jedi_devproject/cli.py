@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from jedi_devproject import __version__
+from jedi_devproject.artifact_handoff import build_artifact_handoff_report
 from jedi_devproject.artifacts import (
     write_candidate_artifact,
     write_json_artifact_once,
@@ -146,6 +147,14 @@ def main(argv: list[str] | None = None) -> int:
     lifecycle_manifest.add_argument("--verification-verified", action="store_true")
     lifecycle_manifest.add_argument("--verification-state")
     lifecycle_manifest.add_argument("--manifest-root", type=Path, required=True)
+    handoff = subparsers.add_parser(
+        "plan-artifact-handoff",
+        help="Write a report describing artifact attachment and link decisions.",
+    )
+    handoff.add_argument("--run-id", required=True)
+    handoff.add_argument("--story-number", required=True)
+    handoff.add_argument("--jobs-file", type=Path, required=True)
+    handoff.add_argument("--report-root", type=Path, required=True)
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -532,6 +541,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    if args.command == "plan-artifact-handoff":
+        report = build_artifact_handoff_report(
+            run_id=args.run_id,
+            story_number=args.story_number,
+            artifacts=_load_json_list(args.jobs_file, "artifact handoff jobs file"),
+        )
+        write_json_artifact_once(
+            args.report_root,
+            filename=f"{args.run_id}.json",
+            payload=report,
+        )
+        print(_render_summary({"handoff_plans": report["summary"]["total"], **report["summary"]}))
+        return 0
+
     if args.command == "plan-bootstrap-fields":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         bootstrap_plan = plan_bootstrap_fields(client.fetch_story_dictionary_fields())
@@ -624,6 +647,15 @@ def _load_json_object(path: Path) -> dict[str, object]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("provider response file must contain a JSON object")
+    return payload
+
+
+def _load_json_list(path: Path, description: str) -> list[dict[str, object]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError(f"{description} must contain a JSON list")
+    if not all(isinstance(item, dict) for item in payload):
+        raise ValueError(f"{description} entries must be JSON objects")
     return payload
 
 

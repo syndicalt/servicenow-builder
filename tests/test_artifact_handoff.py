@@ -1,6 +1,7 @@
 from jedi_devproject.artifact_handoff import (
     ArtifactExposure,
     ArtifactKind,
+    build_artifact_handoff_report,
     plan_artifact_handoff,
 )
 
@@ -60,3 +61,35 @@ def test_test_evidence_bundle_is_attached_after_approval() -> None:
     assert plan.exposure is ArtifactExposure.DELIVERY_EVIDENCE
     assert plan.attach_to_servicenow is True
     assert plan.service_now_attachment_label == "Test Evidence Bundle"
+
+
+def test_handoff_report_summarizes_multiple_artifact_decisions() -> None:
+    report = build_artifact_handoff_report(
+        run_id="handoff-001",
+        story_number="STRY0010013",
+        artifacts=[
+            {
+                "artifact_kind": "implementation_candidate",
+                "artifact_path": "artifacts/candidates/STRY0010013.json",
+                "approved_for_delivery": False,
+            },
+            {
+                "artifact_kind": "test_evidence_bundle",
+                "artifact_path": "artifacts/test-evidence/STRY0010013.zip",
+                "approved_for_delivery": True,
+            },
+        ],
+    )
+
+    assert report["run_id"] == "handoff-001"
+    assert report["story_number"] == "STRY0010013"
+    assert report["summary"] == {
+        "total": 2,
+        "attach_to_servicenow": 1,
+        "internal_evidence": 1,
+        "delivery_evidence": 1,
+    }
+    assert report["decisions"][0]["attach_to_servicenow"] is False
+    assert report["decisions"][1]["service_now_attachment_label"] == (
+        "Test Evidence Bundle"
+    )
