@@ -350,7 +350,7 @@ The command attaches only decisions where `attach_to_servicenow=true`. Internal 
 
 Apply writes a local write-once attachment audit record. The audit includes the story number, actor id, handoff report path, delivery artifact paths, labels, and ServiceNow attachment sys_ids returned by the Attachment API. It does not include the ServiceNow story sys_id.
 
-Before apply calls ServiceNow, `attach-delivery-artifacts` recalculates each delivery file hash and compares it to the handoff report `artifact_sha256`. A changed file fails closed with `reason=artifact_hash_mismatch` and no attachment is uploaded. Dry-run attachment planning also verifies the same hashes before reporting planned attachments. The attachment audit records the reviewed `artifact_sha256` for each uploaded file.
+Before apply calls ServiceNow, `attach-delivery-artifacts` recalculates each delivery file hash and compares it to the handoff report `artifact_sha256`. A missing file fails closed with `reason=artifact_missing`; a changed file fails closed with `reason=artifact_hash_mismatch`; no attachment is uploaded in either case. Dry-run attachment planning also verifies the same hashes before reporting planned attachments. The attachment audit records the reviewed `artifact_sha256` for each uploaded file.
 
 Use `run-delivery-artifact-smoke` to exercise the delivery handoff and attachment planning path without a real Update Set exporter:
 

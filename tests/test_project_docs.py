@@ -78,6 +78,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "run-reviewed-delivery-smoke" in guide
     assert "artifact_hash_mismatch" in guide
     assert "Dry-run attachment planning also verifies" in guide
+    assert "artifact_missing" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -737,3 +738,14 @@ def test_sprint_fifty_three_change_log_documents_dry_run_hash_preflight() -> Non
     assert "artifact_hash_mismatch" in change_log
     assert "before apply-only validation" in change_log
     assert "does not call ServiceNow" in change_log
+
+
+def test_sprint_fifty_four_change_log_documents_missing_artifact_preflight() -> None:
+    change_log = Path("docs/sprints/sprint-54-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "artifact_missing" in change_log
+    assert "dry-run" in change_log
+    assert "traceback" in change_log
+    assert "before ServiceNow" in change_log

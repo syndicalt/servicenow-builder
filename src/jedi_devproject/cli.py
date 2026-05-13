@@ -685,6 +685,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for delivery_job in delivery_jobs:
             artifact_path = Path(delivery_job["artifact_path"])
+            if not artifact_path.exists():
+                print(
+                    f"delivery_attachments_planned={len(delivery_jobs)} "
+                    "delivery_attachments_applied=0 reason=artifact_missing"
+                )
+                return 1
             artifact_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
             if artifact_hash != delivery_job["artifact_sha256"]:
                 print(
