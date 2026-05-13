@@ -161,6 +161,50 @@ def plan_external_build_writeback(
     )
 
 
+def plan_story_build_claim_writeback(
+    *,
+    story: Story,
+    lifecycle_event_id: str,
+    candidate_artifact_url: str | None,
+    claim_state: str,
+    policy: StoryWritebackPolicy,
+) -> StoryWritebackPlan:
+    fields = {"u_ai_status": "Build In Progress"}
+    if candidate_artifact_url:
+        fields["u_ai_candidate_artifact"] = candidate_artifact_url
+
+    if not policy.state_transitions_enabled:
+        return _plan(
+            story=story,
+            fields=fields,
+            work_notes=_build_claim_work_notes(lifecycle_event_id),
+            policy=policy,
+            allowed=False,
+            reasons=["State transitions are disabled"],
+        )
+
+    if not policy.allows_transition(from_state=story.state, to_state=claim_state):
+        return _plan(
+            story=story,
+            fields=fields,
+            work_notes=_build_claim_work_notes(lifecycle_event_id),
+            policy=policy,
+            allowed=False,
+            reasons=[
+                f"Transition from {story.state!r} to {claim_state!r} is not allowlisted"
+            ],
+        )
+
+    fields["state"] = claim_state
+    return _plan(
+        story=story,
+        fields=fields,
+        work_notes=_build_claim_work_notes(lifecycle_event_id),
+        policy=policy,
+        allowed=True,
+    )
+
+
 def _base_fields(build_result: ExternalBuildResult, *, status: str) -> dict[str, str]:
     fields = {
         "u_ai_status": status,
@@ -176,6 +220,14 @@ def _work_notes(build_result: ExternalBuildResult, prefix: str) -> str:
     if build_result.message:
         notes = f"{notes} {build_result.message}"
     return notes
+
+
+def _build_claim_work_notes(lifecycle_event_id: str) -> str:
+    return (
+        "Automated build started. "
+        f"Lifecycle event: {lifecycle_event_id}. "
+        "The story was claimed for external build orchestration."
+    )
 
 
 def _plan(

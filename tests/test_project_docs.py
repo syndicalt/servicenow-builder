@@ -883,3 +883,26 @@ def test_sprint_sixty_change_log_documents_lifecycle_event_processor() -> None:
     assert "Work in Progress" in change_log
     assert "invalid_lifecycle_event" in change_log
     assert "no ServiceNow mutation" in change_log
+
+
+def test_operator_guide_documents_build_claim_writeback_planner() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Build Claim Writeback" in guide
+    assert "plan_story_build_claim_writeback" in guide
+    assert "Ready" in guide
+    assert "Work in Progress" in guide
+    assert "Build In Progress" in guide
+    assert "allowlisted" in guide
+
+
+def test_sprint_sixty_one_change_log_documents_build_claim_planner() -> None:
+    change_log = Path("docs/sprints/sprint-61-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "plan_story_build_claim_writeback" in change_log
+    assert "Ready to Work in Progress" in change_log
+    assert "Build In Progress" in change_log
+    assert "State transitions are disabled" in change_log
+    assert "not live apply" in change_log

@@ -154,6 +154,20 @@ python3 -m jedi_devproject.cli process-lifecycle-event \
 
 The command writes a write-once plan artifact under `lifecycle-event-plans`. A valid `Draft` to `Ready` event plans evaluation and records `Work in Progress` as the later claim state. Invalid events fail closed with `reason=invalid_lifecycle_event` and do not write a plan artifact. This command does not call ServiceNow and does not mutate story state.
 
+## Build Claim Writeback
+
+When a story is eligible for automated fulfillment, the sidecar should claim it before build handoff so users can see that work has started. The application boundary for this is `plan_story_build_claim_writeback()` in `jedi_devproject.writeback`.
+
+The planner allows `Ready` to `Work in Progress` only when state transitions are enabled and that transition is allowlisted by policy. The planned structured fields are:
+
+- `state=Work in Progress`
+- `u_ai_status=Build In Progress`
+- `u_ai_candidate_artifact=<candidate artifact path>` when available
+
+The work note includes the lifecycle event id used as the orchestration trigger. If state transitions are disabled or the current story state is not allowlisted for `Work in Progress`, the planner fails closed and omits `state` from the planned fields.
+
+This is not live apply. The apply path must still fetch the story fresh from ServiceNow, verify the current state, require an integration actor identity, write audit evidence, and use the same allowlisted field and state-transition controls as the Ready for Testing writeback.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:

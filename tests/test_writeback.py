@@ -6,6 +6,7 @@ from jedi_devproject.writeback import (
     StoryWritebackPolicy,
     build_state_mapping_from_choices,
     plan_external_build_writeback,
+    plan_story_build_claim_writeback,
     validate_writeback_fields,
 )
 
@@ -119,3 +120,43 @@ def test_failed_external_build_routes_to_human_review_without_state_change() -> 
     assert "state" not in plan.fields
     assert plan.fields["u_ai_status"] == "Human Review Required"
     assert "Build validation failed." in plan.work_notes
+
+
+def test_story_build_claim_plans_work_in_progress_transition() -> None:
+    plan = plan_story_build_claim_writeback(
+        story=_story(state="Ready"),
+        lifecycle_event_id="evt-20260513-001",
+        candidate_artifact_url="artifacts/implementation-candidates/STRY0010013.json",
+        claim_state="Work in Progress",
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Ready": {"Work in Progress"}},
+        ),
+    )
+
+    assert plan.allowed is True
+    assert plan.fields["state"] == "Work in Progress"
+    assert plan.fields["u_ai_status"] == "Build In Progress"
+    assert (
+        plan.fields["u_ai_candidate_artifact"]
+        == "artifacts/implementation-candidates/STRY0010013.json"
+    )
+    assert "evt-20260513-001" in plan.work_notes
+    assert "Automated build started" in plan.work_notes
+
+
+def test_story_build_claim_fails_closed_when_transition_is_not_allowlisted() -> None:
+    plan = plan_story_build_claim_writeback(
+        story=_story(state="Draft"),
+        lifecycle_event_id="evt-20260513-001",
+        candidate_artifact_url=None,
+        claim_state="Work in Progress",
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Ready": {"Work in Progress"}},
+        ),
+    )
+
+    assert plan.allowed is False
+    assert "state" not in plan.fields
+    assert "Transition from 'Draft' to 'Work in Progress' is not allowlisted" in plan.reasons
