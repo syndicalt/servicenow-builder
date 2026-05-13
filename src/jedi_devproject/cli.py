@@ -152,6 +152,9 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(
                 "build-implementation-packet requires --sample-file or --story-number"
             )
+        if not stories:
+            print("implementation_packets=0 reason=no_stories_found")
+            return 1
         artifact_dir = args.artifact_root / args.run_id
         for story in stories:
             packet = build_implementation_packet(

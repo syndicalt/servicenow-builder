@@ -221,10 +221,65 @@ def test_cli_build_implementation_packet_fetches_story_from_pdi(
     assert "client-secret" not in captured.out
 
 
+def test_cli_build_implementation_packet_fails_closed_when_pdi_story_missing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = []
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "build-implementation-packet",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STRY9999999",
+                "--artifact-root",
+                str(tmp_path / "implementation-packets"),
+                "--run-id",
+                "packet-run-003",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "implementation_packets=0" in captured.out
+    assert "reason=no_stories_found" in captured.out
+    assert "client-secret" not in captured.out
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
         self.updated_fields: list[dict[str, object]] = []
+        self.stories = [
+            Story(
+                sys_id="abc123",
+                number="STORY0010001",
+                short_description="Update portal help text",
+                description="Change portal help text from Submit to Send.",
+                story_points=2,
+                priority=3,
+                state="Ready",
+                data_classification=DataClassification.PUBLIC,
+                acceptance_criteria="Portal help text shows Send.",
+                affected_tables=["sp_instance"],
+            )
+        ]
         self.dictionary_fields = [
             StoryDictionaryField(
                 element="state",
@@ -259,20 +314,7 @@ class FakeServiceNowClient:
         limit: int = 100,
     ) -> list[Story]:
         self.calls.append({"project_sys_id": project_sys_id, "limit": limit})
-        return [
-            Story(
-                sys_id="abc123",
-                number="STORY0010001",
-                short_description="Update portal help text",
-                description="Change portal help text from Submit to Send.",
-                story_points=2,
-                priority=3,
-                state="Ready",
-                data_classification=DataClassification.PUBLIC,
-                acceptance_criteria="Portal help text shows Send.",
-                affected_tables=["sp_instance"],
-            )
-        ]
+        return self.stories
 
     def fetch_stories(
         self,
