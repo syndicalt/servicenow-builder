@@ -112,6 +112,17 @@ def test_sprint_thirty_two_change_log_documents_candidate_cli() -> None:
     assert "unsafe provider response" in change_log
 
 
+def test_sprint_thirty_three_change_log_documents_candidate_batch_runner() -> None:
+    change_log = Path("docs/sprints/sprint-33-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run-implementation-candidates" in change_log
+    assert "implementation candidate jobs file" in change_log
+    assert "no_jobs" in change_log
+    assert "safe summary" in change_log
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),

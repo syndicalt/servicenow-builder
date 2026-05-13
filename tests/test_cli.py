@@ -464,6 +464,113 @@ def test_cli_build_implementation_candidate_rejects_unsafe_provider_response(
     assert not (artifact_root / "candidate-run-002").exists()
 
 
+def test_cli_run_implementation_candidates_processes_job_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    story_path = tmp_path / "story.json"
+    provider_response_path = tmp_path / "provider-response.json"
+    jobs_path = tmp_path / "implementation-jobs.json"
+    artifact_root = tmp_path / "implementation-candidates"
+    story_path.write_text(
+        json.dumps(
+            {
+                "sys_id": "abc123",
+                "number": "STRY0010013",
+                "short_description": "Add implementation notes to the story form",
+                "description": (
+                    "Create a string field named u_ai_review_notes on rm_story and "
+                    "place it on the default story form."
+                ),
+                "story_points": 3,
+                "priority": 4,
+                "state": "Ready",
+                "data_classification": "public",
+                "acceptance_criteria": "The field appears on the default story form.",
+                "affected_tables": ["sys_dictionary", "sys_ui_form"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    provider_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [
+                    {
+                        "table": "sys_dictionary",
+                        "operation": "insert",
+                        "fields": {
+                            "name": "rm_story",
+                            "element": "u_ai_review_notes",
+                        },
+                    }
+                ],
+                "test_plan": ["Confirm the field appears on the Story form."],
+                "rollback_notes": ["Remove the field and form placement."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    jobs_path.write_text(
+        json.dumps(
+            [
+                {
+                    "sample_file": str(story_path),
+                    "provider_response_file": str(provider_response_path),
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "run-implementation-candidates",
+            "--jobs-file",
+            str(jobs_path),
+            "--artifact-root",
+            str(artifact_root),
+            "--run-id",
+            "candidate-batch-001",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "total=1" in captured.out
+    assert "built=1" in captured.out
+    assert "blocked=0" in captured.out
+    assert "abc123" not in captured.out
+    assert (artifact_root / "candidate-batch-001" / "STRY0010013.json").exists()
+
+
+def test_cli_run_implementation_candidates_rejects_empty_job_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    jobs_path = tmp_path / "implementation-jobs.json"
+    jobs_path.write_text("[]", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "run-implementation-candidates",
+            "--jobs-file",
+            str(jobs_path),
+            "--artifact-root",
+            str(tmp_path / "implementation-candidates"),
+            "--run-id",
+            "candidate-batch-empty",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "total=0" in captured.out
+    assert "reason=no_jobs" in captured.out
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []

@@ -65,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     build_candidate.add_argument("--provider-response-file", type=Path, required=True)
     build_candidate.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
     build_candidate.add_argument("--run-id", required=True)
+    run_candidates = subparsers.add_parser(
+        "run-implementation-candidates",
+        help="Run implementation candidate jobs from a JSON file.",
+    )
+    run_candidates.add_argument("--jobs-file", type=Path, required=True)
+    run_candidates.add_argument("--artifact-root", type=Path, default=Path("artifacts"))
+    run_candidates.add_argument("--run-id", required=True)
     plan_writeback = subparsers.add_parser(
         "plan-writeback",
         help="Plan ServiceNow writeback for an external build result without applying it.",
@@ -196,6 +203,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"implementation_candidates={len(stories)} run_id={args.run_id}")
         return 0
 
+    if args.command == "run-implementation-candidates":
+        jobs = _load_implementation_candidate_jobs(args.jobs_file)
+        if not jobs:
+            print("total=0 built=0 blocked=0 reason=no_jobs")
+            return 1
+        built = 0
+        for job in jobs:
+            stories = _load_sample_stories(job["sample_file"])
+            provider = StaticResponseProvider(_load_json_object(job["provider_response_file"]))
+            for story in stories:
+                candidate = generate_implementation_update_set_candidate(
+                    story=story,
+                    policy=_default_policy(),
+                    provider_policy=_default_implementation_provider_policy(),
+                    rags=_default_rags(),
+                    provider=provider,
+                )
+                write_candidate_artifact(
+                    args.artifact_root,
+                    run_id=args.run_id,
+                    candidate=candidate,
+                )
+                built += 1
+        summary = {"total": len(jobs), "built": built, "blocked": 0}
+        print(_render_summary(summary))
+        return 0
+
     if args.command == "plan-writeback":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         writeback_result = execute_writeback(
@@ -306,6 +340,31 @@ def _load_json_object(path: Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError("provider response file must contain a JSON object")
     return payload
+
+
+def _load_implementation_candidate_jobs(path: Path) -> list[dict[str, Path]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("implementation candidate jobs file must contain a JSON list")
+
+    jobs: list[dict[str, Path]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise ValueError("implementation candidate job must be a JSON object")
+        sample_file = item.get("sample_file")
+        provider_response_file = item.get("provider_response_file")
+        if not isinstance(sample_file, str) or not isinstance(provider_response_file, str):
+            raise ValueError(
+                "implementation candidate job requires sample_file and "
+                "provider_response_file"
+            )
+        jobs.append(
+            {
+                "sample_file": Path(sample_file),
+                "provider_response_file": Path(provider_response_file),
+            }
+        )
+    return jobs
 
 
 class StaticResponseProvider:

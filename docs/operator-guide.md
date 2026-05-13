@@ -76,6 +76,28 @@ The provider response file must be a JSON object containing allowed changes plus
 
 This command is a dry-run operator adapter for a future approved model provider. It does not call Now Assist or any external model endpoint.
 
+For file-based batch orchestration, provide an implementation candidate jobs file:
+
+```json
+[
+  {
+    "sample_file": "artifacts/stories/STRY0010013.json",
+    "provider_response_file": "artifacts/provider-responses/STRY0010013.json"
+  }
+]
+```
+
+Run it with:
+
+```bash
+python3 -m jedi_devproject.cli run-implementation-candidates \
+  --jobs-file artifacts/implementation-candidate-jobs.json \
+  --artifact-root artifacts/implementation-candidates \
+  --run-id candidate-batch-20260513-001
+```
+
+Empty job files fail closed with `reason=no_jobs`. The command prints a safe summary with total, built, and blocked counts.
+
 ## Writeback Planning
 
 Before enabling automated writeback, verify the target instance supports the required workflow state and structured fields:
