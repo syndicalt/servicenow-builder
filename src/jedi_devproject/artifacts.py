@@ -98,6 +98,28 @@ def write_lifecycle_manifest(
     )
 
 
+def write_delivery_attachment_audit(
+    root: Path,
+    *,
+    run_id: str,
+    story_number: str,
+    actor_id: str,
+    report_path: Path,
+    attachments: list[dict[str, Any]],
+) -> Path:
+    return write_json_artifact_once(
+        root,
+        filename=f"{run_id}.json",
+        payload={
+            "run_id": run_id,
+            "story_number": story_number,
+            "actor_id": actor_id,
+            "report_path": str(report_path),
+            "attachments": attachments,
+        },
+    )
+
+
 def _artifact_reference(path: Path) -> dict[str, str]:
     return {
         "path": str(path),

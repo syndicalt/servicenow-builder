@@ -316,7 +316,7 @@ python3 -m jedi_devproject.cli attach-delivery-artifacts \
   --report-file artifacts/artifact-handoff-reports/handoff-20260513-001.json
 ```
 
-The command is dry-run by default and prints the number of planned delivery attachments. To attach approved files, pass `--apply`, `--confirm-story-number`, and `--actor-id`:
+The command is dry-run by default and prints the number of planned delivery attachments. To attach approved files, pass `--apply`, `--confirm-story-number`, `--actor-id`, `--audit-root`, and `--run-id`:
 
 ```bash
 python3 -m jedi_devproject.cli attach-delivery-artifacts \
@@ -324,10 +324,14 @@ python3 -m jedi_devproject.cli attach-delivery-artifacts \
   --report-file artifacts/artifact-handoff-reports/handoff-20260513-001.json \
   --apply \
   --confirm-story-number STRY0010013 \
-  --actor-id svc-jedi-orchestrator
+  --actor-id svc-jedi-orchestrator \
+  --audit-root artifacts/delivery-attachment-audit \
+  --run-id attach-delivery-20260513-001
 ```
 
 The command attaches only decisions where `attach_to_servicenow=true`. Internal evidence remains link-only. Delivery files use the ServiceNow Attachment API and are uploaded to the `rm_story` record without changing state or structured AI fields.
+
+Apply writes a local write-once attachment audit record. The audit includes the story number, actor id, handoff report path, delivery artifact paths, labels, and ServiceNow attachment sys_ids returned by the Attachment API. It does not include the ServiceNow story sys_id.
 
 Use `run-delivery-artifact-smoke` to exercise the delivery handoff and attachment planning path without a real Update Set exporter:
 

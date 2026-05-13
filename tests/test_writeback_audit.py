@@ -5,6 +5,7 @@ import pytest
 
 from jedi_devproject.artifacts import (
     ArtifactWriteError,
+    write_delivery_attachment_audit,
     write_json_artifact_once,
     write_lifecycle_manifest,
     write_writeback_audit_artifact,
@@ -121,4 +122,42 @@ def test_write_lifecycle_manifest_ties_phase_artifacts_without_sys_ids(
             candidate_path=candidate_path,
             writeback_audit_path=writeback_audit_path,
             verification={"verified": True},
+        )
+
+
+def test_delivery_attachment_audit_is_write_once_without_story_sys_id(
+    tmp_path: Path,
+) -> None:
+    path = write_delivery_attachment_audit(
+        tmp_path,
+        run_id="attach-001",
+        story_number="STRY0010013",
+        actor_id="svc-jedi-orchestrator",
+        report_path=Path("artifacts/handoff.json"),
+        attachments=[
+            {
+                "artifact_kind": "update_set_xml",
+                "artifact_path": "artifacts/export.xml",
+                "attachment_label": "Approved Update Set XML",
+                "attachment_sys_id": "attachment-sys-id",
+            }
+        ],
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert path.name == "attach-001.json"
+    assert payload["story_number"] == "STRY0010013"
+    assert payload["actor_id"] == "svc-jedi-orchestrator"
+    assert payload["report_path"] == "artifacts/handoff.json"
+    assert payload["attachments"][0]["attachment_sys_id"] == "attachment-sys-id"
+    assert "story_sys_id" not in json.dumps(payload)
+
+    with pytest.raises(ArtifactWriteError):
+        write_delivery_attachment_audit(
+            tmp_path,
+            run_id="attach-001",
+            story_number="STRY0010013",
+            actor_id="svc-jedi-orchestrator",
+            report_path=Path("artifacts/handoff.json"),
+            attachments=[],
         )

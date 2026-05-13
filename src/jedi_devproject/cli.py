@@ -13,6 +13,7 @@ from jedi_devproject.artifact_handoff import (
 )
 from jedi_devproject.artifacts import (
     write_candidate_artifact,
+    write_delivery_attachment_audit,
     write_json_artifact_once,
     write_lifecycle_manifest,
 )
@@ -177,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     attach_delivery.add_argument("--apply", action="store_true")
     attach_delivery.add_argument("--confirm-story-number")
     attach_delivery.add_argument("--actor-id")
+    attach_delivery.add_argument("--audit-root", type=Path)
+    attach_delivery.add_argument("--run-id")
     delivery_smoke = subparsers.add_parser(
         "run-delivery-artifact-smoke",
         help="Create a local placeholder delivery artifact and plan attachment.",
@@ -643,6 +646,18 @@ def main(argv: list[str] | None = None) -> int:
                 "delivery_attachments_applied=0 reason=actor_identity_required"
             )
             return 1
+        if args.audit_root is None or args.run_id is None:
+            print(
+                f"delivery_attachments_planned={len(delivery_jobs)} "
+                "delivery_attachments_applied=0 reason=attachment_audit_required"
+            )
+            return 1
+        if (args.audit_root / f"{args.run_id}.json").exists():
+            print(
+                f"delivery_attachments_planned={len(delivery_jobs)} "
+                "delivery_attachments_applied=0 reason=attachment_audit_already_exists"
+            )
+            return 1
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
         if not stories:
@@ -651,17 +666,35 @@ def main(argv: list[str] | None = None) -> int:
                 "delivery_attachments_applied=0 reason=story_not_found"
             )
             return 1
+        attachment_results: list[dict[str, str]] = []
         for delivery_job in delivery_jobs:
             artifact_path = Path(delivery_job["artifact_path"])
-            client.attach_story_file(
+            attachment = client.attach_story_file(
                 stories[0].sys_id,
                 file_path=artifact_path,
                 file_name=f"{delivery_job['attachment_label']} - {artifact_path.name}",
                 content_type=_content_type_for_artifact(artifact_path),
             )
+            attachment_results.append(
+                {
+                    "artifact_kind": delivery_job["artifact_kind"],
+                    "artifact_path": delivery_job["artifact_path"],
+                    "attachment_label": delivery_job["attachment_label"],
+                    "attachment_sys_id": str(attachment.get("sys_id", "")),
+                }
+            )
+        audit_path = write_delivery_attachment_audit(
+            args.audit_root,
+            run_id=args.run_id,
+            story_number=story_number,
+            actor_id=args.actor_id,
+            report_path=args.report_file,
+            attachments=attachment_results,
+        )
         print(
             f"delivery_attachments_planned={len(delivery_jobs)} "
-            f"delivery_attachments_applied={len(delivery_jobs)}"
+            f"delivery_attachments_applied={len(delivery_jobs)} "
+            f"attachment_audit={audit_path}"
         )
         return 0
 
