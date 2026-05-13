@@ -120,6 +120,36 @@ def write_delivery_attachment_audit(
     )
 
 
+def write_reviewed_delivery_lifecycle_manifest(
+    root: Path,
+    *,
+    run_id: str,
+    story_number: str,
+    delivery_artifact_path: Path,
+    reviewed_delivery_job_path: Path,
+    artifact_handoff_report_path: Path,
+    delivery_attachment_plan: dict[str, Any],
+) -> Path:
+    return write_json_artifact_once(
+        root,
+        filename=f"{run_id}.json",
+        payload={
+            "run_id": run_id,
+            "story_number": story_number,
+            "artifacts": {
+                "delivery_artifact": _artifact_reference(delivery_artifact_path),
+                "reviewed_delivery_job": _artifact_reference(
+                    reviewed_delivery_job_path
+                ),
+                "artifact_handoff_report": _artifact_reference(
+                    artifact_handoff_report_path
+                ),
+            },
+            "delivery_attachment_plan": delivery_attachment_plan,
+        },
+    )
+
+
 def _artifact_reference(path: Path) -> dict[str, str]:
     return {
         "path": str(path),

@@ -19,6 +19,7 @@ from jedi_devproject.artifacts import (
     write_delivery_attachment_audit,
     write_json_artifact_once,
     write_lifecycle_manifest,
+    write_reviewed_delivery_lifecycle_manifest,
 )
 from jedi_devproject.bootstrap import apply_bootstrap_fields, plan_bootstrap_fields
 from jedi_devproject.implementation_packet import (
@@ -829,7 +830,7 @@ def main(argv: list[str] | None = None) -> int:
             artifact_path=export_path,
             reviewer_id=args.reviewer_id,
         )
-        write_json_artifact_once(
+        reviewed_job_path = write_json_artifact_once(
             args.artifact_root / "reviewed-delivery-jobs",
             filename=f"{args.run_id}.json",
             payload=[reviewed_job],
@@ -839,16 +840,30 @@ def main(argv: list[str] | None = None) -> int:
             story_number=args.story_number,
             artifacts=[reviewed_job],
         )
-        write_json_artifact_once(
+        handoff_report_path = write_json_artifact_once(
             args.artifact_root / "artifact-handoff-reports",
             filename=f"{args.run_id}.json",
             payload=handoff_report,
+        )
+        write_reviewed_delivery_lifecycle_manifest(
+            args.artifact_root / "reviewed-delivery-lifecycle-manifests",
+            run_id=args.run_id,
+            story_number=args.story_number,
+            delivery_artifact_path=export_path,
+            reviewed_delivery_job_path=reviewed_job_path,
+            artifact_handoff_report_path=handoff_report_path,
+            delivery_attachment_plan={
+                "dry_run": True,
+                "planned": handoff_report["summary"]["attach_to_servicenow"],
+                "applied": 0,
+            },
         )
         print(
             "reviewed_delivery_artifacts=1 "
             f"handoff_plans={handoff_report['summary']['total']} "
             f"delivery_attachments_planned={handoff_report['summary']['attach_to_servicenow']} "
-            "delivery_attachments_applied=0"
+            "delivery_attachments_applied=0 "
+            "lifecycle_manifest_written=True"
         )
         return 0
 

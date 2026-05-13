@@ -373,7 +373,9 @@ python3 -m jedi_devproject.cli run-reviewed-delivery-smoke \
   --artifact-root artifacts/reviewed-delivery-smoke
 ```
 
-The command creates a non-placeholder XML fixture, writes a reviewed delivery job with `delivery_contract=reviewed_export`, writes the handoff report, and prints one planned delivery attachment. It does not call ServiceNow and does not attach files.
+The command creates a non-placeholder XML fixture, writes a reviewed delivery job with `delivery_contract=reviewed_export`, writes the handoff report, writes a manifest under `reviewed-delivery-lifecycle-manifests`, and prints one planned delivery attachment. It does not call ServiceNow and does not attach files.
+
+The reviewed delivery lifecycle manifest references the delivery artifact, reviewed delivery job, and handoff report by path and SHA-256. It also records the dry-run `delivery_attachment_plan`. It does not include ServiceNow sys_ids.
 
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 

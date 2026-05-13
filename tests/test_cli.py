@@ -2539,21 +2539,38 @@ def test_cli_run_reviewed_delivery_smoke_creates_reviewed_handoff_path(
         / "artifact-handoff-reports"
         / "reviewed-delivery-smoke-001.json"
     )
+    manifest_path = (
+        artifact_root
+        / "reviewed-delivery-lifecycle-manifests"
+        / "reviewed-delivery-smoke-001.json"
+    )
     jobs = json.loads(job_path.read_text(encoding="utf-8"))
     report = json.loads(report_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert exit_code == 0
     assert "reviewed_delivery_artifacts=1" in captured.out
     assert "handoff_plans=1" in captured.out
     assert "delivery_attachments_planned=1" in captured.out
     assert "delivery_attachments_applied=0" in captured.out
+    assert "lifecycle_manifest_written=True" in captured.out
     assert export_path.exists()
     assert "<placeholder_update_set" not in export_path.read_text(encoding="utf-8")
     assert jobs[0]["delivery_contract"] == "reviewed_export"
     assert jobs[0]["reviewer_id"] == "release-coordinator"
     assert report["summary"]["attach_to_servicenow"] == 1
     assert report["decisions"][0]["delivery_contract"] == "reviewed_export"
+    assert manifest["story_number"] == "STRY0010013"
+    assert manifest["artifacts"]["delivery_artifact"]["path"] == str(export_path)
+    assert manifest["artifacts"]["reviewed_delivery_job"]["path"] == str(job_path)
+    assert manifest["artifacts"]["artifact_handoff_report"]["path"] == str(report_path)
+    assert manifest["delivery_attachment_plan"] == {
+        "dry_run": True,
+        "planned": 1,
+        "applied": 0,
+    }
     assert "sys_id" not in json.dumps(report)
+    assert "sys_id" not in json.dumps(manifest)
 
 
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(

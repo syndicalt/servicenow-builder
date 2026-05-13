@@ -76,6 +76,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "review-delivery-artifact" in guide
     assert "--reviewer-id" in guide
     assert "run-reviewed-delivery-smoke" in guide
+    assert "reviewed-delivery-lifecycle-manifests" in guide
     assert "artifact_hash_mismatch" in guide
     assert "Dry-run attachment planning also verifies" in guide
     assert "artifact_missing" in guide
@@ -761,3 +762,15 @@ def test_sprint_fifty_five_change_log_documents_update_set_xml_marker_gate() -> 
     assert "review-delivery-artifact" in change_log
     assert "reviewed_export_artifact_required" in change_log
     assert "empty" in change_log
+
+
+def test_sprint_fifty_six_change_log_documents_reviewed_delivery_lifecycle_manifest() -> None:
+    change_log = Path("docs/sprints/sprint-56-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "reviewed-delivery-lifecycle-manifests" in change_log
+    assert "delivery_attachment_plan" in change_log
+    assert "artifact_handoff_report" in change_log
+    assert "reviewed_delivery_job" in change_log
+    assert "sys_id" in change_log
