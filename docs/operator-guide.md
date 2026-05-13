@@ -302,7 +302,7 @@ python3 -m jedi_devproject.cli review-delivery-artifact \
   --job-root artifacts/reviewed-delivery-jobs
 ```
 
-The command writes a write-once JSON jobs file with `approved_for_delivery=true`, `delivery_contract=reviewed_export`, `reviewer_id`, and `artifact_sha256`. Feed that jobs file into `plan-artifact-handoff` to produce the attachable handoff report. Smoke placeholder XML is rejected and cannot be promoted into a reviewed export.
+The command writes a write-once JSON jobs file with `approved_for_delivery=true`, `delivery_contract=reviewed_export`, `reviewer_id`, and `artifact_sha256`. Feed that jobs file into `plan-artifact-handoff` to produce the attachable handoff report. Smoke placeholder XML is rejected and cannot be promoted into a reviewed export. Update Set XML must contain a `sys_update_xml` entry; empty unload files fail closed with `reason=reviewed_export_artifact_required`.
 
 Use `write-artifact-handoff-summary` to write a short ServiceNow work note that links the handoff report back to the story:
 

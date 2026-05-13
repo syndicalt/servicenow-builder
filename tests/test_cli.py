@@ -1738,7 +1738,7 @@ def test_cli_review_delivery_artifact_writes_handoff_job(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     export_path = tmp_path / "STRY0010013.xml"
-    export_path.write_text("<unload/>", encoding="utf-8")
+    export_path.write_text("<unload><sys_update_xml /></unload>", encoding="utf-8")
     job_root = tmp_path / "reviewed-delivery-jobs"
 
     exit_code = main(
@@ -1788,6 +1788,40 @@ def test_cli_review_delivery_artifact_fails_closed_for_placeholder_xml(
         '<placeholder_update_set story_number="STRY0010013" />',
         encoding="utf-8",
     )
+    job_root = tmp_path / "reviewed-delivery-jobs"
+
+    exit_code = main(
+        [
+            "review-delivery-artifact",
+            "--run-id",
+            "reviewed-export-001",
+            "--story-number",
+            "STRY0010013",
+            "--artifact-kind",
+            "update_set_xml",
+            "--artifact-path",
+            str(export_path),
+            "--reviewer-id",
+            "release-coordinator",
+            "--job-root",
+            str(job_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "reviewed_delivery_artifacts=0" in captured.out
+    assert "reason=reviewed_export_artifact_required" in captured.out
+    assert not (job_root / "reviewed-export-001.json").exists()
+
+
+def test_cli_review_delivery_artifact_fails_closed_for_empty_update_set_xml(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
     job_root = tmp_path / "reviewed-delivery-jobs"
 
     exit_code = main(

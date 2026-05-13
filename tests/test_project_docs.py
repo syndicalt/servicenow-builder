@@ -79,6 +79,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "artifact_hash_mismatch" in guide
     assert "Dry-run attachment planning also verifies" in guide
     assert "artifact_missing" in guide
+    assert "sys_update_xml" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -749,3 +750,14 @@ def test_sprint_fifty_four_change_log_documents_missing_artifact_preflight() -> 
     assert "dry-run" in change_log
     assert "traceback" in change_log
     assert "before ServiceNow" in change_log
+
+
+def test_sprint_fifty_five_change_log_documents_update_set_xml_marker_gate() -> None:
+    change_log = Path("docs/sprints/sprint-55-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "sys_update_xml" in change_log
+    assert "review-delivery-artifact" in change_log
+    assert "reviewed_export_artifact_required" in change_log
+    assert "empty" in change_log

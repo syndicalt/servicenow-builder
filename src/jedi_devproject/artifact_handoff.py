@@ -60,10 +60,12 @@ def build_reviewed_delivery_artifact_job(
         raise ValueError("delivery_artifact_kind_required")
     if reviewer_id.strip() == "":
         raise ValueError("reviewer_id_required")
-    if artifact_kind is ArtifactKind.UPDATE_SET_XML and artifact_path.read_text(
-        encoding="utf-8"
-    ).lstrip().startswith("<placeholder_update_set"):
-        raise ValueError("reviewed_export_artifact_required")
+    if artifact_kind is ArtifactKind.UPDATE_SET_XML:
+        update_set_xml = artifact_path.read_text(encoding="utf-8")
+        if update_set_xml.lstrip().startswith(
+            "<placeholder_update_set"
+        ) or "<sys_update_xml" not in update_set_xml:
+            raise ValueError("reviewed_export_artifact_required")
     return {
         "story_number": story_number,
         "artifact_kind": artifact_kind.value,

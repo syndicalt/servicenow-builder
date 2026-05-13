@@ -216,7 +216,7 @@ def test_reviewed_delivery_artifact_job_records_contract_and_hash(
     tmp_path: Path,
 ) -> None:
     export_path = tmp_path / "STRY0010013.xml"
-    export_path.write_text("<unload/>", encoding="utf-8")
+    export_path.write_text("<unload><sys_update_xml /></unload>", encoding="utf-8")
 
     job = build_reviewed_delivery_artifact_job(
         story_number="STRY0010013",
@@ -257,6 +257,21 @@ def test_reviewed_delivery_artifact_job_rejects_smoke_placeholder_xml(
         '<placeholder_update_set story_number="STRY0010013" />',
         encoding="utf-8",
     )
+
+    with pytest.raises(ValueError, match="reviewed_export_artifact_required"):
+        build_reviewed_delivery_artifact_job(
+            story_number="STRY0010013",
+            artifact_kind=ArtifactKind.UPDATE_SET_XML,
+            artifact_path=export_path,
+            reviewer_id="release-coordinator",
+        )
+
+
+def test_reviewed_delivery_artifact_job_rejects_empty_update_set_xml(
+    tmp_path: Path,
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
 
     with pytest.raises(ValueError, match="reviewed_export_artifact_required"):
         build_reviewed_delivery_artifact_job(
