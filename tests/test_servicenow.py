@@ -683,6 +683,52 @@ def test_servicenow_client_updates_story_fields_with_patch_without_secret_leakag
     assert "client-secret" not in repr(request.sanitized())
 
 
+def test_servicenow_client_uploads_story_attachment_with_binary_body(
+    tmp_path: Path,
+) -> None:
+    attachment_path = tmp_path / "STRY0010013.xml"
+    attachment_path.write_bytes(b"<unload/>")
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=201,
+                json_body={"result": {"sys_id": "attachment-sys-id"}},
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    result = client.attach_story_file(
+        "story-sys-id",
+        file_path=attachment_path,
+        file_name="STRY0010013.xml",
+        content_type="application/xml",
+    )
+
+    request = transport.requests[1]
+    assert result == {"sys_id": "attachment-sys-id"}
+    assert request.method == "POST"
+    assert request.url == "https://dev205693.service-now.com/api/now/attachment/file"
+    assert request.params == {
+        "table_name": "rm_story",
+        "table_sys_id": "story-sys-id",
+        "file_name": "STRY0010013.xml",
+    }
+    assert request.headers["Content-Type"] == "application/xml"
+    assert request.body_bytes == b"<unload/>"
+    assert request.body == {}
+
+
 def test_servicenow_api_failure_raises_without_secret_leakage() -> None:
     transport = RecordingTransport(
         [

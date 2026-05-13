@@ -950,6 +950,7 @@ class FakeServiceNowClient:
         self.calls: list[dict[str, object]] = []
         self.updated_fields: list[dict[str, object]] = []
         self.created_dictionary_fields: list[dict[str, object]] = []
+        self.attached_files: list[dict[str, object]] = []
         self.ai_status = "Ready for Testing"
         self.build_reference = "build-20260513-001"
         self.candidate_artifact = "artifacts/STORY0010001.json"
@@ -1069,6 +1070,23 @@ class FakeServiceNowClient:
                 },
             }
         )
+
+    def attach_story_file(
+        self,
+        story_sys_id: str,
+        *,
+        file_path: Path,
+        file_name: str,
+        content_type: str,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "story_sys_id": story_sys_id,
+            "file_path": str(file_path),
+            "file_name": file_name,
+            "content_type": content_type,
+        }
+        self.attached_files.append(payload)
+        return {"sys_id": f"attachment-{len(self.attached_files)}"}
 
 
 def test_cli_run_pdi_fetches_stories_and_prints_safe_summary(
@@ -1829,6 +1847,141 @@ def test_cli_write_artifact_handoff_summary_dry_run_does_not_mutate(
     assert exit_code == 0
     assert "handoff_summary_written=False" in capsys.readouterr().out
     assert fake_client.updated_fields == []
+
+
+def test_cli_attach_delivery_artifacts_dry_run_does_not_attach(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "delivery_attachments_planned=1" in captured.out
+    assert "delivery_attachments_applied=0" in captured.out
+    assert fake_client.attached_files == []
+
+
+def test_cli_attach_delivery_artifacts_requires_confirmation_to_apply(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "delivery_attachments_applied=1" in captured.out
+    assert fake_client.attached_files == [
+        {
+            "story_sys_id": "abc123",
+            "file_path": str(export_path),
+            "file_name": "Approved Update Set XML - STRY0010013.xml",
+            "content_type": "application/xml",
+        }
+    ]
+    assert fake_client.updated_fields == []
+    assert "abc123" not in captured.out
 
 
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(

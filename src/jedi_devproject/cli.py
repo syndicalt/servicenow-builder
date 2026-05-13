@@ -9,6 +9,7 @@ from jedi_devproject import __version__
 from jedi_devproject.artifact_handoff import (
     build_artifact_handoff_report,
     build_artifact_handoff_work_note,
+    delivery_attachment_jobs_from_report,
 )
 from jedi_devproject.artifacts import (
     write_candidate_artifact,
@@ -167,6 +168,15 @@ def main(argv: list[str] | None = None) -> int:
     handoff_summary.add_argument("--apply", action="store_true")
     handoff_summary.add_argument("--confirm-story-number")
     handoff_summary.add_argument("--actor-id")
+    attach_delivery = subparsers.add_parser(
+        "attach-delivery-artifacts",
+        help="Attach approved delivery artifacts from a handoff report.",
+    )
+    attach_delivery.add_argument("--env-file", type=Path, default=Path(".env"))
+    attach_delivery.add_argument("--report-file", type=Path, required=True)
+    attach_delivery.add_argument("--apply", action="store_true")
+    attach_delivery.add_argument("--confirm-story-number")
+    attach_delivery.add_argument("--actor-id")
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -604,6 +614,50 @@ def main(argv: list[str] | None = None) -> int:
         print(f"handoff_summary_written=True story_number={story_number}")
         return 0
 
+    if args.command == "attach-delivery-artifacts":
+        report = _load_json_object(args.report_file)
+        story_number = str(report["story_number"])
+        delivery_jobs = delivery_attachment_jobs_from_report(report)
+        if not args.apply:
+            print(
+                f"delivery_attachments_planned={len(delivery_jobs)} "
+                "delivery_attachments_applied=0 dry_run=True"
+            )
+            return 0
+        if args.confirm_story_number != story_number:
+            print(
+                f"delivery_attachments_planned={len(delivery_jobs)} "
+                "delivery_attachments_applied=0 reason=confirmation_mismatch"
+            )
+            return 1
+        if not args.actor_id:
+            print(
+                f"delivery_attachments_planned={len(delivery_jobs)} "
+                "delivery_attachments_applied=0 reason=actor_identity_required"
+            )
+            return 1
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+        if not stories:
+            print(
+                f"delivery_attachments_planned={len(delivery_jobs)} "
+                "delivery_attachments_applied=0 reason=story_not_found"
+            )
+            return 1
+        for delivery_job in delivery_jobs:
+            artifact_path = Path(delivery_job["artifact_path"])
+            client.attach_story_file(
+                stories[0].sys_id,
+                file_path=artifact_path,
+                file_name=f"{delivery_job['attachment_label']} - {artifact_path.name}",
+                content_type=_content_type_for_artifact(artifact_path),
+            )
+        print(
+            f"delivery_attachments_planned={len(delivery_jobs)} "
+            f"delivery_attachments_applied={len(delivery_jobs)}"
+        )
+        return 0
+
     if args.command == "plan-bootstrap-fields":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         bootstrap_plan = plan_bootstrap_fields(client.fetch_story_dictionary_fields())
@@ -731,6 +785,17 @@ def _load_implementation_candidate_jobs(path: Path) -> list[dict[str, Path]]:
             }
         )
     return jobs
+
+
+def _content_type_for_artifact(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".xml":
+        return "application/xml"
+    if suffix == ".json":
+        return "application/json"
+    if suffix == ".zip":
+        return "application/zip"
+    return "application/octet-stream"
 
 
 def _write_apply_lifecycle_manifest(

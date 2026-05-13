@@ -139,3 +139,20 @@ def build_artifact_handoff_work_note(
         f"internal_evidence={summary['internal_evidence']} "
         f"delivery_evidence={summary['delivery_evidence']}."
     )
+
+
+def delivery_attachment_jobs_from_report(report: dict[str, Any]) -> list[dict[str, str]]:
+    story_number = str(report["story_number"])
+    jobs = []
+    for decision in report["decisions"]:
+        if not decision["attach_to_servicenow"]:
+            continue
+        jobs.append(
+            {
+                "story_number": story_number,
+                "artifact_kind": str(decision["artifact_kind"]),
+                "artifact_path": str(decision["artifact_path"]),
+                "attachment_label": str(decision["service_now_attachment_label"]),
+            }
+        )
+    return jobs

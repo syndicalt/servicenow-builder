@@ -23,6 +23,7 @@ class HttpRequest(BaseModel):
     headers: dict[str, str] = {}
     params: dict[str, str] = {}
     body: dict[str, Any] = {}
+    body_bytes: bytes | None = None
 
     def sanitized(self) -> HttpRequest:
         return self.model_copy(
@@ -64,7 +65,9 @@ class UrllibTransport:
         encoded_body = None
         headers = dict(request.headers)
 
-        if request.body:
+        if request.body_bytes is not None:
+            encoded_body = request.body_bytes
+        elif request.body:
             if headers.get("Content-Type") == "application/json":
                 encoded_body = json.dumps(request.body).encode("utf-8")
             else:
@@ -303,6 +306,38 @@ class ServiceNowClient:
                 "Content-Type": "application/json",
             },
             body=fields,
+        )
+        response = self._transport.send(request)
+        if response.status_code >= 400:
+            raise ServiceNowApiError(
+                f"ServiceNow API failed with status {response.status_code}: "
+                f"{redact_secrets(response.json_body)}"
+            )
+        result = response.json_body.get("result", {})
+        return result if isinstance(result, dict) else {}
+
+    def attach_story_file(
+        self,
+        story_sys_id: str,
+        *,
+        file_path: Path,
+        file_name: str,
+        content_type: str,
+    ) -> dict[str, Any]:
+        request = HttpRequest(
+            method="POST",
+            url=f"{self._settings.base_url}/api/now/attachment/file",
+            headers={
+                "Authorization": self._auth.authorization_header(),
+                "Accept": "application/json",
+                "Content-Type": content_type,
+            },
+            params={
+                "table_name": "rm_story",
+                "table_sys_id": story_sys_id,
+                "file_name": file_name,
+            },
+            body_bytes=file_path.read_bytes(),
         )
         response = self._transport.send(request)
         if response.status_code >= 400:

@@ -308,6 +308,27 @@ python3 -m jedi_devproject.cli write-artifact-handoff-summary \
 
 This command writes only `work_notes`. It does not attach files, change story state, or modify structured AI fields.
 
+Use `attach-delivery-artifacts` only after the handoff report marks delivery evidence as attachable:
+
+```bash
+python3 -m jedi_devproject.cli attach-delivery-artifacts \
+  --env-file .env \
+  --report-file artifacts/artifact-handoff-reports/handoff-20260513-001.json
+```
+
+The command is dry-run by default and prints the number of planned delivery attachments. To attach approved files, pass `--apply`, `--confirm-story-number`, and `--actor-id`:
+
+```bash
+python3 -m jedi_devproject.cli attach-delivery-artifacts \
+  --env-file .env \
+  --report-file artifacts/artifact-handoff-reports/handoff-20260513-001.json \
+  --apply \
+  --confirm-story-number STRY0010013 \
+  --actor-id svc-jedi-orchestrator
+```
+
+The command attaches only decisions where `attach_to_servicenow=true`. Internal evidence remains link-only. Delivery files use the ServiceNow Attachment API and are uploaded to the `rm_story` record without changing state or structured AI fields.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

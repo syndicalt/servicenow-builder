@@ -7,6 +7,7 @@ from jedi_devproject.artifact_handoff import (
     ArtifactKind,
     build_artifact_handoff_report,
     build_artifact_handoff_work_note,
+    delivery_attachment_jobs_from_report,
     plan_artifact_handoff,
 )
 
@@ -149,3 +150,41 @@ def test_handoff_work_note_summarizes_report_without_hash_dump(tmp_path: Path) -
     assert "attach_to_servicenow=0" in note
     assert "internal_evidence=2" in note
     assert "aaaa" not in note
+
+
+def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
+    report = {
+        "run_id": "handoff-001",
+        "story_number": "STRY0010013",
+        "summary": {
+            "total": 2,
+            "attach_to_servicenow": 1,
+            "internal_evidence": 1,
+            "delivery_evidence": 1,
+        },
+        "decisions": [
+            {
+                "artifact_kind": "implementation_candidate",
+                "artifact_path": "artifacts/candidate.json",
+                "attach_to_servicenow": False,
+                "service_now_attachment_label": None,
+            },
+            {
+                "artifact_kind": "update_set_xml",
+                "artifact_path": "artifacts/export.xml",
+                "attach_to_servicenow": True,
+                "service_now_attachment_label": "Approved Update Set XML",
+            },
+        ],
+    }
+
+    jobs = delivery_attachment_jobs_from_report(report)
+
+    assert jobs == [
+        {
+            "story_number": "STRY0010013",
+            "artifact_kind": "update_set_xml",
+            "artifact_path": "artifacts/export.xml",
+            "attachment_label": "Approved Update Set XML",
+        }
+    ]
