@@ -35,6 +35,15 @@ def test_readme_documents_controlled_story_writeback_scope() -> None:
     assert "Direct Update Set imports" in readme
 
 
+def test_readme_documents_llm_implementation_packet_architecture() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert "LLM implementation packet" in readme
+    assert "rules are gates" in readme
+    assert "Now Assist" in readme
+    assert "generate_implementation_candidate" in readme
+
+
 def test_sprint_zero_governance_documents_are_present() -> None:
     expected_paths = [
         Path("docs/adr/0001-test-first-no-hacks.md"),
@@ -378,3 +387,14 @@ def test_sprint_twenty_seven_change_log_documents_manifest_alignment() -> None:
     assert "Controlled ServiceNow story writeback" in change_log
     assert "Direct Update Set imports" in change_log
     assert "execute_writeback" in change_log
+
+
+def test_sprint_twenty_eight_change_log_documents_implementation_packet() -> None:
+    change_log = Path("docs/sprints/sprint-28-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "LLM implementation packet" in change_log
+    assert "Now Assist" in change_log
+    assert "deterministic gates" in change_log
+    assert "generate_implementation_candidate" in change_log

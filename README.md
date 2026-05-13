@@ -134,6 +134,22 @@ Each retrieval result must include source, version/date when available, confiden
 - Track model cost, latency, token usage, retrieval hit rate, and manual-review rejection rate.
 - Avoid multi-agent workflows until single-step candidate generation is reliable and measurable.
 
+#### 4.4 LLM Implementation Packet
+
+rules are gates, not the implementation engine. Deterministic controls decide whether a story is eligible, whether the provider is approved, what tables and operations are allowed, and whether generated output is safe. The implementation work is performed through an LLM implementation packet.
+
+The LLM implementation packet is a model-ready, citation-backed context bundle for Now Assist or another approved provider. It includes:
+
+- minimized story fields without ServiceNow sys_id
+- safety decision and reasons
+- deterministic risk score
+- allowlisted tables and operations
+- ServiceNow platform, instance metadata, project context, and compliance retrieval sections
+- citation metadata
+- structured output contract requiring manual review when uncertain
+
+`generate_implementation_candidate()` builds the packet, sends it to the approved provider, and validates the model response against allowlisted tables, operations, and sys_id policy.
+
 ---
 
 ### 5. Core Data Models & Artifacts
