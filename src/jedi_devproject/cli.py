@@ -6,7 +6,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from jedi_devproject import __version__
-from jedi_devproject.artifact_handoff import build_artifact_handoff_report
+from jedi_devproject.artifact_handoff import (
+    build_artifact_handoff_report,
+    build_artifact_handoff_work_note,
+)
 from jedi_devproject.artifacts import (
     write_candidate_artifact,
     write_json_artifact_once,
@@ -155,6 +158,15 @@ def main(argv: list[str] | None = None) -> int:
     handoff.add_argument("--story-number", required=True)
     handoff.add_argument("--jobs-file", type=Path, required=True)
     handoff.add_argument("--report-root", type=Path, required=True)
+    handoff_summary = subparsers.add_parser(
+        "write-artifact-handoff-summary",
+        help="Write a ServiceNow work note summarizing an artifact handoff report.",
+    )
+    handoff_summary.add_argument("--env-file", type=Path, default=Path(".env"))
+    handoff_summary.add_argument("--report-file", type=Path, required=True)
+    handoff_summary.add_argument("--apply", action="store_true")
+    handoff_summary.add_argument("--confirm-story-number")
+    handoff_summary.add_argument("--actor-id")
     plan_bootstrap = subparsers.add_parser(
         "plan-bootstrap-fields",
         help="Plan missing ServiceNow bootstrap table fields without applying changes.",
@@ -553,6 +565,43 @@ def main(argv: list[str] | None = None) -> int:
             payload=report,
         )
         print(_render_summary({"handoff_plans": report["summary"]["total"], **report["summary"]}))
+        return 0
+
+    if args.command == "write-artifact-handoff-summary":
+        report = _load_json_object(args.report_file)
+        story_number = str(report["story_number"])
+        work_note = build_artifact_handoff_work_note(
+            report=report,
+            report_path=args.report_file,
+        )
+        if not args.apply:
+            print(
+                "handoff_summary_written=False "
+                f"story_number={story_number} dry_run=True"
+            )
+            return 0
+        if args.confirm_story_number != story_number:
+            print(
+                "handoff_summary_written=False "
+                f"story_number={story_number} reason=confirmation_mismatch"
+            )
+            return 1
+        if not args.actor_id:
+            print(
+                "handoff_summary_written=False "
+                f"story_number={story_number} reason=actor_identity_required"
+            )
+            return 1
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+        if not stories:
+            print(
+                "handoff_summary_written=False "
+                f"story_number={story_number} reason=story_not_found"
+            )
+            return 1
+        client.update_story_fields(stories[0].sys_id, {"work_notes": work_note})
+        print(f"handoff_summary_written=True story_number={story_number}")
         return 0
 
     if args.command == "plan-bootstrap-fields":

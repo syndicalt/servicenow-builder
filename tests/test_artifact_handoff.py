@@ -6,6 +6,7 @@ from jedi_devproject.artifact_handoff import (
     ArtifactExposure,
     ArtifactKind,
     build_artifact_handoff_report,
+    build_artifact_handoff_work_note,
     plan_artifact_handoff,
 )
 
@@ -118,3 +119,33 @@ def test_handoff_report_rejects_missing_artifact_path(tmp_path: Path) -> None:
                 }
             ],
         )
+
+
+def test_handoff_work_note_summarizes_report_without_hash_dump(tmp_path: Path) -> None:
+    report = {
+        "run_id": "handoff-001",
+        "story_number": "STRY0010013",
+        "summary": {
+            "total": 2,
+            "attach_to_servicenow": 0,
+            "internal_evidence": 2,
+            "delivery_evidence": 0,
+        },
+        "decisions": [
+            {
+                "artifact_kind": "implementation_candidate",
+                "artifact_sha256": "a" * 64,
+            }
+        ],
+    }
+
+    note = build_artifact_handoff_work_note(
+        report=report,
+        report_path=tmp_path / "handoff-001.json",
+    )
+
+    assert "Artifact handoff planned." in note
+    assert "Report: " in note
+    assert "attach_to_servicenow=0" in note
+    assert "internal_evidence=2" in note
+    assert "aaaa" not in note

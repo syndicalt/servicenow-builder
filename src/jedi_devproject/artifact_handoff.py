@@ -123,3 +123,19 @@ def build_artifact_handoff_report(
         },
         "decisions": decisions,
     }
+
+
+def build_artifact_handoff_work_note(
+    *,
+    report: dict[str, Any],
+    report_path: Path,
+) -> str:
+    summary = report["summary"]
+    return (
+        "Artifact handoff planned. "
+        f"Report: {report_path}. "
+        f"total={summary['total']} "
+        f"attach_to_servicenow={summary['attach_to_servicenow']} "
+        f"internal_evidence={summary['internal_evidence']} "
+        f"delivery_evidence={summary['delivery_evidence']}."
+    )

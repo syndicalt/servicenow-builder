@@ -287,6 +287,27 @@ The jobs file is a JSON list:
 
 The handoff report records one decision per artifact, including `attach_to_servicenow`, `write_story_link`, `required_before_ready_for_testing`, exposure category, artifact SHA-256, and attachment label when applicable. The command reads each referenced artifact before writing the report; missing files fail closed. It is a planning artifact only; it does not attach files to ServiceNow.
 
+Use `write-artifact-handoff-summary` to write a short ServiceNow work note that links the handoff report back to the story:
+
+```bash
+python3 -m jedi_devproject.cli write-artifact-handoff-summary \
+  --env-file .env \
+  --report-file artifacts/artifact-handoff-reports/handoff-20260513-001.json
+```
+
+The command is dry-run by default. To write the work note, pass `--apply`, `--confirm-story-number`, and `--actor-id`:
+
+```bash
+python3 -m jedi_devproject.cli write-artifact-handoff-summary \
+  --env-file .env \
+  --report-file artifacts/artifact-handoff-reports/handoff-20260513-001.json \
+  --apply \
+  --confirm-story-number STRY0010013 \
+  --actor-id svc-jedi-orchestrator
+```
+
+This command writes only `work_notes`. It does not attach files, change story state, or modify structured AI fields.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

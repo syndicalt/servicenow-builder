@@ -1709,6 +1709,128 @@ def test_cli_plan_artifact_handoff_writes_decision_report(
     assert "sys_id" not in json.dumps(report)
 
 
+def test_cli_write_artifact_handoff_summary_updates_work_notes_only(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 2,
+                    "attach_to_servicenow": 0,
+                    "internal_evidence": 2,
+                    "delivery_evidence": 0,
+                },
+                "decisions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "write-artifact-handoff-summary",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "handoff_summary_written=True" in captured.out
+    assert fake_client.updated_fields == [
+        {
+            "story_sys_id": "abc123",
+            "fields": {
+                "work_notes": (
+                    "Artifact handoff planned. Report: "
+                    f"{report_path}. total=2 attach_to_servicenow=0 "
+                    "internal_evidence=2 delivery_evidence=0."
+                )
+            },
+        }
+    ]
+    updated_fields = fake_client.updated_fields[0]["fields"]
+    assert isinstance(updated_fields, dict)
+    assert "state" not in updated_fields
+    assert "abc123" not in captured.out
+
+
+def test_cli_write_artifact_handoff_summary_dry_run_does_not_mutate(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 0,
+                    "internal_evidence": 1,
+                    "delivery_evidence": 0,
+                },
+                "decisions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "write-artifact-handoff-summary",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+            ]
+        )
+
+    assert exit_code == 0
+    assert "handoff_summary_written=False" in capsys.readouterr().out
+    assert fake_client.updated_fields == []
+
+
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
