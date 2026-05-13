@@ -1051,6 +1051,24 @@ class FakeServiceNowClient:
 
     def update_story_fields(self, story_sys_id: str, fields: dict[str, object]) -> None:
         self.updated_fields.append({"story_sys_id": story_sys_id, "fields": fields})
+        story = self.stories[0]
+        self.stories[0] = story.model_copy(
+            update={
+                "state": str(fields.get("state", story.state)),
+                "additional_context": {
+                    **story.additional_context,
+                    **{
+                        key: str(fields[key])
+                        for key in [
+                            "u_ai_status",
+                            "u_ai_build_reference",
+                            "u_ai_candidate_artifact",
+                        ]
+                        if key in fields
+                    },
+                },
+            }
+        )
 
 
 def test_cli_run_pdi_fetches_stories_and_prints_safe_summary(
@@ -1388,6 +1406,80 @@ def test_cli_plan_writeback_apply_updates_story_after_validation_and_confirmatio
         / "STORY0010001-build-20260513-001.json"
     )
     assert audit_path.exists()
+
+
+def test_cli_plan_writeback_apply_writes_lifecycle_manifest_when_requested(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    packet_path = tmp_path / "packet.json"
+    candidate_path = tmp_path / "candidate.json"
+    packet_path.write_text(json.dumps({"story": {"number": "STORY0010001"}}), encoding="utf-8")
+    candidate_path.write_text(
+        json.dumps({"story_number": "STORY0010001", "artifact_hash": "abc"}),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "plan-writeback",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STRY0010013",
+                "--build-reference",
+                "build-20260513-003",
+                "--artifact-url",
+                "artifacts/STRY0010013.json",
+                "--from-state",
+                "Ready",
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-type",
+                "service",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+                "--execution-id",
+                "run-20260513-003",
+                "--audit-root",
+                str(tmp_path / "writeback-audit"),
+                "--manifest-root",
+                str(tmp_path / "lifecycle-manifests"),
+                "--packet-path",
+                str(packet_path),
+                "--candidate-path",
+                str(candidate_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    manifest_path = tmp_path / "lifecycle-manifests" / "run-20260513-003.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "lifecycle_manifest_written=True" in captured.out
+    assert manifest["story_number"] == "STORY0010001"
+    assert manifest["build_reference"] == "build-20260513-003"
+    assert manifest["artifacts"]["implementation_packet"]["sha256"]
+    assert manifest["artifacts"]["implementation_candidate"]["sha256"]
+    assert manifest["artifacts"]["writeback_audit"]["sha256"]
+    assert manifest["writeback"]["applied"] is True
+    assert manifest["verification"]["verified"] is True
+    assert "sys_id" not in json.dumps(manifest)
 
 
 def test_cli_plan_writeback_apply_accepts_manual_human_actor(

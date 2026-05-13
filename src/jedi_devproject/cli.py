@@ -24,7 +24,9 @@ from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import UrllibTransport, servicenow_client_from_env
 from jedi_devproject.writeback import ActorType, ExternalBuildStatus
 from jedi_devproject.writeback_orchestration import (
+    WritebackClient,
     WritebackExecutionRequest,
+    WritebackExecutionResult,
     build_writeback_batch_report,
     evaluate_writeback_capability,
     execute_writeback,
@@ -114,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
     plan_writeback.add_argument("--actor-id")
     plan_writeback.add_argument("--execution-id")
     plan_writeback.add_argument("--audit-root", type=Path)
+    plan_writeback.add_argument("--manifest-root", type=Path)
+    plan_writeback.add_argument("--packet-path", type=Path)
+    plan_writeback.add_argument("--candidate-path", type=Path)
+    plan_writeback.add_argument("--candidate-batch-path", type=Path)
     check_writeback = subparsers.add_parser(
         "check-writeback-capability",
         help="Check whether the ServiceNow instance supports structured writeback.",
@@ -409,6 +415,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "plan-writeback":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        if args.manifest_root is not None and (
+            args.packet_path is None or args.candidate_path is None
+        ):
+            parser.error(
+                "plan-writeback --manifest-root requires --packet-path and --candidate-path"
+            )
         writeback_result = execute_writeback(
             client,
             WritebackExecutionRequest(
@@ -439,6 +451,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         if writeback_result.applied:
             print(f"applied=True story_number={plan.story_number}")
+            if args.manifest_root is not None:
+                _write_apply_lifecycle_manifest(
+                    client=client,
+                    manifest_root=args.manifest_root,
+                    run_id=args.execution_id or args.build_reference,
+                    story_number=plan.story_number,
+                    build_reference=args.build_reference,
+                    artifact_url=args.artifact_url,
+                    packet_path=args.packet_path,
+                    candidate_path=args.candidate_path,
+                    candidate_batch_path=args.candidate_batch_path,
+                    writeback_result=writeback_result,
+                )
         elif args.apply and writeback_result.reasons:
             print(f"applied=False reason={writeback_result.reasons[-1]}")
         return (
@@ -625,6 +650,51 @@ def _load_implementation_candidate_jobs(path: Path) -> list[dict[str, Path]]:
             }
         )
     return jobs
+
+
+def _write_apply_lifecycle_manifest(
+    *,
+    client: WritebackClient,
+    manifest_root: Path,
+    run_id: str,
+    story_number: str,
+    build_reference: str,
+    artifact_url: str | None,
+    packet_path: Path | None,
+    candidate_path: Path | None,
+    candidate_batch_path: Path | None,
+    writeback_result: WritebackExecutionResult,
+) -> Path:
+    if packet_path is None or candidate_path is None:
+        raise ValueError("packet_path and candidate_path are required")
+    verification = verify_writeback(
+        client,
+        story_number=story_number,
+        build_reference=build_reference,
+        artifact_url=artifact_url,
+    )
+    manifest_path = write_lifecycle_manifest(
+        manifest_root,
+        run_id=run_id,
+        story_number=story_number,
+        build_reference=build_reference,
+        packet_path=packet_path,
+        candidate_path=candidate_path,
+        candidate_batch_path=candidate_batch_path,
+        writeback_audit_path=writeback_result.audit_path,
+        writeback={
+            "allowed": writeback_result.allowed,
+            "applied": writeback_result.applied,
+            "idempotent": writeback_result.idempotent,
+            "reasons": writeback_result.reasons or writeback_result.plan.reasons,
+        },
+        verification=verification.model_dump(mode="json"),
+    )
+    print(
+        "lifecycle_manifest_written=True "
+        f"story_number={story_number} path={manifest_path}"
+    )
+    return manifest_path
 
 
 class StaticResponseProvider:

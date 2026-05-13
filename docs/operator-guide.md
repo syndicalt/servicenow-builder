@@ -191,7 +191,10 @@ python3 -m jedi_devproject.cli plan-writeback \
   --actor-type service \
   --actor-id svc-jedi-orchestrator \
   --execution-id run-20260513-001 \
-  --audit-root artifacts/writeback-audit
+  --audit-root artifacts/writeback-audit \
+  --manifest-root artifacts/lifecycle-manifests \
+  --packet-path artifacts/lifecycle-smoke/implementation-packets/lifecycle-20260513-001/STRY0010013.json \
+  --candidate-path artifacts/lifecycle-smoke/implementation-candidates/lifecycle-20260513-001/STRY0010013.json
 ```
 
 The dry-run default is intentional. A mismatch between the fetched story number and `--confirm-story-number` blocks the update.
@@ -199,6 +202,8 @@ The dry-run default is intentional. A mismatch between the fetched story number 
 Apply also requires `--actor-id` and `--audit-root`. Automated orchestration should use `--actor-type service` and set `--actor-id` to the service principal, workload identity, or named integration identity that performed the writeback. Manual runs may use `--actor-type human`.
 
 The command writes a local writeback audit artifact before reporting success. Audit artifacts are write-once and include story number, build reference, actor type, actor id, optional execution id, allowed/applied flags, planned fields, and validation reasons. They do not include the ServiceNow story sys_id.
+
+When `--manifest-root`, `--packet-path`, and `--candidate-path` are provided with `plan-writeback --apply`, the command verifies the remote writeback with `verify_writeback()` and writes a lifecycle manifest for the applied run. `--candidate-batch-path` can also be supplied when a candidate batch report exists.
 
 Automated orchestration should call the application boundary directly through `execute_writeback()` in `jedi_devproject.writeback_orchestration`. The CLI is an operator adapter over that same path, not the product integration surface.
 

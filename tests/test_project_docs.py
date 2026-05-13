@@ -27,6 +27,9 @@ def test_operator_guide_documents_plan_writeback_dry_run() -> None:
     assert "check-writeback-capability" in guide
     assert "lifecycle manifest" in guide
     assert "record-lifecycle-manifest" in guide
+    assert "--manifest-root" in guide
+    assert "--packet-path" in guide
+    assert "--candidate-path" in guide
 
 
 def test_operator_guide_documents_implementation_packet_artifact() -> None:
@@ -558,3 +561,14 @@ def test_sprint_forty_change_log_documents_lifecycle_manifest() -> None:
     assert "implementation_packet" in change_log
     assert "implementation_candidate" in change_log
     assert "writeback" in change_log
+
+
+def test_sprint_forty_one_change_log_documents_apply_manifest() -> None:
+    change_log = Path("docs/sprints/sprint-41-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "plan-writeback --apply" in change_log
+    assert "--manifest-root" in change_log
+    assert "verify_writeback" in change_log
+    assert "writeback_audit" in change_log
