@@ -26,6 +26,7 @@ class ArtifactHandoffPlan(BaseModel):
     story_number: str
     artifact_kind: ArtifactKind
     artifact_path: str
+    delivery_contract: str | None = None
     exposure: ArtifactExposure
     attach_to_servicenow: bool
     write_story_link: bool
@@ -45,6 +46,7 @@ _ATTACHMENT_LABELS = {
     ArtifactKind.UPDATE_SET_XML: "Approved Update Set XML",
     ArtifactKind.TEST_EVIDENCE_BUNDLE: "Test Evidence Bundle",
 }
+_REVIEWED_DELIVERY_CONTRACT = "reviewed_export"
 
 
 def plan_artifact_handoff(
@@ -53,13 +55,19 @@ def plan_artifact_handoff(
     artifact_kind: ArtifactKind,
     artifact_path: str,
     approved_for_delivery: bool,
+    delivery_contract: str | None = None,
 ) -> ArtifactHandoffPlan:
-    can_attach = artifact_kind in _ATTACHMENT_LABELS and approved_for_delivery
+    can_attach = (
+        artifact_kind in _ATTACHMENT_LABELS
+        and approved_for_delivery
+        and delivery_contract == _REVIEWED_DELIVERY_CONTRACT
+    )
     if can_attach:
         return ArtifactHandoffPlan(
             story_number=story_number,
             artifact_kind=artifact_kind,
             artifact_path=artifact_path,
+            delivery_contract=delivery_contract,
             exposure=ArtifactExposure.DELIVERY_EVIDENCE,
             attach_to_servicenow=True,
             write_story_link=True,
@@ -68,15 +76,24 @@ def plan_artifact_handoff(
             rationale="Approved delivery evidence can be attached to the story.",
         )
 
-    approval_reason = (
-        "human approval is required before this artifact can become delivery evidence"
-        if artifact_kind in _ATTACHMENT_LABELS
-        else "internal audit evidence should remain in controlled artifact storage"
-    )
+    if artifact_kind in _ATTACHMENT_LABELS and approved_for_delivery:
+        approval_reason = (
+            "reviewed export contract is required before this artifact can become "
+            "delivery evidence"
+        )
+    elif artifact_kind in _ATTACHMENT_LABELS:
+        approval_reason = (
+            "human approval is required before this artifact can become delivery evidence"
+        )
+    else:
+        approval_reason = (
+            "internal audit evidence should remain in controlled artifact storage"
+        )
     return ArtifactHandoffPlan(
         story_number=story_number,
         artifact_kind=artifact_kind,
         artifact_path=artifact_path,
+        delivery_contract=delivery_contract,
         exposure=ArtifactExposure.INTERNAL_EVIDENCE,
         attach_to_servicenow=False,
         write_story_link=True,
@@ -99,6 +116,11 @@ def build_artifact_handoff_report(
             artifact_kind=ArtifactKind(str(artifact["artifact_kind"])),
             artifact_path=str(artifact_path),
             approved_for_delivery=bool(artifact["approved_for_delivery"]),
+            delivery_contract=(
+                str(artifact["delivery_contract"])
+                if artifact.get("delivery_contract") is not None
+                else None
+            ),
         ).model_dump(mode="json")
         plan["artifact_sha256"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
         decisions.append(plan)
@@ -147,11 +169,14 @@ def delivery_attachment_jobs_from_report(report: dict[str, Any]) -> list[dict[st
     for decision in report["decisions"]:
         if not decision["attach_to_servicenow"]:
             continue
+        if decision.get("delivery_contract") != _REVIEWED_DELIVERY_CONTRACT:
+            raise ValueError("delivery_contract_required")
         jobs.append(
             {
                 "story_number": story_number,
                 "artifact_kind": str(decision["artifact_kind"]),
                 "artifact_path": str(decision["artifact_path"]),
+                "delivery_contract": str(decision["delivery_contract"]),
                 "attachment_label": str(decision["service_now_attachment_label"]),
             }
         )

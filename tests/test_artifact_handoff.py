@@ -27,12 +27,27 @@ def test_internal_evidence_artifacts_are_not_servicenow_attachments() -> None:
     assert "internal audit evidence" in plan.rationale
 
 
-def test_approved_update_set_export_is_delivery_attachment() -> None:
+def test_approved_update_set_export_requires_reviewed_export_contract() -> None:
     plan = plan_artifact_handoff(
         story_number="STRY0010013",
         artifact_kind=ArtifactKind.UPDATE_SET_XML,
         artifact_path="artifacts/exports/STRY0010013.xml",
         approved_for_delivery=True,
+    )
+
+    assert plan.exposure is ArtifactExposure.INTERNAL_EVIDENCE
+    assert plan.attach_to_servicenow is False
+    assert plan.service_now_attachment_label is None
+    assert "reviewed export contract" in plan.rationale
+
+
+def test_reviewed_update_set_export_is_delivery_attachment() -> None:
+    plan = plan_artifact_handoff(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.UPDATE_SET_XML,
+        artifact_path="artifacts/exports/STRY0010013.xml",
+        approved_for_delivery=True,
+        delivery_contract="reviewed_export",
     )
 
     assert plan.exposure is ArtifactExposure.DELIVERY_EVIDENCE
@@ -62,6 +77,7 @@ def test_test_evidence_bundle_is_attached_after_approval() -> None:
         artifact_kind=ArtifactKind.TEST_EVIDENCE_BUNDLE,
         artifact_path="artifacts/test-evidence/STRY0010013.zip",
         approved_for_delivery=True,
+        delivery_contract="reviewed_export",
     )
 
     assert plan.exposure is ArtifactExposure.DELIVERY_EVIDENCE
@@ -88,6 +104,7 @@ def test_handoff_report_summarizes_multiple_artifact_decisions(tmp_path: Path) -
                 "artifact_kind": "test_evidence_bundle",
                 "artifact_path": str(evidence_path),
                 "approved_for_delivery": True,
+                "delivery_contract": "reviewed_export",
             },
         ],
     )
@@ -173,6 +190,7 @@ def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
                 "artifact_kind": "update_set_xml",
                 "artifact_path": "artifacts/export.xml",
                 "attach_to_servicenow": True,
+                "delivery_contract": "reviewed_export",
                 "service_now_attachment_label": "Approved Update Set XML",
             },
         ],
@@ -185,6 +203,7 @@ def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
             "story_number": "STRY0010013",
             "artifact_kind": "update_set_xml",
             "artifact_path": "artifacts/export.xml",
+            "delivery_contract": "reviewed_export",
             "attachment_label": "Approved Update Set XML",
         }
     ]

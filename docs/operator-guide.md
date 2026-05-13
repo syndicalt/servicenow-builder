@@ -280,12 +280,15 @@ The jobs file is a JSON list:
   {
     "artifact_kind": "update_set_xml",
     "artifact_path": "artifacts/exports/STRY0010013.xml",
-    "approved_for_delivery": true
+    "approved_for_delivery": true,
+    "delivery_contract": "reviewed_export"
   }
 ]
 ```
 
-The handoff report records one decision per artifact, including `attach_to_servicenow`, `write_story_link`, `required_before_ready_for_testing`, exposure category, artifact SHA-256, and attachment label when applicable. The command reads each referenced artifact before writing the report; missing files fail closed. It is a planning artifact only; it does not attach files to ServiceNow.
+The handoff report records one decision per artifact, including `attach_to_servicenow`, `write_story_link`, `required_before_ready_for_testing`, exposure category, artifact SHA-256, delivery contract, and attachment label when applicable. The command reads each referenced artifact before writing the report; missing files fail closed. It is a planning artifact only; it does not attach files to ServiceNow.
+
+`approved_for_delivery=true` is not sufficient by itself for live attachment. Delivery attachments also require `delivery_contract=reviewed_export`. The local delivery smoke runner uses `delivery_contract=smoke_placeholder`, which proves the planning path but intentionally does not create an attachable delivery artifact.
 
 Use `write-artifact-handoff-summary` to write a short ServiceNow work note that links the handoff report back to the story:
 
@@ -342,7 +345,7 @@ python3 -m jedi_devproject.cli run-delivery-artifact-smoke \
   --artifact-root artifacts/delivery-smoke
 ```
 
-The command creates an XML-shaped placeholder Update Set artifact, writes a handoff report that marks it as approved delivery evidence, and prints the planned attachment count. It does not call ServiceNow and does not attach files. This smoke path validates orchestration only; it is not a substitute for a real reviewed Update Set export.
+The command creates an XML-shaped placeholder Update Set artifact, writes a handoff report with `delivery_contract=smoke_placeholder`, and prints the planned attachment count. It does not call ServiceNow and does not attach files. This smoke path validates orchestration only; it is not a substitute for a real reviewed Update Set export.
 
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 

@@ -627,7 +627,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "attach-delivery-artifacts":
         report = _load_json_object(args.report_file)
         story_number = str(report["story_number"])
-        delivery_jobs = delivery_attachment_jobs_from_report(report)
+        try:
+            delivery_jobs = delivery_attachment_jobs_from_report(report)
+        except ValueError as exc:
+            print(
+                "delivery_attachments_planned=0 "
+                f"delivery_attachments_applied=0 reason={exc}"
+            )
+            return 1
         if not args.apply:
             print(
                 f"delivery_attachments_planned={len(delivery_jobs)} "
@@ -721,6 +728,7 @@ def main(argv: list[str] | None = None) -> int:
                     "artifact_kind": "update_set_xml",
                     "artifact_path": str(export_path),
                     "approved_for_delivery": True,
+                    "delivery_contract": "smoke_placeholder",
                 }
             ],
         )

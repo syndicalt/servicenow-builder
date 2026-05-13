@@ -70,6 +70,9 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
     assert "run-delivery-artifact-smoke" in guide
     assert "attachment audit" in guide
     assert "attachment sys_ids" in guide
+    assert "delivery_contract" in guide
+    assert "reviewed_export" in guide
+    assert "smoke_placeholder" in guide
 
 
 def test_readme_documents_controlled_story_writeback_scope() -> None:
@@ -670,3 +673,15 @@ def test_sprint_forty_eight_change_log_documents_attachment_audit() -> None:
     assert "write-once" in change_log
     assert "attachment sys_ids" in change_log
     assert "story_sys_id" in change_log
+
+
+def test_sprint_forty_nine_change_log_documents_delivery_contract_gate() -> None:
+    change_log = Path("docs/sprints/sprint-49-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "delivery_contract" in change_log
+    assert "reviewed_export" in change_log
+    assert "smoke_placeholder" in change_log
+    assert "approved_for_delivery" in change_log
+    assert "fail closed" in change_log

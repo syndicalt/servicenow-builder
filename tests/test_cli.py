@@ -1691,6 +1691,7 @@ def test_cli_plan_artifact_handoff_writes_decision_report(
                     "artifact_kind": "update_set_xml",
                     "artifact_path": str(export_path),
                     "approved_for_delivery": True,
+                    "delivery_contract": "reviewed_export",
                 },
             ]
         ),
@@ -1883,6 +1884,7 @@ def test_cli_attach_delivery_artifacts_dry_run_does_not_attach(
                         "artifact_kind": "update_set_xml",
                         "artifact_path": str(export_path),
                         "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
                         "service_now_attachment_label": "Approved Update Set XML",
                     }
                 ],
@@ -1944,6 +1946,7 @@ def test_cli_attach_delivery_artifacts_requires_confirmation_to_apply(
                         "artifact_kind": "update_set_xml",
                         "artifact_path": str(export_path),
                         "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
                         "service_now_attachment_label": "Approved Update Set XML",
                     }
                 ],
@@ -2028,6 +2031,7 @@ def test_cli_attach_delivery_artifacts_blocks_existing_audit_before_attachment(
                         "artifact_kind": "update_set_xml",
                         "artifact_path": str(export_path),
                         "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
                         "service_now_attachment_label": "Approved Update Set XML",
                     }
                 ],
@@ -2067,6 +2071,76 @@ def test_cli_attach_delivery_artifacts_blocks_existing_audit_before_attachment(
     assert fake_client.attached_files == []
 
 
+def test_cli_attach_delivery_artifacts_blocks_legacy_report_without_delivery_contract(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+                "--audit-root",
+                str(tmp_path / "attachment-audit"),
+                "--run-id",
+                "attach-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "reason=delivery_contract_required" in captured.out
+    assert fake_client.attached_files == []
+
+
 def test_cli_run_delivery_artifact_smoke_creates_placeholder_and_plans_attachment(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -2096,12 +2170,13 @@ def test_cli_run_delivery_artifact_smoke_creates_placeholder_and_plans_attachmen
 
     assert exit_code == 0
     assert "delivery_artifact_created=True" in captured.out
-    assert "delivery_attachments_planned=1" in captured.out
+    assert "delivery_attachments_planned=0" in captured.out
     assert "delivery_attachments_applied=0" in captured.out
     assert export_path.exists()
     assert export_path.read_text(encoding="utf-8").startswith("<placeholder_update_set")
-    assert report["summary"]["attach_to_servicenow"] == 1
+    assert report["summary"]["attach_to_servicenow"] == 0
     assert report["decisions"][0]["artifact_kind"] == "update_set_xml"
+    assert report["decisions"][0]["delivery_contract"] == "smoke_placeholder"
     assert len(report["decisions"][0]["artifact_sha256"]) == 64
     assert "sys_id" not in json.dumps(report)
 
