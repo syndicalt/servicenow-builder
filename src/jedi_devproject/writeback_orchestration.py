@@ -245,9 +245,10 @@ def execute_writeback(
     )
     plan = validate_writeback_fields(
         plan,
-        available_fields={
-            field.element for field in client.fetch_story_dictionary_fields()
-        },
+        available_fields=_available_writeback_fields(
+            dictionary_fields=client.fetch_story_dictionary_fields(),
+            state_mapping_found=state_mapping is not None,
+        ),
     )
     if not plan.allowed:
         return WritebackExecutionResult(
@@ -359,6 +360,17 @@ def _blocked_batch_result(
         applied=False,
         reasons=["writeback_capability_failed"],
     )
+
+
+def _available_writeback_fields(
+    *,
+    dictionary_fields: list[StoryDictionaryField],
+    state_mapping_found: bool,
+) -> set[str]:
+    available_fields = {field.element for field in dictionary_fields}
+    if state_mapping_found:
+        available_fields.add("state")
+    return available_fields
 
 
 def _batch_summary(results: list[WritebackExecutionResult]) -> dict[str, int]:

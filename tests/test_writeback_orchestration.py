@@ -118,6 +118,36 @@ def test_execute_writeback_dry_run_does_not_mutate_or_write_audit(tmp_path: Path
     assert list(tmp_path.iterdir()) == []
 
 
+def test_execute_writeback_accepts_state_from_state_mapping_when_dictionary_omits_state(
+    tmp_path: Path,
+) -> None:
+    client = FakeWritebackClient()
+    client.dictionary_fields = [
+        field for field in client.dictionary_fields if field.element != "state"
+    ]
+
+    result = execute_writeback(
+        client,
+        WritebackExecutionRequest(
+            story_number="STRY0010013",
+            build_reference="build-20260513-001",
+            artifact_url="artifacts/STRY0010013.json",
+            build_status=ExternalBuildStatus.SUCCEEDED,
+            from_state="Ready",
+            apply=False,
+            actor_type=ActorType.SERVICE,
+            actor_id="svc-jedi-orchestrator",
+            execution_id="run-20260513-001",
+            audit_root=tmp_path,
+        ),
+    )
+
+    assert result.allowed is True
+    assert result.applied is False
+    assert result.plan.fields["state"] == "-7"
+    assert result.reasons == []
+
+
 def test_execute_writeback_applies_and_writes_audit_for_service_actor(
     tmp_path: Path,
 ) -> None:
