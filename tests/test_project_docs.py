@@ -52,6 +52,18 @@ def test_operator_guide_documents_implementation_candidate_artifact() -> None:
     assert "write-once" in guide
 
 
+def test_operator_guide_documents_artifact_handoff_contract() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Artifact Handoff Contract" in guide
+    assert "implementation packet" in guide
+    assert "implementation candidate" in guide
+    assert "internal audit evidence" in guide
+    assert "Approved Update Set XML" in guide
+    assert "Test Evidence Bundle" in guide
+    assert "attach" in guide
+
+
 def test_readme_documents_controlled_story_writeback_scope() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
@@ -572,3 +584,14 @@ def test_sprint_forty_one_change_log_documents_apply_manifest() -> None:
     assert "--manifest-root" in change_log
     assert "verify_writeback" in change_log
     assert "writeback_audit" in change_log
+
+
+def test_sprint_forty_two_change_log_documents_artifact_handoff_contract() -> None:
+    change_log = Path("docs/sprints/sprint-42-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "artifact handoff" in change_log
+    assert "Approved Update Set XML" in change_log
+    assert "Test Evidence Bundle" in change_log
+    assert "internal audit evidence" in change_log

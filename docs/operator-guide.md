@@ -238,6 +238,26 @@ python3 -m jedi_devproject.cli record-lifecycle-manifest \
 
 Lifecycle manifest files are write-once. They are intended for audit review and should reference artifacts by path and hash, not by ServiceNow sys_id.
 
+## Artifact Handoff Contract
+
+Not every generated artifact should become a ServiceNow attachment. Internal orchestration evidence should stay in the controlled artifact store and be referenced by structured fields, lifecycle manifests, or artifact links.
+
+internal audit evidence:
+
+- implementation packet
+- implementation candidate
+- lifecycle manifest
+- writeback audit
+
+These artifacts should not be attached to the story by default. They can be linked for traceability, but they are not the work product testers need.
+
+Delivery evidence:
+
+- Approved Update Set XML
+- Test Evidence Bundle
+
+These artifacts can be attached to the story after human approval or generated test evidence approval. They are the artifacts a tester, reviewer, or release coordinator may need from ServiceNow. This attachment stage happens after candidate review/export, not during implementation packet generation or Ready for Testing writeback.
+
 Batch orchestration should use `run_writeback_batch()`. It runs capability preflight once, fails the batch closed when the instance is not ready, and returns a summary with total, allowed, applied, idempotent, and blocked counts.
 
 For file-based orchestration, provide a writeback job file:

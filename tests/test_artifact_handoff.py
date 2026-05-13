@@ -1,0 +1,62 @@
+from jedi_devproject.artifact_handoff import (
+    ArtifactExposure,
+    ArtifactKind,
+    plan_artifact_handoff,
+)
+
+
+def test_internal_evidence_artifacts_are_not_servicenow_attachments() -> None:
+    plan = plan_artifact_handoff(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.IMPLEMENTATION_PACKET,
+        artifact_path="artifacts/lifecycle-smoke/implementation-packets/run/STRY0010013.json",
+        approved_for_delivery=False,
+    )
+
+    assert plan.exposure is ArtifactExposure.INTERNAL_EVIDENCE
+    assert plan.attach_to_servicenow is False
+    assert plan.write_story_link is True
+    assert plan.required_before_ready_for_testing is False
+    assert "internal audit evidence" in plan.rationale
+
+
+def test_approved_update_set_export_is_delivery_attachment() -> None:
+    plan = plan_artifact_handoff(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.UPDATE_SET_XML,
+        artifact_path="artifacts/exports/STRY0010013.xml",
+        approved_for_delivery=True,
+    )
+
+    assert plan.exposure is ArtifactExposure.DELIVERY_EVIDENCE
+    assert plan.attach_to_servicenow is True
+    assert plan.write_story_link is True
+    assert plan.required_before_ready_for_testing is True
+    assert plan.service_now_attachment_label == "Approved Update Set XML"
+
+
+def test_unapproved_update_set_export_stays_internal() -> None:
+    plan = plan_artifact_handoff(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.UPDATE_SET_XML,
+        artifact_path="artifacts/exports/STRY0010013.xml",
+        approved_for_delivery=False,
+    )
+
+    assert plan.exposure is ArtifactExposure.INTERNAL_EVIDENCE
+    assert plan.attach_to_servicenow is False
+    assert plan.required_before_ready_for_testing is False
+    assert "human approval" in plan.rationale
+
+
+def test_test_evidence_bundle_is_attached_after_approval() -> None:
+    plan = plan_artifact_handoff(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.TEST_EVIDENCE_BUNDLE,
+        artifact_path="artifacts/test-evidence/STRY0010013.zip",
+        approved_for_delivery=True,
+    )
+
+    assert plan.exposure is ArtifactExposure.DELIVERY_EVIDENCE
+    assert plan.attach_to_servicenow is True
+    assert plan.service_now_attachment_label == "Test Evidence Bundle"
