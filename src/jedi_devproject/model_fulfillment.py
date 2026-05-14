@@ -14,7 +14,7 @@ from jedi_devproject.implementation_packet import (
     build_implementation_packet,
     generate_implementation_update_set_candidate_from_packet,
 )
-from jedi_devproject.models import ProviderPolicy
+from jedi_devproject.models import CandidateStatus, ProviderPolicy, UpdateSetCandidate
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.rag import SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy
@@ -134,6 +134,16 @@ def _create_handoff_after_persist(
     update_set_user_name: str | None,
 ) -> None:
     _ = (apply_update_set_changes, update_set_user_name)
+    if candidate.status is not CandidateStatus.READY_FOR_REVIEW:
+        _write_manual_review_required(
+            client=client,
+            story_sys_id=story_sys_id,
+            story_number=story_number,
+            candidate=candidate,
+            candidate_artifact_ref=candidate_artifact_ref,
+        )
+        return
+
     create_update_set_handoff(
         client=client,
         request=UpdateSetHandoffRequest(
@@ -144,6 +154,34 @@ def _create_handoff_after_persist(
             instance_url=instance_url,
         ),
     )
+
+
+def _write_manual_review_required(
+    *,
+    client: ModelFulfillmentClient,
+    story_sys_id: str,
+    story_number: str,
+    candidate: UpdateSetCandidate,
+    candidate_artifact_ref: str,
+) -> None:
+    client.update_story_fields(
+        story_sys_id,
+        {
+            "u_ai_status": "Human Review Required",
+            "work_notes": (
+                f"Automated implementation candidate for {story_number} requires manual review. "
+                "No retrieved Update Set was created. "
+                f"Candidate artifact: {candidate_artifact_ref}. "
+                f"Reasons: {_candidate_reasons(candidate)}."
+            ),
+        },
+    )
+
+
+def _candidate_reasons(candidate: UpdateSetCandidate) -> str:
+    if not candidate.eligibility_reasons:
+        return f"candidate status is {candidate.status.value}"
+    return "; ".join(candidate.eligibility_reasons)
 
 
 def _candidate_artifact_ref(artifacts: list[Any]) -> str:

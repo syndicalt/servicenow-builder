@@ -9,7 +9,13 @@ from jedi_devproject.model_fulfillment import (
     ModelCandidateFulfillmentConfig,
     model_candidate_fulfillment_handler,
 )
-from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus, Story
+from jedi_devproject.models import (
+    CandidateStatus,
+    DataClassification,
+    ProviderPolicy,
+    ProviderStatus,
+    Story,
+)
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy, StoryType
@@ -17,7 +23,8 @@ from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
 
 
 class FakeModelClient:
-    def __init__(self) -> None:
+    def __init__(self, *, story: Story | None = None) -> None:
+        self.story = story
         self.updated_fields: list[dict[str, object]] = []
         self.upserts: list[dict[str, object]] = []
         self.fetches: list[dict[str, object]] = []
@@ -29,6 +36,8 @@ class FakeModelClient:
         *,
         limit: int = 100,
     ) -> list[Story]:
+        if self.story is not None:
+            return [self.story]
         return [
             Story(
                 sys_id="story-sys-id",
@@ -200,7 +209,10 @@ def _rags() -> SpecializedRags:
             Document(
                 domain=RagDomain.COMPLIANCE,
                 source="compliance/evaluation",
-                content="Public PDI story context may be used for dev evaluation.",
+                content=(
+                    "Public PDI story context may be used for dev evaluation. "
+                    "Incident field requests stay in the regulated review workflow."
+                ),
                 version="test",
             ),
         ]
@@ -324,6 +336,78 @@ def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
     assert "retrieved Update Set handoff created" in work_note_fields["work_notes"]
     assert work_note_fields["state"] == "-7"
     assert work_note_fields["u_ai_status"] == "Ready for Testing"
+
+
+def test_model_candidate_handler_routes_manual_build_candidate_without_handoff_failure(
+    tmp_path: Path,
+) -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010001",
+            short_description="Add a New Field to the Incident Form",
+            description=(
+                "As an incident manager, I would like a new field added to the "
+                "Incident form.\n\n- Field Name: Antics\n- Field Type: String\n"
+                "- Length: 4000"
+            ),
+            acceptance_criteria=(
+                "- A new field labeled Antics exists on the incident form.\n"
+                "- The field is placed below the Description field.\n"
+                "- All incident users are able to read and write to the Antics field."
+            ),
+            story_points=2,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010001"}))
+
+    assert result.artifacts[1].payload_json is not None
+    assert result.artifacts[1].payload_json["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert provider.payloads == []
+    assert result.after_artifacts_persisted is not None
+
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/36",
+                sha256="b" * 64,
+                artifact_id=36,
+            ),
+        ]
+    )
+
+    assert client.imports == []
+    assert client.upserts == []
+    assert client.updated_fields == [
+        {
+            "story_sys_id": "story-sys-id",
+            "fields": {
+                "u_ai_status": "Human Review Required",
+                "work_notes": (
+                    "Automated implementation candidate for STRY0010001 requires "
+                    "manual review. No retrieved Update Set was created. Candidate "
+                    "artifact: db://artifact_blobs/36. Reasons: missing affected "
+                    "tables; story type not allowed: unknown; operation allowed: update."
+                ),
+            },
+        }
+    ]
 
 
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(

@@ -100,9 +100,7 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
     ]
     missing = [key for key in required if not values.get(key)]
     if missing:
-        raise RuntimeConfigError(
-            f"Missing required runtime settings: {', '.join(missing)}"
-        )
+        raise RuntimeConfigError(f"Missing required runtime settings: {', '.join(missing)}")
 
     return RuntimeSettings(
         database_url=str(values["DATABASE_URL"]),
@@ -155,8 +153,7 @@ def create_runtime_api(
         return {
             "job_id": job_id,
             "artifacts": [
-                _artifact_ref_response(ref)
-                for ref in store.artifact_refs_for_job(job_id)
+                _artifact_ref_response(ref) for ref in store.artifact_refs_for_job(job_id)
             ],
         }
 
@@ -330,18 +327,31 @@ def _servicenow_failure_notifier(
         )
         if not stories:
             raise RuntimeError(f"story not found: {fulfillment_job.story_number}")
+        fields: dict[str, object] = {
+            "u_ai_status": "Automation Failed",
+            "work_notes": (
+                "Automated fulfillment failed for lifecycle event "
+                f"{fulfillment_job.event_id}. Job: {fulfillment_job.job_id}. "
+                f"Error: {_redact_text(error_message, secret_values)}"
+            ),
+        }
+        draft_state = _story_state_choice_value(client=client, label="Draft")
+        if draft_state is not None:
+            fields["state"] = draft_state
         client.update_story_fields(
             stories[0].sys_id,
-            {
-                "work_notes": (
-                    "Automated fulfillment failed for lifecycle event "
-                    f"{fulfillment_job.event_id}. Job: {fulfillment_job.job_id}. "
-                    f"Error: {_redact_text(error_message, secret_values)}"
-                )
-            },
+            fields,
         )
 
     return notify
+
+
+def _story_state_choice_value(*, client: ServiceNowClient, label: str) -> str | None:
+    normalized_label = label.strip().lower()
+    for choice in client.fetch_story_state_choices():
+        if choice.label.strip().lower() == normalized_label:
+            return choice.value
+    return None
 
 
 def _default_model_allowlist_policy() -> AllowlistPolicy:

@@ -844,6 +844,19 @@ def test_process_one_runtime_fulfillment_writes_work_note_when_handler_fails(
                     ]
                 },
             ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "label": "Draft",
+                            "value": "-6",
+                            "sequence": "10",
+                            "inactive": "false",
+                        }
+                    ]
+                },
+            ),
             HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
         ]
     )
@@ -861,12 +874,16 @@ def test_process_one_runtime_fulfillment_writes_work_note_when_handler_fails(
         "POST",
         "GET",
         "GET",
+        "GET",
         "PATCH",
     ]
+    assert transport.requests[-2].url.endswith("/api/now/table/sys_choice")
     assert transport.requests[-1].body["work_notes"] == (
         "Automated fulfillment failed for lifecycle event evt-001. "
         "Job: job-evt-001. Error: fresh_story_state_mismatch"
     )
+    assert transport.requests[-1].body["state"] == "-6"
+    assert transport.requests[-1].body["u_ai_status"] == "Automation Failed"
 
 
 def test_process_one_runtime_fulfillment_redacts_secrets_from_failure_notes(
@@ -898,6 +915,19 @@ def test_process_one_runtime_fulfillment_redacts_secrets_from_failure_notes(
                             "story_points": "3",
                             "priority": "4",
                             "state": "Ready",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "label": "Draft",
+                            "value": "-6",
+                            "sequence": "10",
+                            "inactive": "false",
                         }
                     ]
                 },

@@ -1267,3 +1267,24 @@ def test_sprint_ninety_one_change_log_documents_ready_for_testing_handoff() -> N
     assert (
         "does not replace the retrieved Update Set preview/commit approval boundary" in change_log
     )
+
+
+def test_operator_guide_documents_manual_build_and_failure_state_handling() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "`u_ai_status=Human Review Required`" in guide
+    assert "does not create a retrieved Update Set" in guide
+    assert "active `Draft` state choice" in guide
+    assert "`u_ai_status=Automation Failed`" in guide
+    assert "does not leave the story in Work in Progress" in guide
+
+
+def test_sprint_ninety_two_change_log_documents_uat_failure_handling() -> None:
+    change_log = Path("docs/sprints/sprint-92-change-log.md").read_text(encoding="utf-8")
+
+    assert "STRY0010001" in change_log
+    assert "candidate is not ready for Update Set handoff" in change_log
+    assert "Manual Build" in change_log
+    assert "u_ai_status=Human Review Required" in change_log
+    assert "u_ai_status=Automation Failed" in change_log
+    assert "state=-6" in change_log
