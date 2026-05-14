@@ -1031,6 +1031,62 @@ def test_servicenow_client_previews_commits_and_fetches_cicd_progress() -> None:
     assert progress_request.url.endswith("/api/sn_cicd/progress/commit-progress-sys-id")
 
 
+def test_servicenow_client_discovers_and_calls_update_set_importer() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "operation_uri": "/api/1860704/jedi_update_set_import",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=201,
+                json_body={
+                    "result": {
+                        "status": "imported",
+                        "load_result": "remote-update-set-sys-id",
+                    }
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    result = client.import_update_set_xml(
+        service_id="jedi_update_set_import",
+        update_set_xml="<unload />",
+    )
+
+    discovery_request = transport.requests[1]
+    import_request = transport.requests[2]
+    assert result["status_code"] == 201
+    assert result["result"]["status"] == "imported"
+    assert discovery_request.method == "GET"
+    assert discovery_request.url.endswith("/api/now/table/sys_ws_operation")
+    assert discovery_request.params["sysparm_query"] == (
+        "web_service_definition.service_id=jedi_update_set_import"
+        "^name=import_update_set_xml^active=true"
+    )
+    assert import_request.method == "POST"
+    assert import_request.url.endswith("/api/1860704/jedi_update_set_import")
+    assert import_request.body == {"update_set_xml": "<unload />"}
+
+
 def test_servicenow_client_fetches_table_record_by_lookup() -> None:
     transport = RecordingTransport(
         [

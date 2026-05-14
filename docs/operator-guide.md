@@ -269,6 +269,8 @@ python3 -m jedi_devproject.cli verify-update-set-importer \
 
 This bootstrap only installs the importer endpoint. It does not send XML, preview, commit, or wire story fulfillment to promotion. Import smoke tests must use reviewed Update Set XML and should verify that `sys_remote_update_set` and related `sys_update_xml` rows appear before any CICD preview or commit operation is considered.
 
+The PDI importer smoke on May 14, 2026 posted a minimal reviewed XML payload to the discovered endpoint `/api/1860704/jedi_update_set_import`. ServiceNow returned `201` with `status=imported` and created retrieved update set `JEDI XML Import Smoke 20260514 002` with sys_id `64c3e9d1b27a42479620114da017857a`, state `loaded`, and zero `sys_update_xml` rows. This proves the server-side XML import bridge works for retrieved update set headers; the next smoke must include real customer update rows.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:

@@ -1195,6 +1195,9 @@ def test_operator_guide_documents_update_set_importer_bootstrap() -> None:
     assert "discovered platform state" in guide
     assert "GlideUpdateManager2().loadXML(xmlPayload)" in guide
     assert "does not send XML, preview, commit" in guide
+    assert "JEDI XML Import Smoke 20260514 002" in guide
+    assert "64c3e9d1b27a42479620114da017857a" in guide
+    assert "zero `sys_update_xml` rows" in guide
 
 
 def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
@@ -1207,3 +1210,6 @@ def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
     assert "verify-update-set-importer" in change_log
     assert "GlideUpdateManager2().loadXML(xmlPayload)" in change_log
     assert "Do not automate `upload.do`" in change_log
+    assert "400 update_set_xml_required" in change_log
+    assert "JEDI XML Import Smoke 20260514 002" in change_log
+    assert "64c3e9d1b27a42479620114da017857a" in change_log

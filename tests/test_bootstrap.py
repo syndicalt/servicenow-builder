@@ -412,6 +412,7 @@ def test_update_set_importer_bootstrap_spec_defines_scripted_rest_api() -> None:
     assert "GlideUpdateManager2" in spec.operation.operation_script
     assert "loadXML(xmlPayload)" in spec.operation.operation_script
     assert "update_set_xml" in spec.operation.operation_script
+    assert "replace(/^<\\?xml[^>]*>/, '')" in spec.operation.operation_script
     assert "jedi-devproject-update-set-importer" in spec.operation.operation_script
 
 

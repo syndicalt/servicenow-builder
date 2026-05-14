@@ -539,6 +539,52 @@ class ServiceNowClient:
             context=f"GET sn_cicd/progress/{progress_id}",
         )
 
+    def import_update_set_xml(
+        self,
+        *,
+        service_id: str,
+        update_set_xml: str,
+    ) -> dict[str, Any]:
+        operation_uri = self._fetch_update_set_importer_operation_uri(service_id=service_id)
+        response = self._transport.send(
+            HttpRequest(
+                method="POST",
+                url=f"{self._settings.base_url}{operation_uri}",
+                headers={
+                    "Authorization": self._auth.authorization_header(),
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                body={"update_set_xml": update_set_xml},
+            )
+        )
+        return _servicenow_response_body_or_raise(
+            response=response,
+            context=f"POST {operation_uri}",
+        )
+
+    def _fetch_update_set_importer_operation_uri(self, *, service_id: str) -> str:
+        records = self.fetch_table_records(
+            table="sys_ws_operation",
+            lookup={
+                "web_service_definition.service_id": service_id,
+                "name": "import_update_set_xml",
+                "active": "true",
+            },
+            fields=["operation_uri"],
+            limit=1,
+        )
+        if not records:
+            raise ServiceNowApiError(
+                f"ServiceNow Update Set importer operation not found for service_id={service_id}"
+            )
+        operation_uri = str(records[0].get("operation_uri") or "")
+        if not operation_uri.startswith("/api/"):
+            raise ServiceNowApiError(
+                "ServiceNow Update Set importer operation did not include operation_uri"
+            )
+        return operation_uri
+
     def _send_cicd_update_set_request(
         self,
         *,

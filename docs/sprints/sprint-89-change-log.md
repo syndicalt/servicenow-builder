@@ -17,6 +17,14 @@ Bootstrap a reviewed ServiceNow-side Update Set XML importer instead of automati
 - Added bootstrap tests for the Scripted REST spec, record plan, apply confirmation, apply ordering, and verification.
 - Added CLI tests for planning and applying the importer bootstrap.
 - Added documentation coverage for the operator workflow.
+- Added client coverage for discovering the installed importer operation URI and posting XML to it.
+
+## Smoke
+
+- Applied the importer to the PDI and verified `sys_ws_definition` plus `sys_ws_operation`.
+- Confirmed the endpoint fails closed with `400 update_set_xml_required` when no XML is supplied.
+- Posted minimal reviewed XML to `/api/1860704/jedi_update_set_import`.
+- Verified ServiceNow created retrieved update set `JEDI XML Import Smoke 20260514 002` with sys_id `64c3e9d1b27a42479620114da017857a`, state `loaded`, and zero customer update rows.
 
 ## Decision
 

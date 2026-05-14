@@ -822,6 +822,7 @@ def _update_set_importer_operation_script(*, integration_identity: str) -> str:
     }}
 
     var trimmedXml = xmlPayload.replace(/^\\s+|\\s+$/g, '');
+    trimmedXml = trimmedXml.replace(/^<\\?xml[^>]*>/, '').replace(/^\\s+|\\s+$/g, '');
     if (trimmedXml.indexOf('<unload') !== 0) {{
         response.setStatus(400);
         response.setBody({{
