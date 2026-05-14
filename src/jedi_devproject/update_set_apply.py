@@ -55,6 +55,7 @@ class PlannedFormLayoutChange(BaseModel):
     table_name: str
     element: str
     section_sys_id: str
+    section_caption: str
     position: int
     shifted_elements: list[dict[str, str]]
 
@@ -224,6 +225,7 @@ def _plan_named_section_form_layout_change(
         table_name=table_name,
         element=element,
         section_sys_id=section_sys_id,
+        section_caption=section_name,
         position=insert_position,
         shifted_elements=[],
     )
@@ -350,6 +352,11 @@ def _apply_form_layout_change(
             "sys_ui_section": change.section_sys_id,
             "position": str(change.position),
         },
+    )
+    client.upsert_table_record(
+        table="sys_ui_section",
+        lookup={"sys_id": change.section_sys_id},
+        fields={"caption": change.section_caption},
     )
 
 

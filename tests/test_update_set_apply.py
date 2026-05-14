@@ -243,6 +243,7 @@ def test_apply_candidate_places_form_field_in_notes_section_by_default() -> None
         "sys_user_preference",
         "sys_dictionary",
         "sys_ui_element",
+        "sys_ui_section",
     ]
     assert client.upserts[2] == {
         "table": "sys_ui_element",
@@ -257,6 +258,11 @@ def test_apply_candidate_places_form_field_in_notes_section_by_default() -> None
             "sys_ui_section": "notes-section-sys-id",
             "position": "2",
         },
+    }
+    assert client.upserts[3] == {
+        "table": "sys_ui_section",
+        "lookup": {"sys_id": "notes-section-sys-id"},
+        "fields": {"caption": "Notes"},
     }
 
 
@@ -292,7 +298,7 @@ def test_apply_candidate_infers_form_target_from_single_custom_dictionary_field(
         ),
     )
 
-    assert client.upserts[-1] == {
+    assert client.upserts[-2] == {
         "table": "sys_ui_element",
         "lookup": {
             "name": "rm_story",
@@ -342,7 +348,7 @@ def test_apply_candidate_uses_named_form_section_when_provided() -> None:
         ),
     )
 
-    assert client.upserts[-1]["lookup"] == {
+    assert client.upserts[-2]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
         "sys_ui_section": "notes-section-sys-id",
@@ -401,7 +407,7 @@ def test_apply_candidate_normalizes_model_field_aliases() -> None:
             "internal_type": "string",
         },
     }
-    assert client.upserts[-1]["lookup"] == {
+    assert client.upserts[-2]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
         "sys_ui_section": "notes-section-sys-id",
@@ -448,7 +454,7 @@ def test_apply_candidate_normalizes_known_field_defaults_and_form_xml_element() 
     dictionary_fields = cast(dict[str, Any], client.upserts[1]["fields"])
     assert dictionary_fields["column_label"] == "AI Review Notes"
     assert dictionary_fields["help"] == "Notes from human review."
-    assert client.upserts[-1]["lookup"] == {
+    assert client.upserts[-2]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
         "sys_ui_section": "notes-section-sys-id",
