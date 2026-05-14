@@ -184,6 +184,35 @@ def _aliased_dictionary_form_candidate() -> UpdateSetCandidate:
     )
 
 
+def _minimal_model_dictionary_form_candidate() -> UpdateSetCandidate:
+    return _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "u_ai_review_notes",
+                        "type": "string",
+                        "label": "AI Review Notes",
+                        "help_text": "Notes from human review.",
+                        "mandatory": False,
+                        "max_length": 8000,
+                        "default_value": "",
+                    },
+                    rationale="Create the requested field on the Story table.",
+                ),
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={"field_order": "u_ai_review_notes"},
+                    rationale="Place the requested field on the Story form.",
+                ),
+            ]
+        }
+    )
+
+
 def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
@@ -331,6 +360,36 @@ def test_create_update_set_handoff_normalizes_model_aliases_for_retrieved_update
     assert client.upserts[1]["fields"]["target_name"] == "Story.AI Review Notes"
     assert "<max_length>8000</max_length>" in str(client.upserts[1]["fields"]["payload"])
     assert "<mandatory>false</mandatory>" in str(client.upserts[1]["fields"]["payload"])
+    assert client.upserts[3]["lookup"] == {
+        "name": "sys_ui_section_default-main-section-sys-id",
+        "remote_update_set": "update-set-sys-id",
+    }
+
+
+def test_create_update_set_handoff_normalizes_minimal_model_shape() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=_minimal_model_dictionary_form_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/30",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    assert client.upserts[1]["lookup"] == {
+        "name": "sys_dictionary_rm_story_u_ai_review_notes",
+        "remote_update_set": "update-set-sys-id",
+    }
+    assert client.upserts[1]["fields"]["target_name"] == "Story.AI Review Notes"
+    assert "<name>rm_story</name>" in str(client.upserts[1]["fields"]["payload"])
+    assert "<element>u_ai_review_notes</element>" in str(client.upserts[1]["fields"]["payload"])
+    assert '<internal_type display_value="String">string</internal_type>' in str(
+        client.upserts[1]["fields"]["payload"]
+    )
     assert client.upserts[3]["lookup"] == {
         "name": "sys_ui_section_default-main-section-sys-id",
         "remote_update_set": "update-set-sys-id",

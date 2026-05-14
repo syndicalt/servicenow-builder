@@ -188,11 +188,12 @@ def _form_layout_customer_updates(
     change: CandidateChange,
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    table_name = str(change.fields.get("table") or change.fields.get("name") or "rm_story")
+    table_name = _story_table_name(change.fields)
     element = str(
         change.fields.get("field")
         or change.fields.get("element")
         or change.fields.get("field_name")
+        or _custom_field_value(change.fields.get("field_order"))
         or "u_ai_review_notes"
     )
     if table_name != "rm_story" or not element.startswith("u_"):
@@ -334,14 +335,20 @@ def _dictionary_customer_updates(
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
     fields = dict(change.fields)
-    table_name = str(fields.get("name") or "rm_story")
+    table_name = _story_table_name(fields)
     element = str(
-        fields.get("element") or fields.get("field_name") or fields.get("column_name") or ""
+        fields.get("element")
+        or fields.get("field_name")
+        or fields.get("column_name")
+        or _custom_field_value(fields.get("name"))
+        or ""
     )
-    label = str(fields.get("column_label") or fields.get("field_label") or "")
+    label = str(
+        fields.get("column_label") or fields.get("field_label") or fields.get("label") or ""
+    )
     if element == "u_ai_review_notes" and label.strip() == "":
         label = "AI Review Notes"
-    internal_type = str(fields.get("internal_type") or "string")
+    internal_type = str(fields.get("internal_type") or fields.get("type") or "string")
     max_length = str(fields.get("max_length") or "8000")
     mandatory = _bool_text(fields.get("mandatory"))
     if table_name.strip() == "" or element.strip() == "" or label.strip() == "":
@@ -380,6 +387,21 @@ def _dictionary_customer_updates(
             "application": "global",
         },
     ]
+
+
+def _story_table_name(fields: dict[str, Any]) -> str:
+    raw_table = fields.get("table") or fields.get("table_name")
+    if raw_table:
+        return str(raw_table)
+    raw_name = str(fields.get("name") or "").strip()
+    if raw_name.startswith("u_") or raw_name == "":
+        return "rm_story"
+    return raw_name
+
+
+def _custom_field_value(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text.startswith("u_") else ""
 
 
 def _dictionary_payload(
