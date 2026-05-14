@@ -163,7 +163,20 @@ def test_operator_guide_documents_runtime_wiring() -> None:
     assert "load_runtime_settings" in guide
     assert "create_runtime_api" in guide
     assert "process_one_runtime_fulfillment" in guide
+    assert "run_loop" in guide
+    assert "Automated fulfillment failed" in guide
     assert "DATABASE_URL" in guide
+
+
+def test_operator_guide_documents_chatgpt_implementation_adapter() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "ChatGPT Implementation Adapter" in guide
+    assert "OpenAIResponsesProvider" in guide
+    assert "Responses API" in guide
+    assert "strict JSON schema" in guide
+    assert "name/value" in guide
+    assert "fail closed" in guide
 
 
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
@@ -258,6 +271,18 @@ def test_sprint_seventy_six_change_log_documents_public_lifecycle_bootstrap() ->
     assert "rest_endpoint" in change_log
     assert "sys_rest_message_fn.rest_message" in change_log
     assert "jedi-devproject-0-jedi.up.railway.app/lifecycle/events" in change_log
+
+
+def test_sprint_seventy_seven_change_log_documents_worker_failure_notes() -> None:
+    change_log = Path("docs/sprints/sprint-77-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "failure_notifier" in change_log
+    assert "Automated fulfillment failed" in change_log
+    assert "run_loop" in change_log
+    assert "OpenAIResponsesProvider" in change_log
+    assert "name/value pairs" in change_log
     assert "no_authentication" in change_log
 
 

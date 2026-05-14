@@ -283,3 +283,124 @@ def test_process_one_runtime_fulfillment_returns_idle_without_servicenow_calls(
     assert result.status == "idle"
     assert transport.requests == []
     assert store.closed is True
+
+
+def test_process_one_runtime_fulfillment_writes_work_note_when_handler_fails(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore(claimed_job=_job())
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "story-sys-id",
+                            "number": "STRY0010013",
+                            "short_description": "Add AI Review Notes field",
+                            "description": "Add AI Review Notes field.",
+                            "story_points": "3",
+                            "priority": "4",
+                            "state": "Draft",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "story-sys-id",
+                            "number": "STRY0010013",
+                            "short_description": "Add AI Review Notes field",
+                            "description": "Add AI Review Notes field.",
+                            "story_points": "3",
+                            "priority": "4",
+                            "state": "Draft",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+        ]
+    )
+
+    result = process_one_runtime_fulfillment(
+        settings=_settings(tmp_path, apply=True),
+        store_factory=lambda _database_url: store,
+        transport=transport,
+    )
+
+    assert result.status == "failed"
+    assert result.error_message == "fresh_story_state_mismatch"
+    assert store.failed_jobs == [("job-evt-001", "fresh_story_state_mismatch")]
+    assert [request.method for request in transport.requests] == [
+        "POST",
+        "GET",
+        "GET",
+        "PATCH",
+    ]
+    assert transport.requests[-1].body["work_notes"] == (
+        "Automated fulfillment failed for lifecycle event evt-001. "
+        "Job: job-evt-001. Error: fresh_story_state_mismatch"
+    )
+
+
+def test_process_one_runtime_fulfillment_redacts_secrets_from_failure_notes(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore(claimed_job=_job())
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=500,
+                json_body={
+                    "error": {
+                        "message": (
+                            "client-secret leaked with "
+                            "postgresql://jedi:secret@localhost:5432/jedi"
+                        )
+                    }
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "story-sys-id",
+                            "number": "STRY0010013",
+                            "short_description": "Add AI Review Notes field",
+                            "description": "Add AI Review Notes field.",
+                            "story_points": "3",
+                            "priority": "4",
+                            "state": "Ready",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+        ]
+    )
+
+    result = process_one_runtime_fulfillment(
+        settings=_settings(tmp_path, apply=True),
+        store_factory=lambda _database_url: store,
+        transport=transport,
+    )
+
+    assert result.status == "failed"
+    assert result.error_message is not None
+    assert "client-secret" not in result.error_message
+    assert "postgresql://jedi:secret@localhost:5432/jedi" not in result.error_message
+    assert store.failed_jobs
+    assert "client-secret" not in store.failed_jobs[0][1]
+    assert "postgresql://jedi:secret@localhost:5432/jedi" not in store.failed_jobs[0][1]
+    work_notes = transport.requests[-1].body["work_notes"]
+    assert "client-secret" not in work_notes
+    assert "postgresql://jedi:secret@localhost:5432/jedi" not in work_notes
+    assert "***REDACTED***" in work_notes

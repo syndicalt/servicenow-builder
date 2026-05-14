@@ -47,6 +47,7 @@ class FulfillmentWorkerResult(BaseModel):
 
 
 FulfillmentHandler = Callable[[FulfillmentJobRecord], FulfillmentExecutionResult]
+FulfillmentFailureNotifier = Callable[[FulfillmentJobRecord, str], None]
 
 
 def process_one_fulfillment_job(
@@ -54,6 +55,7 @@ def process_one_fulfillment_job(
     store: FulfillmentWorkerStore,
     worker_id: str,
     handler: FulfillmentHandler,
+    failure_notifier: FulfillmentFailureNotifier | None = None,
 ) -> FulfillmentWorkerResult:
     if worker_id.strip() == "":
         raise ValueError("worker_id must not be empty")
@@ -72,6 +74,13 @@ def process_one_fulfillment_job(
         execution_result = handler(job)
     except Exception as exc:
         error_message = str(exc)
+        if failure_notifier is not None:
+            try:
+                failure_notifier(job, error_message)
+            except Exception as notifier_exc:
+                error_message = (
+                    f"{error_message}; failure notifier failed: {notifier_exc}"
+                )
         store.fail_fulfillment_job(job_id=job.job_id, error_message=error_message)
         return FulfillmentWorkerResult(
             status="failed",

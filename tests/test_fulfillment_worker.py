@@ -103,6 +103,7 @@ def test_worker_completes_claimed_job_after_handler_success() -> None:
 
 def test_worker_fails_claimed_job_when_handler_raises() -> None:
     store = FakeWorkerStore(claimed_job=_job())
+    notified_failures: list[tuple[str, str]] = []
 
     def handler(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
         raise RuntimeError(f"build failed for {job.story_number}")
@@ -111,6 +112,9 @@ def test_worker_fails_claimed_job_when_handler_raises() -> None:
         store=store,
         worker_id="worker-1",
         handler=handler,
+        failure_notifier=lambda job, error: notified_failures.append(
+            (job.job_id, error)
+        ),
     )
 
     assert result.status == "failed"
@@ -118,6 +122,37 @@ def test_worker_fails_claimed_job_when_handler_raises() -> None:
     assert result.error_message == "build failed for STRY0010013"
     assert store.completed_jobs == []
     assert store.failed_jobs == [("job-evt-001", "build failed for STRY0010013")]
+    assert notified_failures == [("job-evt-001", "build failed for STRY0010013")]
+
+
+def test_worker_records_failed_job_even_when_failure_notifier_fails() -> None:
+    store = FakeWorkerStore(claimed_job=_job())
+
+    def handler(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
+        raise RuntimeError(f"build failed for {job.story_number}")
+
+    def failure_notifier(_job: FulfillmentJobRecord, _error: str) -> None:
+        raise RuntimeError("work note writeback failed")
+
+    result = process_one_fulfillment_job(
+        store=store,
+        worker_id="worker-1",
+        handler=handler,
+        failure_notifier=failure_notifier,
+    )
+
+    assert result.status == "failed"
+    assert result.error_message == (
+        "build failed for STRY0010013; failure notifier failed: "
+        "work note writeback failed"
+    )
+    assert store.failed_jobs == [
+        (
+            "job-evt-001",
+            "build failed for STRY0010013; failure notifier failed: "
+            "work note writeback failed",
+        )
+    ]
 
 
 def test_worker_requires_non_empty_worker_id() -> None:

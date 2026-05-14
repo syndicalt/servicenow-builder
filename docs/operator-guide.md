@@ -167,6 +167,16 @@ Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject
 
 Optional values are `JEDI_WORKER_ID` and `JEDI_BUILD_CLAIM_APPLY`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
 
+`runtime_worker.run_loop()` provides the built-in polling loop for hosts that run the worker as a long-lived process. It repeatedly calls the same one-job runtime processor, sleeps after idle polls, and can stop on the first failed job for smoke tests or continue when the host owns failure alerting.
+
+Runtime fulfillment failures write back to the originating ServiceNow story work notes through the worker `failure_notifier`. The note begins with `Automated fulfillment failed` and includes the lifecycle event id, fulfillment job id, and redacted failure message. If the ServiceNow writeback itself fails, the worker still marks the PostgreSQL job failed and stores both the original handler error and the notifier error in `last_error`.
+
+## ChatGPT Implementation Adapter
+
+`OpenAIResponsesProvider` in `jedi_devproject.openai_provider` is the first ChatGPT/OpenAI adapter boundary for implementation candidate generation. It calls the OpenAI Responses API with strict JSON schema output and returns the existing internal implementation candidate shape.
+
+The model-facing schema requires ServiceNow field mutations as explicit `name/value` pairs. The adapter normalizes those pairs into the internal `fields` dictionary after parsing. Arbitrary field objects fail closed at the provider boundary so model output cannot bypass the implementation packet and writeback validators.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:

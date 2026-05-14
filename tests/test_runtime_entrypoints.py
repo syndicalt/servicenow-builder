@@ -76,6 +76,68 @@ def test_runtime_worker_run_once_delegates_to_runtime_fulfillment(
     assert seen_settings == [settings]
 
 
+def test_runtime_worker_run_loop_processes_until_iteration_limit(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    statuses = ["completed", "idle", "completed"]
+    seen_settings: list[RuntimeSettings] = []
+    sleep_calls: list[float] = []
+
+    def processor(runtime_settings: RuntimeSettings) -> FulfillmentWorkerResult:
+        seen_settings.append(runtime_settings)
+        status = statuses.pop(0)
+        return FulfillmentWorkerResult(
+            status=status,
+            job_id="job-001" if status == "completed" else None,
+            story_number="STRY0010013" if status == "completed" else None,
+            message=status,
+            error_message=None,
+        )
+
+    summary = runtime_worker.run_loop(
+        settings=settings,
+        processor=processor,
+        max_iterations=3,
+        idle_sleep_seconds=2.5,
+        sleep=sleep_calls.append,
+    )
+
+    assert summary.iterations == 3
+    assert summary.completed == 2
+    assert summary.idle == 1
+    assert summary.failed == 0
+    assert len(seen_settings) == 3
+    assert sleep_calls == [2.5]
+
+
+def test_runtime_worker_run_loop_stops_on_failed_job_by_default(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+
+    def processor(_runtime_settings: RuntimeSettings) -> FulfillmentWorkerResult:
+        return FulfillmentWorkerResult(
+            status="failed",
+            job_id="job-001",
+            story_number="STRY0010013",
+            message=None,
+            error_message="provider unavailable",
+        )
+
+    summary = runtime_worker.run_loop(
+        settings=settings,
+        processor=processor,
+        max_iterations=5,
+        idle_sleep_seconds=0,
+        sleep=lambda _seconds: None,
+    )
+
+    assert summary.iterations == 1
+    assert summary.failed == 1
+    assert summary.stopped_reason == "failed_job"
+
+
 def _store_factory(database_urls: list[str]) -> Callable[[str], _NoopStore]:
     def create(database_url: str) -> _NoopStore:
         database_urls.append(database_url)
