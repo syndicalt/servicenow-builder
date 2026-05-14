@@ -253,7 +253,22 @@ This plan assumes two-week sprints with a strict test-first workflow, 90% covera
 
 Current MVP roadmap status: implemented.
 
-The project continued beyond the original Sprint 0-9 baseline to close the SPM-aware sidecar and controlled writeback roadmap. Each implemented extension sprint has a dedicated change log under `docs/sprints/`.
+The project continued beyond the original Sprint 0-9 baseline to close the SPM-aware sidecar, controlled writeback, lifecycle orchestration, retrieved Update Set handoff, and read-only admin console roadmap. Each implemented extension sprint has a dedicated change log under `docs/sprints/`.
+
+## MVP Baseline: Complete Through Sprint 101
+
+The MVP is now organized into six delivery phases. This keeps the detailed sprint history intact while making the product shape easier to reason about.
+
+| Phase | Sprints | Implemented Outcome |
+|---|---:|---|
+| Foundation and governance | 0-9 | Test-first baseline, 90% coverage gate, FedRAMP-aligned boundary assumptions, typed schemas, deterministic safety gates, RAG boundaries, provider gates, review workflow, and read-only ServiceNow OAuth integration. |
+| Local pipeline and controlled story writeback | 10-27 | End-to-end local pipeline, context enrichment, first dictionary/form candidate, SPM/PPM work-surface decision, controlled story writeback, actor/audit capture, idempotency, batch writeback, and Sprint 27 manifest alignment for Controlled story writeback. |
+| Implementation packet and candidate artifacts | 28-42 | PDI lifecycle smoke, LLM implementation packet, provider output contract hardening, validated Update Set candidate artifacts, batch candidate generation, dry-run lifecycle smoke, bootstrap field planning/apply, structured writeback verification, and writeback batch reporting. |
+| Delivery handoff and lifecycle bootstrap | 43-67 | Artifact handoff reports, delivery attachment planning, reviewed delivery artifacts, Reviewed delivery lifecycle manifest, external build-result contract, ServiceNow lifecycle event contract, Business Rule/webhook bootstrap, lifecycle apply, and lifecycle verification. |
+| Hosted runtime and operational store | 68-82 | Durable operational store, Sprint 69 PostgreSQL operational store retarget, lifecycle Webhook API, fulfillment worker, build-claim handler, runtime wiring, containerized runtime, Railway public webhook verification, worker loop, ChatGPT adapter boundary, and DB-backed artifact retrieval. |
+| ServiceNow-native handoff, UAT, and admin visibility | 83-101 | Retrieved Update Set handoff, platform-generated customer updates, generic dictionary/form capability, reference-field support, read-only AI handoff fields, UAT Complete/Ready/Draft closeout, deterministic context escalation, admin summary APIs, and Sprint 101 Read-only admin console. |
+
+### Detailed Sprint Index
 
 | Sprint | Implemented Outcome |
 |---|---|
@@ -324,20 +339,59 @@ The project continued beyond the original Sprint 0-9 baseline to close the SPM-a
 | Sprint 74 | Containerized local runtime |
 | Sprint 75 | Container lifecycle smoke and packaged runtime fixes |
 | Sprint 76 | Public lifecycle webhook bootstrap verification |
+| Sprint 77 | Worker loop, failure work notes, and OpenAI adapter boundary |
+| Sprint 78 | Runtime ChatGPT/OpenAI implementation-candidate generation |
+| Sprint 79 | Hosted long-running worker and live WIP build claim |
+| Sprint 80 | Provider failure diagnostics and redaction |
+| Sprint 81 | DB-backed implementation packet and candidate artifacts |
+| Sprint 82 | Admin artifact retrieval API |
+| Sprint 83 | Native ServiceNow Update Set handoff record |
+| Sprint 84 | Controlled platform-generated customer updates |
+| Sprint 85 | Story form placement correction |
+| Sprint 86 | Retrieved Update Set handoff instead of local Update Sets |
+| Sprint 87 | Retrieved Update Set customer update import path |
+| Sprint 88 | Retrieved Update Set importer verification |
+| Sprint 89 | Server-side XML import method for retrieved Update Sets |
+| Sprint 90 | Live retrieved Update Set handoff proof for `STRY0010013` |
+| Sprint 91 | Ready for Testing transition after retrieved Update Set handoff |
+| Sprint 92 | Manual-build and failure-state handling |
+| Sprint 93 | Capability-based automation gate and generic dictionary/form support |
+| Sprint 94 | Deterministic context sufficiency metadata |
+| Sprint 95 | Problem-table vendor reference field UAT support |
+| Sprint 96 | Read-only AI handoff metadata fields |
+| Sprint 97 | UAT Complete lifecycle closeout |
+| Sprint 98 | UAT rework and story rejection lifecycle handling |
+| Sprint 99 | Deterministic context escalation planning |
+| Sprint 100 | Admin operational summary endpoints |
+| Sprint 101 | Read-only admin console |
 
-Controlled story writeback is now explicitly scoped to build claim, external build completion evidence, and `Ready for Testing` transition handling. Direct Update Set imports, deployments, production promotion, and unvalidated ServiceNow mutation remain out of scope.
+Controlled story writeback is now explicitly scoped to build claim, external build completion evidence, retrieved Update Set handoff metadata, UAT lifecycle closeout, and `Ready for Testing` transition handling. Direct production promotion, autonomous approval, and unvalidated ServiceNow mutation remain out of scope.
+
+## Current MVP Runtime
+
+The current product boundary is the public API and worker runtime. The sidecar can accept ServiceNow lifecycle webhook events, claim fulfillment jobs asynchronously, move a story to Work in Progress, generate an implementation packet, call the explicitly configured ChatGPT/OpenAI provider, validate implementation candidates, create retrieved Update Set handoffs, write Ready for Testing back to ServiceNow, and expose read-only operational visibility through `/admin`.
+
+- API: receive ServiceNow lifecycle webhook events, validate payloads, persist `lifecycle_events`, enqueue `fulfillment_jobs`, serve admin summary APIs, and serve the Basic-auth read-only admin console.
+- Worker: claim queued jobs using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`, run evaluation/build orchestration asynchronously, write state transitions and failures back to ServiceNow, and record job status in PostgreSQL.
+- Runtime: package the API, worker, and PostgreSQL dependency for Railway and local container deployment with explicit environment variables and health checks.
+- Evidence: preserve lifecycle manifests, implementation packets, candidate artifacts, build results, writeback audits, reviewed delivery jobs, handoff reports, retrieved Update Set references, and admin-visible operational summaries.
+
+## Post-MVP Sprint Backlog
+
+These are the next organized sprints. They are intentionally hardening-first: the MVP should not expand its mutation surface until authentication, observability, and evidence quality are stronger.
+
+| Priority | Proposed Sprint | Goal | Exit Criteria |
+|---:|---|---|---|
+| 1 | Sprint 102: ServiceNow role-backed admin authentication | Replace or wrap local Basic auth with ServiceNow/OIDC-backed operator authentication and explicit admin-role checks. | `/admin` access is tied to customer identity, local Basic auth is development-only, and tests cover unauthenticated, unauthorized, and authorized users. |
+| 2 | Sprint 103: Authenticated inbound webhook protection | Protect `/lifecycle/events` before any non-PDI use. | ServiceNow lifecycle calls use a signed secret or OAuth-authenticated integration path; unauthenticated lifecycle events are rejected. |
+| 3 | Sprint 104: Confidence-based context retrieval worker | Turn deterministic context escalation into an actual retrieval step before model generation. | Missing live instance context triggers a retrieval worker; insufficient context routes to human review; the model is not asked to guess. |
+| 4 | Sprint 105: Admin console drill-down and evidence views | Make the console useful for operations without adding mutation controls. | Job detail, lifecycle event detail, artifact links, and retrieved Update Set links are visible from the console. |
+| 5 | Sprint 106: ATO evidence refresh | Refresh data flow, threat model, control mapping, risk register, and sprint evidence index after MVP completion. | Security docs reflect Railway dev deployment, ServiceNow sidecar flow, ChatGPT evaluation boundary, PostgreSQL artifacts, and residual risks. |
+| 6 | Sprint 107: Broader capability backlog design | Decide the next supported ServiceNow change capability after generic dictionary/form placement. | A written ADR names the next capability, unsupported cases, validation requirements, and UAT story shape before implementation. |
 
 ## Next Roadmap Focus
 
-The current product boundary is the public API and worker runtime. The sidecar can already prepare implementation packets, validate implementation candidates, bootstrap lifecycle webhook records, verify ServiceNow lifecycle records, accept lifecycle webhook events, claim fulfillment jobs, run the guarded build-claim handler, load runtime settings, run in local containers, plan and execute the container lifecycle smoke, record controlled writeback, and manage reviewed delivery handoff artifacts. The operational store targets PostgreSQL so the runtime can use database-backed event intake and worker claiming from the start.
-
-- API: receive ServiceNow lifecycle webhook events, validate payloads, persist `lifecycle_events`, enqueue `fulfillment_jobs`, and return fast acknowledgements. The first API intake boundary is implemented and publicly reachable through Railway.
-- Worker: claim queued jobs using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`, run evaluation/build orchestration asynchronously, and write state transitions back to ServiceNow through existing guarded boundaries. The first claim/complete/fail boundary and build-claim handler are implemented.
-- Runtime: package the API, worker, and PostgreSQL dependency for local container deployment with explicit environment variables and health checks. Environment-driven API and worker wiring, local compose topology, packaged migrations, request-safe PostgreSQL autocommit, and container smoke execution are implemented.
-- Evidence: preserve lifecycle manifests, implementation packets, candidate artifacts, build results, writeback audits, reviewed delivery jobs, handoff reports, and delivery attachment plans.
-
-The following roadmap items should be prioritized:
-
-1. Full lifecycle smoke from a live PDI `Draft` to `Ready` transition through build claim and controlled writeback.
-2. Add authenticated inbound webhook protection before any non-PDI use.
-3. ATO evidence refresh: data flow, threat model, control mapping, residual risk register, and sprint evidence index.
+1. Treat Sprint 101 as the MVP cut line.
+2. Run no new mutation features until Sprint 102 and Sprint 103 close the authentication gaps.
+3. Build Sprint 104 before expanding model autonomy; context retrieval is the root engineering step for safer LLM fulfillment.
+4. Keep the admin console read-only until the operator action model is explicitly designed.

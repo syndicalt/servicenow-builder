@@ -448,6 +448,17 @@ def test_sprint_plan_documents_delivery_lifecycle_roadmap_through_sprint_56() ->
     assert "SELECT ... FOR UPDATE SKIP LOCKED" in sprint_plan
 
 
+def test_sprint_plan_documents_mvp_baseline_and_post_mvp_backlog() -> None:
+    sprint_plan = Path("SPRINTS.md").read_text(encoding="utf-8")
+
+    assert "MVP Baseline: Complete Through Sprint 101" in sprint_plan
+    assert "Sprint 101" in sprint_plan
+    assert "Read-only admin console" in sprint_plan
+    assert "Post-MVP Sprint Backlog" in sprint_plan
+    assert "ServiceNow role-backed admin authentication" in sprint_plan
+    assert "Confidence-based context retrieval worker" in sprint_plan
+
+
 def test_sprint_one_change_log_documents_schema_work() -> None:
     change_log = Path("docs/sprints/sprint-1-change-log.md").read_text(encoding="utf-8")
 
