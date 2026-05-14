@@ -335,7 +335,9 @@ def _dictionary_customer_updates(
 ) -> list[dict[str, Any]]:
     fields = dict(change.fields)
     table_name = str(fields.get("name") or "rm_story")
-    element = str(fields.get("element") or fields.get("field_name") or "")
+    element = str(
+        fields.get("element") or fields.get("field_name") or fields.get("column_name") or ""
+    )
     label = str(fields.get("column_label") or fields.get("field_label") or "")
     if element == "u_ai_review_notes" and label.strip() == "":
         label = "AI Review Notes"
