@@ -321,9 +321,9 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
                 "u_ai_status": "Ready for Testing",
                 "work_notes": (
                     "ServiceNow retrieved Update Set handoff created for STRY0010013. "
-                    "Retrieved Update Set: JEDI STRY0010013 - AI Candidate "
-                    "(https://dev205693.service-now.com/sys_remote_update_set.do?"
-                    "sys_id=remote-update-set-sys-id). "
+                    "Retrieved Update Set: JEDI STRY0010013 - AI Candidate\n"
+                    "Retrieved Update Set link: https://dev205693.service-now.com/"
+                    "sys_remote_update_set.do?sys_id=remote-update-set-sys-id\n"
                     "Candidate artifact: db://artifact_blobs/2."
                 ),
             },
