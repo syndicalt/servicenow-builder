@@ -51,6 +51,7 @@ class ImplementationPacket(BaseModel):
     capability_assessment: dict[str, Any] = Field(default_factory=dict)
     normalized_intent: dict[str, Any] | None = None
     instance_context: dict[str, Any] | None = None
+    context_sufficiency: dict[str, Any] = Field(default_factory=dict)
     context_sections: dict[str, str]
     retrieval_citations: list[RetrievalCitation]
     output_contract: dict[str, Any]
@@ -68,6 +69,7 @@ class ImplementationPacket(BaseModel):
                 "allowed_operations": self.allowed_operations,
                 "capability_assessment": self.capability_assessment,
                 "normalized_intent": self.normalized_intent,
+                "context_sufficiency": self.context_sufficiency,
             },
             "instance_context": self.instance_context,
             "context": self.context_sections,
@@ -140,6 +142,9 @@ def build_implementation_packet(
         instance_context=(
             discovery_context.model_dump(mode="json") if discovery_context is not None else None
         ),
+        context_sufficiency=_context_sufficiency(
+            discovery_context=discovery_context,
+        ),
         context_sections=context_sections,
         retrieval_citations=citations,
         output_contract={
@@ -153,6 +158,34 @@ def build_implementation_packet(
             "must_use_discovered_instance_context": True,
         },
     )
+
+
+def _context_sufficiency(
+    *,
+    discovery_context: InstanceDiscoveryContext | None,
+) -> dict[str, Any]:
+    if discovery_context is None:
+        return {
+            "status": "needs_retrieval",
+            "score": 0.35,
+            "missing_context": ["live_instance_context"],
+            "evidence": [],
+        }
+    missing_context: list[str] = []
+    if not discovery_context.table_exists:
+        missing_context.append("target_table")
+    if not discovery_context.supports_custom_fields:
+        missing_context.append("custom_field_support")
+    if not discovery_context.form_sections:
+        missing_context.append("form_sections")
+    status = "sufficient" if not missing_context else "insufficient"
+    score = 0.95 if status == "sufficient" else 0.2
+    return {
+        "status": status,
+        "score": score,
+        "missing_context": missing_context,
+        "evidence": discovery_context.evidence,
+    }
 
 
 def generate_implementation_candidate(

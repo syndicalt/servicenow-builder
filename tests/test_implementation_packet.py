@@ -201,7 +201,28 @@ def test_build_implementation_packet_includes_discovered_instance_context() -> N
     assert packet.instance_context is not None
     assert packet.instance_context["target_table"] == "incident"
     assert packet.instance_context["fields"][0]["element"] == "description"
+    assert packet.context_sufficiency["status"] == "sufficient"
+    assert packet.context_sufficiency["score"] == 0.95
     assert packet.output_contract["must_use_discovered_instance_context"] is True
+
+
+def test_build_implementation_packet_marks_missing_instance_context_for_retrieval() -> None:
+    packet = build_implementation_packet(
+        story=_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+    )
+
+    assert packet.context_sufficiency == {
+        "status": "needs_retrieval",
+        "score": 0.35,
+        "missing_context": ["live_instance_context"],
+        "evidence": [],
+    }
+    assert packet.to_model_payload()["controls"]["context_sufficiency"]["status"] == (
+        "needs_retrieval"
+    )
 
 
 def test_implementation_packet_payload_is_model_ready_and_minimized() -> None:
