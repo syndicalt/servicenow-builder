@@ -328,7 +328,7 @@ def _form_table_name(fields: dict[str, Any], *, default: str) -> str:
     if raw_table:
         text = str(raw_table)
         if not text.startswith("u_"):
-            return text
+            return _normalize_table_name(text)
     return default
 
 
@@ -389,11 +389,17 @@ def _bool_value(value: Any) -> bool:
 def _story_table_name(fields: dict[str, Any]) -> str:
     raw_table = fields.get("table") or fields.get("table_name")
     if raw_table:
-        return str(raw_table)
+        return _normalize_table_name(str(raw_table))
     raw_name = str(fields.get("name") or "").strip()
     if raw_name.startswith("u_") or raw_name == "":
         return "rm_story"
-    return raw_name
+    return _normalize_table_name(raw_name)
+
+
+def _normalize_table_name(value: str) -> str:
+    text = value.strip().lower()
+    text = text.removesuffix(" table").removesuffix(" form")
+    return text.replace(" ", "_")
 
 
 def _custom_field_value(value: Any) -> str:

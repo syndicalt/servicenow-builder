@@ -473,7 +473,7 @@ def test_create_update_set_handoff_preserves_reference_field_metadata() -> None:
                     table="sys_dictionary",
                     operation="insert",
                     fields={
-                        "name": "problem",
+                        "name": "Problem",
                         "element": "u_vendor_reference",
                         "column_label": "Vendor Reference",
                         "internal_type": "reference",
@@ -488,7 +488,7 @@ def test_create_update_set_handoff_preserves_reference_field_metadata() -> None:
                     table="sys_ui_form",
                     operation="update",
                     fields={
-                        "name": "problem",
+                        "name": "Problem",
                         "field": "u_vendor_reference",
                         "position_hint": "below Description",
                     },

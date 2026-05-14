@@ -15,6 +15,7 @@ Prepare the next UAT story for a Problem-table vendor reference field without ge
   - `reference_qual=vendor=true`
   - `reference_qual_condition=vendor=true`
 - Added validation so reference fields cannot generate XML without a reference table.
+- Normalized model-produced table names such as `Problem`, `Problem table`, and `Problem form` to `problem` before form metadata lookup.
 
 ## Tests
 
@@ -22,6 +23,7 @@ Prepare the next UAT story for a Problem-table vendor reference field without ge
 - Added generic dictionary/form XML coverage for reference metadata.
 - Added retrieved Update Set handoff coverage proving reference metadata is preserved.
 - Added a fail-closed validation test for incomplete reference field intents.
+- Added a regression for mixed-case model table names after the first `STRY0010002` UAT retry failed with `dictionary/form handoff changes must target the same table`.
 
 ## Decision
 
