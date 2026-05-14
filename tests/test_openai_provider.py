@@ -50,6 +50,8 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
                     {"name": "name", "value": "rm_story"},
                     {"name": "element", "value": "u_ai_review_notes"},
                 ],
+                "sys_id": None,
+                "rationale": None,
             }
         ],
         "test_plan": ["Confirm the field exists."],
@@ -71,6 +73,8 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
                 "table": "sys_dictionary",
                 "operation": "insert",
                 "fields": {"name": "rm_story", "element": "u_ai_review_notes"},
+                "sys_id": None,
+                "rationale": None,
             }
         ],
         "test_plan": ["Confirm the field exists."],
@@ -87,6 +91,13 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
     assert schema["additionalProperties"] is False
     change_schema = schema["properties"]["changes"]["items"]
     assert change_schema["additionalProperties"] is False
+    assert change_schema["required"] == [
+        "table",
+        "operation",
+        "fields",
+        "sys_id",
+        "rationale",
+    ]
     fields_schema = change_schema["properties"]["fields"]
     assert fields_schema["type"] == "array"
     assert fields_schema["items"]["additionalProperties"] is False

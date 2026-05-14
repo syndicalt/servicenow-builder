@@ -152,7 +152,13 @@ def _implementation_candidate_schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["table", "operation", "fields"],
+                    "required": [
+                        "table",
+                        "operation",
+                        "fields",
+                        "sys_id",
+                        "rationale",
+                    ],
                     "properties": {
                         "table": {"type": "string"},
                         "operation": {
