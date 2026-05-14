@@ -166,7 +166,6 @@ def _plan_form_layout_change(
     element = _form_target_element(
         change=change, custom_dictionary_elements=custom_dictionary_elements
     )
-    position = str(change.fields.get("position") or "description")
     view = (
         str(change.fields.get("view") or change.fields.get("view_name") or "default")
         .strip()
@@ -183,57 +182,13 @@ def _plan_form_layout_change(
         change.fields.get("form_section_name")
         or change.fields.get("section")
         or change.fields.get("caption")
-        or ""
+        or "Notes"
     ).strip()
-    if section_name:
-        return _plan_named_section_form_layout_change(
-            client=client,
-            table_name=table_name,
-            element=element,
-            section_name=section_name,
-        )
-
-    if "description" not in position.lower():
-        raise ValueError("sys_ui_form change must place the field relative to Description")
-
-    description_elements = client.fetch_table_records(
-        table="sys_ui_element",
-        lookup={"name": table_name, "element": "description"},
-        fields=["sys_id", "name", "element", "sys_ui_section", "position"],
-        limit=10,
-    )
-    if len(description_elements) != 1:
-        raise RuntimeError("default Description form element lookup was ambiguous")
-    description_element = description_elements[0]
-    section_sys_id = _reference_value(description_element.get("sys_ui_section"))
-    description_position = _record_position(description_element)
-
-    section_elements = client.fetch_table_records(
-        table="sys_ui_element",
-        lookup={"name": table_name, "sys_ui_section": section_sys_id},
-        fields=["sys_id", "element", "position"],
-        limit=200,
-    )
-    insert_position = description_position + 1
-    shifted_elements = [
-        {
-            "sys_id": str(record["sys_id"]),
-            "position": str(_record_position(record) + 1),
-        }
-        for record in sorted(
-            section_elements,
-            key=_record_position,
-            reverse=True,
-        )
-        if str(record.get("element") or "") != element
-        and _record_position(record) >= insert_position
-    ]
-    return PlannedFormLayoutChange(
+    return _plan_named_section_form_layout_change(
+        client=client,
         table_name=table_name,
         element=element,
-        section_sys_id=section_sys_id,
-        position=insert_position,
-        shifted_elements=shifted_elements,
+        section_name=section_name,
     )
 
 

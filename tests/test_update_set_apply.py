@@ -24,9 +24,7 @@ class FakeApplyClient:
         user_record: dict[str, Any] | None = _DEFAULT,
         customer_updates: list[dict[str, Any]] = _DEFAULT,
     ) -> None:
-        self.user_record = (
-            {"sys_id": "user-sys-id"} if user_record is _DEFAULT else user_record
-        )
+        self.user_record = {"sys_id": "user-sys-id"} if user_record is _DEFAULT else user_record
         self.customer_updates = (
             [{"sys_id": "customer-update-sys-id", "name": "sys_dictionary_rm_story_u_ai"}]
             if customer_updates is _DEFAULT
@@ -54,9 +52,7 @@ class FakeApplyClient:
         fields: list[str] | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        self.fetches.append(
-            {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
-        )
+        self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
         if table == "sys_update_xml":
             return cast(list[dict[str, Any]], self.customer_updates)
         if table == "sys_ui_section" and lookup == {
@@ -206,7 +202,7 @@ def test_apply_candidate_sets_current_update_set_then_applies_dictionary_change(
     }
 
 
-def test_apply_candidate_places_form_field_after_description_with_native_ui_elements() -> None:
+def test_apply_candidate_places_form_field_in_notes_section_by_default() -> None:
     client = FakeApplyClient()
     candidate = _candidate(
         [
@@ -247,25 +243,19 @@ def test_apply_candidate_places_form_field_after_description_with_native_ui_elem
         "sys_user_preference",
         "sys_dictionary",
         "sys_ui_element",
-        "sys_ui_element",
     ]
     assert client.upserts[2] == {
-        "table": "sys_ui_element",
-        "lookup": {"sys_id": "acceptance-element-sys-id"},
-        "fields": {"position": "5"},
-    }
-    assert client.upserts[3] == {
         "table": "sys_ui_element",
         "lookup": {
             "name": "rm_story",
             "element": "u_ai_review_notes",
-            "sys_ui_section": "main-section-sys-id",
+            "sys_ui_section": "notes-section-sys-id",
         },
         "fields": {
             "name": "rm_story",
             "element": "u_ai_review_notes",
-            "sys_ui_section": "main-section-sys-id",
-            "position": "4",
+            "sys_ui_section": "notes-section-sys-id",
+            "position": "2",
         },
     }
 
@@ -307,13 +297,13 @@ def test_apply_candidate_infers_form_target_from_single_custom_dictionary_field(
         "lookup": {
             "name": "rm_story",
             "element": "u_ai_review_notes",
-            "sys_ui_section": "main-section-sys-id",
+            "sys_ui_section": "notes-section-sys-id",
         },
         "fields": {
             "name": "rm_story",
             "element": "u_ai_review_notes",
-            "sys_ui_section": "main-section-sys-id",
-            "position": "4",
+            "sys_ui_section": "notes-section-sys-id",
+            "position": "2",
         },
     }
 
@@ -421,9 +411,7 @@ def test_apply_candidate_normalizes_model_field_aliases() -> None:
 def test_apply_candidate_rejects_unsupported_change_before_mutation() -> None:
     client = FakeApplyClient()
     candidate = _candidate(
-        [
-            CandidateChange(table="sys_user", operation="update", fields={"name": "bad"})
-        ]
+        [CandidateChange(table="sys_user", operation="update", fields={"name": "bad"})]
     )
 
     with pytest.raises(ValueError, match="unsupported update-set apply table: sys_user"):
