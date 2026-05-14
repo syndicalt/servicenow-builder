@@ -3064,6 +3064,39 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
     assert "story_sys_id" not in json.dumps(payload)
 
 
+def test_cli_plan_update_set_importer_writes_reviewable_spec(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spec_root = tmp_path / "update-set-importer"
+
+    exit_code = main(
+        [
+            "plan-update-set-importer",
+            "--integration-identity",
+            "jedi-devproject-update-set-importer",
+            "--run-id",
+            "update-set-importer-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    spec_path = spec_root / "update-set-importer-001.json"
+    payload = json.loads(spec_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "update_set_importer_specs=1" in captured.out
+    assert payload["definition"]["service_id"] == "jedi_update_set_import"
+    assert payload["operation"]["name"] == "import_update_set_xml"
+    assert "GlideUpdateManager2" in payload["operation"]["operation_script"]
+    assert [record["table"] for record in payload["servicenow_records"]] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+
+
 def test_cli_apply_lifecycle_webhook_requires_confirmation_without_mutation(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -3204,6 +3237,122 @@ def test_cli_apply_lifecycle_webhook_upserts_records_and_writes_audit(
     ]
     assert "story_sys_id" not in json.dumps(audit)
     assert "client-secret" not in captured.out
+
+
+def test_cli_apply_update_set_importer_requires_confirmation_without_mutation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_root = tmp_path / "update-set-importer"
+    main(
+        [
+            "plan-update-set-importer",
+            "--integration-identity",
+            "jedi-devproject-update-set-importer",
+            "--run-id",
+            "update-set-importer-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "apply-update-set-importer",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_root / "update-set-importer-001.json"),
+                "--audit-root",
+                str(tmp_path / "bootstrap-audit"),
+                "--run-id",
+                "update-set-importer-apply-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert fake_client.upserted_table_records == []
+    assert "update_set_importer_applied=False" in captured.out
+    assert "reason=update_set_importer_confirmation_required" in captured.out
+
+
+def test_cli_apply_update_set_importer_upserts_records_and_writes_audit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_root = tmp_path / "update-set-importer"
+    main(
+        [
+            "plan-update-set-importer",
+            "--integration-identity",
+            "jedi-devproject-update-set-importer",
+            "--run-id",
+            "update-set-importer-001",
+            "--spec-root",
+            str(spec_root),
+        ]
+    )
+    fake_client = FakeServiceNowClient()
+    audit_root = tmp_path / "bootstrap-audit"
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "apply-update-set-importer",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_root / "update-set-importer-001.json"),
+                "--confirm-service-id",
+                "jedi_update_set_import",
+                "--confirm-records",
+                "--audit-root",
+                str(audit_root),
+                "--run-id",
+                "update-set-importer-apply-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    audit = json.loads(
+        (audit_root / "update-set-importer-apply-001.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 0
+    assert "update_set_importer_applied=True" in captured.out
+    assert "upserted_records=2" in captured.out
+    assert [record["table"] for record in fake_client.upserted_table_records] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+    assert [record["table"] for record in audit["upserted_records"]] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
 
 
 def test_cli_verify_lifecycle_webhook_reports_matching_records(

@@ -230,6 +230,45 @@ This probe does not prove that generated XML can be imported directly. The CI/CD
 
 These methods are not wired into automated fulfillment yet. Commit remains intentionally unreachable from runtime story processing until the promotion source, preview review, and approval gates are designed.
 
+## Update Set XML Importer Bootstrap
+
+The native retrieved update set XML import surface is the `sys_remote_update_set` UI action `Import Update Set from XML`, which opens `upload.do` with `sysparm_target=sys_remote_update_set`. That route is UI/session oriented and should not be automated from the sidecar with browser cookies or CSRF scraping.
+
+Use `plan-update-set-importer` to generate a reviewed ServiceNow Scripted REST bootstrap spec instead:
+
+```bash
+python3 -m jedi_devproject.cli plan-update-set-importer \
+  --integration-identity jedi-devproject-update-set-importer \
+  --run-id update-set-importer-20260514-001 \
+  --spec-root artifacts/update-set-importer
+```
+
+The spec creates a Scripted REST API definition with service id `jedi_update_set_import` and operation `import_update_set_xml`. ServiceNow generates the concrete `base_uri` for the instance namespace, for example `/api/<namespace>/jedi_update_set_import`; treat that value as discovered platform state rather than a portable spec field. The operation requires authentication and ACL authorization, accepts JSON, validates `update_set_xml`, and calls `GlideUpdateManager2().loadXML(xmlPayload)` server-side so ServiceNow imports the XML through platform update set mechanics.
+
+After reviewing the generated spec, apply it with explicit confirmation:
+
+```bash
+python3 -m jedi_devproject.cli apply-update-set-importer \
+  --env-file .env \
+  --spec-file artifacts/update-set-importer/update-set-importer-20260514-001.json \
+  --confirm-service-id jedi_update_set_import \
+  --confirm-records \
+  --audit-root artifacts/bootstrap-audit \
+  --run-id update-set-importer-apply-20260514-001
+```
+
+Verify the installed Scripted REST records with:
+
+```bash
+python3 -m jedi_devproject.cli verify-update-set-importer \
+  --env-file .env \
+  --spec-file artifacts/update-set-importer/update-set-importer-20260514-001.json \
+  --report-root artifacts/bootstrap-verification \
+  --run-id update-set-importer-verify-20260514-001
+```
+
+This bootstrap only installs the importer endpoint. It does not send XML, preview, commit, or wire story fulfillment to promotion. Import smoke tests must use reviewed Update Set XML and should verify that `sys_remote_update_set` and related `sys_update_xml` rows appear before any CICD preview or commit operation is considered.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:

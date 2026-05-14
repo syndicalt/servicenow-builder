@@ -25,12 +25,17 @@ from jedi_devproject.artifacts import (
 )
 from jedi_devproject.bootstrap import (
     LifecycleWebhookBootstrapSpec,
+    UpdateSetImporterBootstrapSpec,
     apply_bootstrap_fields,
     apply_lifecycle_webhook_records,
+    apply_update_set_importer_records,
     build_lifecycle_webhook_bootstrap_spec,
+    build_update_set_importer_bootstrap_spec,
     lifecycle_webhook_servicenow_record_plan,
     plan_bootstrap_fields,
+    update_set_importer_servicenow_record_plan,
     verify_lifecycle_webhook_records,
+    verify_update_set_importer_records,
 )
 from jedi_devproject.cicd_update_sets import evaluate_cicd_update_set_capability
 from jedi_devproject.external_build import (
@@ -282,6 +287,13 @@ def main(argv: list[str] | None = None) -> int:
     plan_lifecycle_business_rule.add_argument("--ready-state-value", required=True)
     plan_lifecycle_business_rule.add_argument("--run-id", required=True)
     plan_lifecycle_business_rule.add_argument("--spec-root", type=Path, required=True)
+    plan_update_set_importer = subparsers.add_parser(
+        "plan-update-set-importer",
+        help="Write a reviewable ServiceNow Update Set XML importer Scripted REST spec.",
+    )
+    plan_update_set_importer.add_argument("--integration-identity", required=True)
+    plan_update_set_importer.add_argument("--run-id", required=True)
+    plan_update_set_importer.add_argument("--spec-root", type=Path, required=True)
     apply_lifecycle_webhook = subparsers.add_parser(
         "apply-lifecycle-webhook",
         help="Create or update reviewed ServiceNow lifecycle webhook records.",
@@ -292,6 +304,16 @@ def main(argv: list[str] | None = None) -> int:
     apply_lifecycle_webhook.add_argument("--confirm-records", action="store_true")
     apply_lifecycle_webhook.add_argument("--audit-root", type=Path, required=True)
     apply_lifecycle_webhook.add_argument("--run-id", default="lifecycle-webhook")
+    apply_update_set_importer = subparsers.add_parser(
+        "apply-update-set-importer",
+        help="Create or update reviewed ServiceNow Update Set XML importer records.",
+    )
+    apply_update_set_importer.add_argument("--env-file", type=Path, default=Path(".env"))
+    apply_update_set_importer.add_argument("--spec-file", type=Path, required=True)
+    apply_update_set_importer.add_argument("--confirm-service-id")
+    apply_update_set_importer.add_argument("--confirm-records", action="store_true")
+    apply_update_set_importer.add_argument("--audit-root", type=Path, required=True)
+    apply_update_set_importer.add_argument("--run-id", default="update-set-importer")
     verify_lifecycle_webhook = subparsers.add_parser(
         "verify-lifecycle-webhook",
         help="Verify installed ServiceNow lifecycle webhook records.",
@@ -300,6 +322,14 @@ def main(argv: list[str] | None = None) -> int:
     verify_lifecycle_webhook.add_argument("--spec-file", type=Path, required=True)
     verify_lifecycle_webhook.add_argument("--report-root", type=Path, required=True)
     verify_lifecycle_webhook.add_argument("--run-id", required=True)
+    verify_update_set_importer = subparsers.add_parser(
+        "verify-update-set-importer",
+        help="Verify installed ServiceNow Update Set XML importer records.",
+    )
+    verify_update_set_importer.add_argument("--env-file", type=Path, default=Path(".env"))
+    verify_update_set_importer.add_argument("--spec-file", type=Path, required=True)
+    verify_update_set_importer.add_argument("--report-root", type=Path, required=True)
+    verify_update_set_importer.add_argument("--run-id", required=True)
     run_writeback = subparsers.add_parser(
         "run-writeback-batch",
         help="Run structured writeback jobs from a JSON file.",
@@ -1063,6 +1093,29 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    if args.command == "plan-update-set-importer":
+        try:
+            importer_spec = build_update_set_importer_bootstrap_spec(
+                integration_identity=args.integration_identity,
+            )
+        except ValueError as exc:
+            print(f"update_set_importer_specs=0 reason={exc}")
+            return 1
+        spec_path = write_json_artifact_once(
+            args.spec_root,
+            filename=f"{args.run_id}.json",
+            payload={
+                **importer_spec.model_dump(mode="json"),
+                "servicenow_records": update_set_importer_servicenow_record_plan(importer_spec),
+            },
+        )
+        print(
+            "update_set_importer_specs=1 "
+            f"service_id={importer_spec.definition.service_id} "
+            f"path={spec_path}"
+        )
+        return 0
+
     if args.command == "apply-lifecycle-webhook":
         try:
             spec = LifecycleWebhookBootstrapSpec.model_validate(_load_json_object(args.spec_file))
@@ -1093,6 +1146,38 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0 if lifecycle_apply_result.applied or not lifecycle_apply_result.reasons else 1
 
+    if args.command == "apply-update-set-importer":
+        try:
+            importer_spec = UpdateSetImporterBootstrapSpec.model_validate(
+                _load_json_object(args.spec_file)
+            )
+        except (ValidationError, ValueError) as exc:
+            print(
+                "update_set_importer_applied=False "
+                f"reason=invalid_update_set_importer_spec detail={exc}"
+            )
+            return 1
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        importer_apply_result = apply_update_set_importer_records(
+            client,
+            spec=importer_spec,
+            confirm_service_id=args.confirm_service_id,
+            confirm_records=args.confirm_records,
+        )
+        if importer_apply_result.applied:
+            write_json_artifact_once(
+                args.audit_root,
+                filename=f"{args.run_id}.json",
+                payload=importer_apply_result.model_dump(mode="json"),
+            )
+        reasons = " ".join(f"reason={reason}" for reason in importer_apply_result.reasons)
+        print(
+            f"update_set_importer_applied={importer_apply_result.applied} "
+            f"upserted_records={len(importer_apply_result.upserted_records)} "
+            f"{reasons}".strip()
+        )
+        return 0 if importer_apply_result.applied or not importer_apply_result.reasons else 1
+
     if args.command == "verify-lifecycle-webhook":
         try:
             spec = LifecycleWebhookBootstrapSpec.model_validate(_load_json_object(args.spec_file))
@@ -1121,6 +1206,37 @@ def main(argv: list[str] | None = None) -> int:
             f"{reasons}".strip()
         )
         return 0 if lifecycle_webhook_verification.verified else 1
+
+    if args.command == "verify-update-set-importer":
+        try:
+            importer_spec = UpdateSetImporterBootstrapSpec.model_validate(
+                _load_json_object(args.spec_file)
+            )
+        except (ValidationError, ValueError) as exc:
+            print(
+                "update_set_importer_verified=False "
+                f"reason=invalid_update_set_importer_spec detail={exc}"
+            )
+            return 1
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        importer_verification = verify_update_set_importer_records(
+            client,
+            spec=importer_spec,
+        )
+        report_path = write_json_artifact_once(
+            args.report_root,
+            filename=f"{args.run_id}.json",
+            payload=importer_verification.model_dump(mode="json"),
+        )
+        reasons = " ".join(f"reason={reason}" for reason in importer_verification.reasons)
+        print(
+            f"update_set_importer_verified={importer_verification.verified} "
+            f"matched_records={len(importer_verification.matched_records)} "
+            f"missing_records={len(importer_verification.missing_records)} "
+            f"path={report_path} "
+            f"{reasons}".strip()
+        )
+        return 0 if importer_verification.verified else 1
 
     if args.command == "run-writeback-batch":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())

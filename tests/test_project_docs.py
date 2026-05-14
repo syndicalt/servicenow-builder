@@ -1181,3 +1181,29 @@ def test_sprint_eighty_eight_change_log_documents_cicd_lifecycle_methods() -> No
     assert "fetch_cicd_progress()" in change_log
     assert "force_commit=false" in change_log
     assert "build/source ServiceNow instance" in change_log
+
+
+def test_operator_guide_documents_update_set_importer_bootstrap() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "plan-update-set-importer" in guide
+    assert "apply-update-set-importer" in guide
+    assert "verify-update-set-importer" in guide
+    assert "sysparm_target=sys_remote_update_set" in guide
+    assert "jedi_update_set_import" in guide
+    assert "/api/<namespace>/jedi_update_set_import" in guide
+    assert "discovered platform state" in guide
+    assert "GlideUpdateManager2().loadXML(xmlPayload)" in guide
+    assert "does not send XML, preview, commit" in guide
+
+
+def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
+    change_log = Path("docs/sprints/sprint-89-change-log.md").read_text(encoding="utf-8")
+
+    assert "build_update_set_importer_bootstrap_spec()" in change_log
+    assert "sys_ws_definition" in change_log
+    assert "sys_ws_operation" in change_log
+    assert "apply-update-set-importer" in change_log
+    assert "verify-update-set-importer" in change_log
+    assert "GlideUpdateManager2().loadXML(xmlPayload)" in change_log
+    assert "Do not automate `upload.do`" in change_log

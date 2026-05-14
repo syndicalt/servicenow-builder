@@ -1,10 +1,14 @@
 from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
     apply_lifecycle_webhook_records,
+    apply_update_set_importer_records,
     build_lifecycle_business_rule_spec,
     build_lifecycle_webhook_bootstrap_spec,
+    build_update_set_importer_bootstrap_spec,
     lifecycle_webhook_servicenow_record_plan,
     plan_bootstrap_fields,
+    update_set_importer_servicenow_record_plan,
+    verify_update_set_importer_records,
 )
 from jedi_devproject.servicenow import StoryDictionaryField
 
@@ -319,9 +323,7 @@ def test_apply_lifecycle_webhook_records_upserts_planned_records() -> None:
     method_fields = client.upserts[1]["fields"]
     assert isinstance(method_fields, dict)
     assert method_fields["rest_message"] == "sys_rest_message-sys-id"
-    assert method_fields["rest_endpoint"] == (
-        "https://sidecar.example.gov/lifecycle/events"
-    )
+    assert method_fields["rest_endpoint"] == ("https://sidecar.example.gov/lifecycle/events")
 
 
 def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
@@ -341,8 +343,7 @@ def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
         confirm_records=True,
     )
     script_key = (
-        "sys_script:{'name': 'Jedi DevProject lifecycle event emitter', "
-        "'collection': 'rm_story'}"
+        "sys_script:{'name': 'Jedi DevProject lifecycle event emitter', 'collection': 'rm_story'}"
     )
     client.records[script_key]["action_update"] = "true"
     client.records[script_key]["active"] = "true"
@@ -394,3 +395,125 @@ def test_verify_lifecycle_webhook_records_reports_missing_and_mismatched_records
     }
     assert "record_missing" in result.reasons
     assert "field_mismatch" in result.reasons
+
+
+def test_update_set_importer_bootstrap_spec_defines_scripted_rest_api() -> None:
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    assert spec.definition.name == "Jedi DevProject Update Set Import API"
+    assert spec.definition.service_id == "jedi_update_set_import"
+    assert spec.definition.active is True
+    assert spec.operation.name == "import_update_set_xml"
+    assert spec.operation.http_method == "POST"
+    assert spec.operation.requires_authentication is True
+    assert spec.operation.requires_acl_authorization is True
+    assert "GlideUpdateManager2" in spec.operation.operation_script
+    assert "loadXML(xmlPayload)" in spec.operation.operation_script
+    assert "update_set_xml" in spec.operation.operation_script
+    assert "jedi-devproject-update-set-importer" in spec.operation.operation_script
+
+
+def test_update_set_importer_servicenow_record_plan_has_explicit_tables() -> None:
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    plan = update_set_importer_servicenow_record_plan(spec)
+
+    assert [record["table"] for record in plan] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+    assert plan[0]["lookup"] == {"service_id": "jedi_update_set_import"}
+    assert "base_uri" not in plan[0]["fields"]
+    assert plan[0]["fields"]["consumes"] == "application/json"
+    assert plan[1]["lookup"] == {
+        "web_service_definition_name": "Jedi DevProject Update Set Import API",
+        "name": "import_update_set_xml",
+    }
+    assert plan[1]["fields"]["http_method"] == "POST"
+    assert plan[1]["fields"]["requires_authentication"] is True
+    assert plan[1]["fields"]["requires_acl_authorization"] is True
+    assert "web_service_definition" not in plan[1]["fields"]
+
+
+def test_apply_update_set_importer_records_requires_confirmation() -> None:
+    client = FakeLifecycleWebhookClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    result = apply_update_set_importer_records(
+        client,
+        spec=spec,
+        confirm_service_id=None,
+        confirm_records=False,
+    )
+
+    assert result.applied is False
+    assert result.upserted_records == []
+    assert result.reasons == ["update_set_importer_confirmation_required"]
+    assert client.upserts == []
+
+
+def test_apply_update_set_importer_records_upserts_definition_then_operation() -> None:
+    client = FakeLifecycleWebhookClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    result = apply_update_set_importer_records(
+        client,
+        spec=spec,
+        confirm_service_id="jedi_update_set_import",
+        confirm_records=True,
+    )
+
+    assert result.applied is True
+    assert result.reasons == []
+    assert [record["table"] for record in result.upserted_records] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+    assert client.upserts[1]["lookup"] == {
+        "web_service_definition": "sys_ws_definition-sys-id",
+        "name": "import_update_set_xml",
+    }
+    operation_fields = client.upserts[1]["fields"]
+    assert isinstance(operation_fields, dict)
+    assert operation_fields["web_service_definition"] == "sys_ws_definition-sys-id"
+
+
+def test_verify_update_set_importer_records_confirms_matching_records() -> None:
+    client = FakeLifecycleWebhookClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+    apply_update_set_importer_records(
+        client,
+        spec=spec,
+        confirm_service_id="jedi_update_set_import",
+        confirm_records=True,
+    )
+    operation_key = (
+        "sys_ws_operation:{'web_service_definition': 'sys_ws_definition-sys-id', "
+        "'name': 'import_update_set_xml'}"
+    )
+    client.records[operation_key]["requires_authentication"] = "true"
+    client.records[operation_key]["requires_acl_authorization"] = "true"
+    client.records[operation_key]["active"] = "true"
+    client.records[operation_key]["web_service_definition"] = {"value": "sys_ws_definition-sys-id"}
+
+    result = verify_update_set_importer_records(client, spec=spec)
+
+    assert result.verified is True
+    assert result.matched_records == ["sys_ws_definition", "sys_ws_operation"]
+    assert result.missing_records == []
+    assert result.mismatched_fields == {}
+    assert result.reasons == []
