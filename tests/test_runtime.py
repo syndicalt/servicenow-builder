@@ -8,7 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from jedi_devproject.lifecycle_events import LifecycleStateChangeEvent
-from jedi_devproject.operational_store import FulfillmentJobRecord, LifecycleEventRecord
+from jedi_devproject.operational_store import (
+    ArtifactBlobRecord,
+    ArtifactRefRecord,
+    FulfillmentJobRecord,
+    LifecycleEventRecord,
+)
 from jedi_devproject.runtime import (
     RuntimeConfigError,
     RuntimeSettings,
@@ -28,6 +33,8 @@ class FakeRuntimeStore:
         self.failed_jobs: list[tuple[str, str]] = []
         self.artifact_refs: list[tuple[str, str, str, str]] = []
         self.json_artifacts: list[tuple[str, str, str, str, dict[str, Any]]] = []
+        self.artifact_blob_records: dict[int, ArtifactBlobRecord] = {}
+        self.artifact_ref_records: dict[str, list[ArtifactRefRecord]] = {}
         self.closed = False
 
     def __enter__(self) -> FakeRuntimeStore:
@@ -116,6 +123,14 @@ class FakeRuntimeStore:
         )
         return object()
 
+    def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord:
+        if artifact_id not in self.artifact_blob_records:
+            raise KeyError(f"Artifact blob not found: {artifact_id}")
+        return self.artifact_blob_records[artifact_id]
+
+    def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]:
+        return self.artifact_ref_records.get(job_id, [])
+
 
 class RecordingTransport:
     def __init__(self, responses: list[HttpResponse]) -> None:
@@ -137,6 +152,10 @@ def _settings(tmp_path: Path, *, apply: bool = False) -> RuntimeSettings:
         audit_root=tmp_path,
         build_claim_apply=apply,
     )
+
+
+def _settings_with_admin_token(tmp_path: Path) -> RuntimeSettings:
+    return _settings(tmp_path).model_copy(update={"admin_api_token": "admin-token"})
 
 
 def _settings_with_openai(tmp_path: Path, *, apply: bool = False) -> RuntimeSettings:
@@ -306,6 +325,27 @@ def test_load_runtime_settings_accepts_build_claim_state_values(tmp_path: Path) 
     assert settings.build_claim_state == "2"
 
 
+def test_load_runtime_settings_reads_admin_api_token(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_ADMIN_API_TOKEN=admin-token",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.admin_api_token == "admin-token"
+
+
 def test_load_runtime_settings_requires_explicit_model_provider_to_enable_openai(
     tmp_path: Path,
 ) -> None:
@@ -376,6 +416,169 @@ def test_create_runtime_api_wires_store_factory(tmp_path: Path) -> None:
     assert database_urls == ["postgresql://jedi:secret@localhost:5432/jedi"]
     assert store.recorded_events == ["evt-001"]
     assert store.enqueued_jobs == [("evt-001", "STRY0010013")]
+
+
+def test_artifact_read_requires_admin_bearer_token(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/artifacts/1")
+
+    assert response.status_code == 401
+
+
+def test_artifact_read_rejects_wrong_admin_bearer_token(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/artifacts/1",
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_artifact_read_returns_metadata_and_payload(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.artifact_blob_records[2] = ArtifactBlobRecord(
+        id=2,
+        job_id="job-evt-001",
+        story_number="STRY0010013",
+        artifact_kind="implementation_candidate",
+        schema_version="implementation-candidate-v1",
+        payload_json={
+            "story_number": "STRY0010013",
+            "changes": [{"fields": {"element": "u_ai_review_notes"}}],
+        },
+        sha256="a" * 64,
+        created_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+    )
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/artifacts/2",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 2,
+        "job_id": "job-evt-001",
+        "story_number": "STRY0010013",
+        "artifact_kind": "implementation_candidate",
+        "schema_version": "implementation-candidate-v1",
+        "sha256": "a" * 64,
+        "created_at": "2026-05-13T15:00:00Z",
+        "payload": {
+            "story_number": "STRY0010013",
+            "changes": [{"fields": {"element": "u_ai_review_notes"}}],
+        },
+    }
+    assert "story-sys-id" not in response.text
+
+
+def test_artifact_read_returns_404_for_missing_artifact(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/artifacts/404",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_job_artifacts_lists_only_refs_for_requested_job(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.artifact_ref_records["job-evt-001"] = [
+        ArtifactRefRecord(
+            id=1,
+            job_id="job-evt-001",
+            artifact_kind="implementation_packet",
+            path="db://artifact_blobs/1",
+            sha256="a" * 64,
+            artifact_id=1,
+            created_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+        ),
+        ArtifactRefRecord(
+            id=2,
+            job_id="job-evt-001",
+            artifact_kind="implementation_candidate",
+            path="db://artifact_blobs/2",
+            sha256="b" * 64,
+            artifact_id=2,
+            created_at=datetime(2026, 5, 13, 15, 1, tzinfo=UTC),
+        ),
+    ]
+    store.artifact_ref_records["job-other"] = [
+        ArtifactRefRecord(
+            id=3,
+            job_id="job-other",
+            artifact_kind="implementation_candidate",
+            path="db://artifact_blobs/3",
+            sha256="c" * 64,
+            artifact_id=3,
+            created_at=datetime(2026, 5, 13, 15, 2, tzinfo=UTC),
+        )
+    ]
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/jobs/job-evt-001/artifacts",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": "job-evt-001",
+        "artifacts": [
+            {
+                "id": 1,
+                "job_id": "job-evt-001",
+                "artifact_kind": "implementation_packet",
+                "path": "db://artifact_blobs/1",
+                "sha256": "a" * 64,
+                "artifact_id": 1,
+                "created_at": "2026-05-13T15:00:00Z",
+            },
+            {
+                "id": 2,
+                "job_id": "job-evt-001",
+                "artifact_kind": "implementation_candidate",
+                "path": "db://artifact_blobs/2",
+                "sha256": "b" * 64,
+                "artifact_id": 2,
+                "created_at": "2026-05-13T15:01:00Z",
+            },
+        ],
+    }
 
 
 def test_process_one_runtime_fulfillment_wires_store_servicenow_and_handler(

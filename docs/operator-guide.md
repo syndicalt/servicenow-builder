@@ -146,6 +146,25 @@ A valid `Draft` to `Ready` `LifecycleStateChangeEvent` returns `202 Accepted`, r
 
 The webhook request path does not execute fulfillment inline. Build evaluation, ServiceNow claim writeback, implementation packet generation, external build handoff, and Ready for Testing writeback must run in worker processing after a queued job is claimed.
 
+## Artifact Retrieval API
+
+Runtime artifact reads are admin-only. Set `JEDI_ADMIN_API_TOKEN` in the API service environment and call artifact endpoints with:
+
+```text
+Authorization: Bearer <JEDI_ADMIN_API_TOKEN>
+```
+
+The artifact read endpoints are:
+
+```text
+GET /artifacts/{artifact_id}
+GET /jobs/{job_id}/artifacts
+```
+
+`GET /artifacts/{artifact_id}` returns artifact metadata plus the JSON payload stored in `artifact_blobs`. It returns `404` when the artifact id is not found. `GET /jobs/{job_id}/artifacts` returns only the artifact references for the requested job, including `artifact_id`, `artifact_kind`, `path`, and SHA-256 hash.
+
+These endpoints do not replace ServiceNow as the work surface. They provide a safe API for the admin GUI and operator diagnostics to inspect generated implementation packets and candidates. Lifecycle webhook calls do not use this admin token, and unauthenticated artifact reads are rejected.
+
 ## Fulfillment Worker
 
 The worker boundary is `process_one_fulfillment_job()` in `jedi_devproject.fulfillment_worker`. It claims one queued job from PostgreSQL with `claim_next_fulfillment_job(worker_id=...)`, calls an injected fulfillment handler, and records the terminal job state.

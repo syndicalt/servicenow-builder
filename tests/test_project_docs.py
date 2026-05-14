@@ -146,6 +146,17 @@ def test_operator_guide_documents_lifecycle_webhook_api() -> None:
     assert "DATABASE_URL" in guide
 
 
+def test_operator_guide_documents_artifact_retrieval_api() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Artifact Retrieval API" in guide
+    assert "JEDI_ADMIN_API_TOKEN" in guide
+    assert "Authorization: Bearer" in guide
+    assert "GET /artifacts/{artifact_id}" in guide
+    assert "GET /jobs/{job_id}/artifacts" in guide
+    assert "unauthenticated artifact reads are rejected" in guide
+
+
 def test_operator_guide_documents_fulfillment_worker() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 

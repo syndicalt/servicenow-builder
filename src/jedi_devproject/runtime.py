@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import secrets
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.fulfillment_handler import (
@@ -30,6 +32,8 @@ from jedi_devproject.model_fulfillment import (
 from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus
 from jedi_devproject.openai_provider import OpenAIProviderSettings, OpenAIResponsesProvider
 from jedi_devproject.operational_store import (
+    ArtifactBlobRecord,
+    ArtifactRefRecord,
     FulfillmentJobRecord,
     connect_operational_store,
 )
@@ -64,12 +68,17 @@ class RuntimeSettings(BaseModel):
     model_provider: str | None = None
     openai_api_key: str | None = None
     openai_model: str | None = None
+    admin_api_token: str | None = None
 
 
 class RuntimeStore(LifecycleEventStore, FulfillmentWorkerStore, Protocol):
     def __enter__(self) -> RuntimeStore: ...
 
     def __exit__(self, *_args: object) -> None: ...
+
+    def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord: ...
+
+    def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]: ...
 
 
 StoreFactory = Callable[[str], RuntimeStore]
@@ -106,6 +115,7 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         model_provider=_optional_str(values.get("JEDI_MODEL_PROVIDER")),
         openai_api_key=_optional_str(values.get("OPENAI_API_KEY")),
         openai_model=_optional_str(values.get("OPENAI_MODEL")),
+        admin_api_token=_optional_str(values.get("JEDI_ADMIN_API_TOKEN")),
     )
 
 
@@ -115,7 +125,90 @@ def create_runtime_api(
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
 ) -> FastAPI:
     store = store_factory(settings.database_url)
-    return create_lifecycle_api(store=store)
+    app = create_lifecycle_api(store=store)
+
+    @app.get("/artifacts/{artifact_id}")
+    def get_artifact(
+        artifact_id: int,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        _require_admin_token(settings=settings, authorization=authorization)
+        try:
+            artifact = store.get_artifact_blob(artifact_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="artifact not found",
+            ) from exc
+        return _artifact_blob_response(artifact)
+
+    @app.get("/jobs/{job_id}/artifacts")
+    def list_job_artifacts(
+        job_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        _require_admin_token(settings=settings, authorization=authorization)
+        return {
+            "job_id": job_id,
+            "artifacts": [
+                _artifact_ref_response(ref)
+                for ref in store.artifact_refs_for_job(job_id)
+            ],
+        }
+
+    return app
+
+
+def _require_admin_token(
+    *,
+    settings: RuntimeSettings,
+    authorization: str | None,
+) -> None:
+    if not settings.admin_api_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="admin artifact API is not configured",
+        )
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="admin bearer token required",
+        )
+    token = authorization.removeprefix("Bearer ").strip()
+    if not secrets.compare_digest(token, settings.admin_api_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="admin bearer token rejected",
+        )
+
+
+def _artifact_blob_response(artifact: ArtifactBlobRecord) -> dict[str, Any]:
+    return {
+        "id": artifact.id,
+        "job_id": artifact.job_id,
+        "story_number": artifact.story_number,
+        "artifact_kind": artifact.artifact_kind,
+        "schema_version": artifact.schema_version,
+        "sha256": artifact.sha256,
+        "created_at": _json_timestamp(artifact.created_at),
+        "payload": artifact.payload_json,
+    }
+
+
+def _artifact_ref_response(ref: ArtifactRefRecord) -> dict[str, Any]:
+    return {
+        "id": ref.id,
+        "job_id": ref.job_id,
+        "artifact_kind": ref.artifact_kind,
+        "path": ref.path,
+        "sha256": ref.sha256,
+        "artifact_id": ref.artifact_id,
+        "created_at": _json_timestamp(ref.created_at),
+    }
+
+
+def _json_timestamp(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
 
 
 def _runtime_handler(

@@ -9,7 +9,12 @@ from fastapi import FastAPI
 from jedi_devproject import runtime_api, runtime_worker
 from jedi_devproject.fulfillment_worker import FulfillmentWorkerResult
 from jedi_devproject.lifecycle_events import LifecycleStateChangeEvent
-from jedi_devproject.operational_store import FulfillmentJobRecord, LifecycleEventRecord
+from jedi_devproject.operational_store import (
+    ArtifactBlobRecord,
+    ArtifactRefRecord,
+    FulfillmentJobRecord,
+    LifecycleEventRecord,
+)
 from jedi_devproject.runtime import RuntimeSettings
 
 
@@ -284,4 +289,10 @@ class _NoopStore:
         schema_version: str,
         payload: dict[str, Any],
     ) -> object:
+        raise AssertionError("not called")
+
+    def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord:
+        raise AssertionError("not called")
+
+    def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]:
         raise AssertionError("not called")
