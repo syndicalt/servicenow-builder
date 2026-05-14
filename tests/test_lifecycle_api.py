@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import time
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -171,6 +175,26 @@ def _draft_rejected_event_payload() -> dict[str, str]:
     return payload
 
 
+def _signed_webhook_request(
+    payload: dict[str, str],
+    *,
+    secret: str = "webhook-secret",
+    timestamp: int | None = None,
+) -> tuple[bytes, dict[str, str]]:
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    issued_at = str(timestamp if timestamp is not None else int(time.time()))
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        issued_at.encode("utf-8") + b"." + body,
+        hashlib.sha256,
+    ).hexdigest()
+    return body, {
+        "content-type": "application/json",
+        "X-JEDI-Webhook-Timestamp": issued_at,
+        "X-JEDI-Webhook-Signature": f"sha256={digest}",
+    }
+
+
 def test_lifecycle_webhook_records_ready_event_and_enqueues_fulfillment() -> None:
     store = FakeOperationalStore()
     client = TestClient(create_lifecycle_api(store=store))
@@ -190,6 +214,205 @@ def test_lifecycle_webhook_records_ready_event_and_enqueues_fulfillment() -> Non
     assert [event.event_id for event in store.recorded_events] == ["evt-20260513-001"]
     assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
     assert store.closed_story_jobs == []
+
+
+def test_lifecycle_webhook_hmac_auth_requires_signature_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+        )
+    )
+
+    response = client.post("/lifecycle/events", json=_ready_event_payload())
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "lifecycle webhook signature required"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_hmac_auth_accepts_valid_signature() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+        )
+    )
+    body, headers = _signed_webhook_request(_ready_event_payload())
+
+    response = client.post("/lifecycle/events", content=body, headers=headers)
+
+    assert response.status_code == 202
+    assert response.json()["job_id"] == "job-evt-20260513-001"
+    assert [event.event_id for event in store.recorded_events] == ["evt-20260513-001"]
+    assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
+
+
+def test_lifecycle_webhook_hmac_auth_rejects_bad_signature_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+        )
+    )
+    body, headers = _signed_webhook_request(_ready_event_payload())
+    headers["X-JEDI-Webhook-Signature"] = "sha256=" + ("0" * 64)
+
+    response = client.post("/lifecycle/events", content=body, headers=headers)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "lifecycle webhook signature rejected"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_hmac_auth_rejects_stale_timestamp_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+            webhook_max_skew_seconds=300,
+        )
+    )
+    body, headers = _signed_webhook_request(_ready_event_payload(), timestamp=1)
+
+    response = client.post("/lifecycle/events", content=body, headers=headers)
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "lifecycle webhook timestamp outside replay window"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_hmac_auth_rejects_invalid_timestamp_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+        )
+    )
+    body, headers = _signed_webhook_request(_ready_event_payload())
+    headers["X-JEDI-Webhook-Timestamp"] = "not-a-timestamp"
+
+    response = client.post("/lifecycle/events", content=body, headers=headers)
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "lifecycle webhook timestamp invalid"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_hmac_auth_rejects_invalid_json_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+        )
+    )
+    body = b"{not-json"
+    timestamp = str(int(time.time()))
+    digest = hmac.new(
+        b"webhook-secret",
+        timestamp.encode("utf-8") + b"." + body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = client.post(
+        "/lifecycle/events",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "X-JEDI-Webhook-Timestamp": timestamp,
+            "X-JEDI-Webhook-Signature": f"sha256={digest}",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid lifecycle webhook JSON"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_shared_secret_accepts_valid_secret() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="shared_secret",
+            webhook_secret="webhook-secret",
+        )
+    )
+
+    response = client.post(
+        "/lifecycle/events",
+        json=_ready_event_payload(),
+        headers={"X-JEDI-Webhook-Secret": "webhook-secret"},
+    )
+
+    assert response.status_code == 202
+    assert [event.event_id for event in store.recorded_events] == ["evt-20260513-001"]
+    assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
+
+
+def test_lifecycle_webhook_shared_secret_rejects_bad_secret_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="shared_secret",
+            webhook_secret="webhook-secret",
+        )
+    )
+
+    response = client.post(
+        "/lifecycle/events",
+        json=_ready_event_payload(),
+        headers={"X-JEDI-Webhook-Secret": "wrong-secret"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "lifecycle webhook secret rejected"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_oauth_mode_fails_closed_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(create_lifecycle_api(store=store, webhook_auth_mode="servicenow_oauth"))
+
+    response = client.post("/lifecycle/events", json=_ready_event_payload())
+
+    assert response.status_code == 501
+    assert response.json()["detail"] == (
+        "lifecycle webhook auth mode is not implemented: servicenow_oauth"
+    )
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_auth_requires_configured_secret_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(create_lifecycle_api(store=store, webhook_auth_mode="hmac_sha256"))
+
+    response = client.post("/lifecycle/events", json=_ready_event_payload())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "lifecycle webhook secret is not configured"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
 
 
 def test_lifecycle_webhook_records_complete_event_and_closes_related_job() -> None:

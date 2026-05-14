@@ -146,6 +146,18 @@ def test_operator_guide_documents_lifecycle_webhook_api() -> None:
     assert "DATABASE_URL" in guide
 
 
+def test_operator_guide_documents_authenticated_lifecycle_webhook() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Lifecycle Webhook Authentication" in guide
+    assert "JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE" in guide
+    assert "hmac_sha256" in guide
+    assert "X-JEDI-Webhook-Timestamp" in guide
+    assert "X-JEDI-Webhook-Signature" in guide
+    assert "<timestamp>.<raw request body>" in guide
+    assert "replay window" in guide
+
+
 def test_operator_guide_documents_artifact_retrieval_api() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
@@ -469,6 +481,16 @@ def test_production_hardening_backlog_documents_review_targets() -> None:
     assert "Slop review" in backlog
     assert "Security review" in backlog
     assert "No new mutation surface" in backlog
+
+
+def test_sprint_one_hundred_three_change_log_documents_webhook_auth() -> None:
+    change_log = Path("docs/sprints/sprint-103-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 103 Change Log" in change_log
+    assert "hmac_sha256" in change_log
+    assert "JEDI_LIFECYCLE_WEBHOOK_SECRET" in change_log
+    assert "replay-window enforcement" in change_log
+    assert "development-only" in change_log
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

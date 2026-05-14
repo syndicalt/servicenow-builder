@@ -460,6 +460,51 @@ def test_load_runtime_settings_defaults_admin_console_auth_disabled(tmp_path: Pa
     assert settings.admin_auth_mode == "disabled"
 
 
+def test_load_runtime_settings_reads_lifecycle_webhook_hmac_config(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=hmac_sha256",
+                "JEDI_LIFECYCLE_WEBHOOK_SECRET=webhook-secret",
+                "JEDI_LIFECYCLE_WEBHOOK_MAX_SKEW_SECONDS=120",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.lifecycle_webhook_auth_mode == "hmac_sha256"
+    assert settings.lifecycle_webhook_secret == "webhook-secret"
+    assert settings.lifecycle_webhook_max_skew_seconds == 120
+
+
+def test_runtime_lifecycle_webhook_rejects_when_auth_disabled_in_production(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore()
+    settings = _settings(tmp_path).model_copy(update={"runtime_environment": "production"})
+    client = TestClient(
+        create_runtime_api(
+            settings=settings,
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.post("/lifecycle/events", json=_ready_event_payload())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "lifecycle webhook authentication is disabled"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
 def test_load_runtime_settings_requires_explicit_model_provider_to_enable_openai(
     tmp_path: Path,
 ) -> None:

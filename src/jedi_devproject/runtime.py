@@ -29,7 +29,11 @@ from jedi_devproject.fulfillment_worker import (
     process_one_fulfillment_job,
 )
 from jedi_devproject.implementation_packet import IMPLEMENTATION_PACKET_TASK
-from jedi_devproject.lifecycle_api import LifecycleEventStore, create_lifecycle_api
+from jedi_devproject.lifecycle_api import (
+    LifecycleEventStore,
+    LifecycleWebhookAuthMode,
+    create_lifecycle_api,
+)
 from jedi_devproject.model_fulfillment import (
     ModelCandidateFulfillmentConfig,
     model_candidate_fulfillment_handler,
@@ -79,6 +83,9 @@ class RuntimeSettings(BaseModel):
     admin_auth_mode: Literal["disabled", "dev_basic", "oidc", "servicenow_oauth"] = "disabled"
     admin_console_username: str | None = None
     admin_console_password: str | None = None
+    lifecycle_webhook_auth_mode: LifecycleWebhookAuthMode = "disabled"
+    lifecycle_webhook_secret: str | None = None
+    lifecycle_webhook_max_skew_seconds: int = 300
     update_set_apply: bool = False
     update_set_user_name: str | None = None
 
@@ -137,6 +144,15 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         ),
         admin_console_username=_optional_str(values.get("JEDI_ADMIN_CONSOLE_USERNAME")),
         admin_console_password=_optional_str(values.get("JEDI_ADMIN_CONSOLE_PASSWORD")),
+        lifecycle_webhook_auth_mode=cast(
+            LifecycleWebhookAuthMode,
+            str(values.get("JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE") or "disabled"),
+        ),
+        lifecycle_webhook_secret=_optional_str(values.get("JEDI_LIFECYCLE_WEBHOOK_SECRET")),
+        lifecycle_webhook_max_skew_seconds=_int_value(
+            values.get("JEDI_LIFECYCLE_WEBHOOK_MAX_SKEW_SECONDS"),
+            default=300,
+        ),
         update_set_apply=_truthy(values.get("JEDI_UPDATE_SET_APPLY")),
         update_set_user_name=_optional_str(values.get("JEDI_UPDATE_SET_USER_NAME")),
     )
@@ -148,7 +164,13 @@ def create_runtime_api(
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
 ) -> FastAPI:
     store = store_factory(settings.database_url)
-    app = create_lifecycle_api(store=store)
+    app = create_lifecycle_api(
+        store=store,
+        webhook_auth_mode=settings.lifecycle_webhook_auth_mode,
+        webhook_secret=settings.lifecycle_webhook_secret,
+        runtime_environment=settings.runtime_environment,
+        webhook_max_skew_seconds=settings.lifecycle_webhook_max_skew_seconds,
+    )
 
     @app.get("/artifacts/{artifact_id}")
     def get_artifact(
@@ -865,6 +887,7 @@ def _runtime_secret_values(settings: RuntimeSettings) -> tuple[str, ...]:
         settings.database_url,
         _url_password(settings.database_url),
         settings.servicenow_client_secret,
+        settings.lifecycle_webhook_secret or "",
     ]
     return tuple(value for value in values if value)
 
@@ -886,6 +909,12 @@ def _redact_text(text: str, secret_values: Iterable[str]) -> str:
 
 def _truthy(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_value(value: str | None, *, default: int) -> int:
+    if value is None or value.strip() == "":
+        return default
+    return int(value.strip())
 
 
 def _optional_str(value: str | None) -> str | None:

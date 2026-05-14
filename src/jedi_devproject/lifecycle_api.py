@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import Protocol
+import hashlib
+import hmac
+import json
+import time
+from typing import Literal, Protocol
 
-from fastapi import FastAPI, status
-from pydantic import BaseModel, ConfigDict
+from fastapi import FastAPI, Header, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from jedi_devproject.lifecycle_events import (
     LifecycleStateChangeEvent,
@@ -62,7 +66,22 @@ class LifecycleWebhookResponse(BaseModel):
     reasons: list[str]
 
 
-def create_lifecycle_api(*, store: LifecycleEventStore) -> FastAPI:
+LifecycleWebhookAuthMode = Literal[
+    "disabled",
+    "shared_secret",
+    "hmac_sha256",
+    "servicenow_oauth",
+]
+
+
+def create_lifecycle_api(
+    *,
+    store: LifecycleEventStore,
+    webhook_auth_mode: LifecycleWebhookAuthMode = "disabled",
+    webhook_secret: str | None = None,
+    runtime_environment: str = "development",
+    webhook_max_skew_seconds: int = 300,
+) -> FastAPI:
     app = FastAPI(
         title="Jedi DevProject Lifecycle API",
         version="0.2.0",
@@ -77,9 +96,45 @@ def create_lifecycle_api(*, store: LifecycleEventStore) -> FastAPI:
         response_model=LifecycleWebhookResponse,
         status_code=status.HTTP_202_ACCEPTED,
     )
-    def receive_lifecycle_event(
-        event: LifecycleStateChangeEvent,
+    async def receive_lifecycle_event(
+        request: Request,
+        x_jedi_webhook_secret: str | None = Header(
+            default=None,
+            alias="X-JEDI-Webhook-Secret",
+        ),
+        x_jedi_webhook_timestamp: str | None = Header(
+            default=None,
+            alias="X-JEDI-Webhook-Timestamp",
+        ),
+        x_jedi_webhook_signature: str | None = Header(
+            default=None,
+            alias="X-JEDI-Webhook-Signature",
+        ),
     ) -> LifecycleWebhookResponse:
+        body = await request.body()
+        _require_lifecycle_webhook_auth(
+            auth_mode=webhook_auth_mode,
+            configured_secret=webhook_secret,
+            runtime_environment=runtime_environment,
+            max_skew_seconds=webhook_max_skew_seconds,
+            body=body,
+            provided_secret=x_jedi_webhook_secret,
+            timestamp_header=x_jedi_webhook_timestamp,
+            signature_header=x_jedi_webhook_signature,
+        )
+        try:
+            event = LifecycleStateChangeEvent.model_validate(await request.json())
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="invalid lifecycle webhook JSON",
+            ) from exc
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=exc.errors(include_url=False),
+            ) from exc
+
         store.record_lifecycle_event(event)
         plan = plan_story_ready_lifecycle_event(event)
 
@@ -121,3 +176,121 @@ def create_lifecycle_api(*, store: LifecycleEventStore) -> FastAPI:
         )
 
     return app
+
+
+def _require_lifecycle_webhook_auth(
+    *,
+    auth_mode: LifecycleWebhookAuthMode,
+    configured_secret: str | None,
+    runtime_environment: str,
+    max_skew_seconds: int,
+    body: bytes,
+    provided_secret: str | None,
+    timestamp_header: str | None,
+    signature_header: str | None,
+) -> None:
+    if auth_mode == "disabled":
+        if runtime_environment.strip().lower() == "development":
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="lifecycle webhook authentication is disabled",
+        )
+    if auth_mode == "servicenow_oauth":
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="lifecycle webhook auth mode is not implemented: servicenow_oauth",
+        )
+    secret = _configured_webhook_secret(configured_secret)
+    if auth_mode == "shared_secret":
+        _require_shared_secret_webhook_auth(
+            configured_secret=secret,
+            provided_secret=provided_secret,
+        )
+        return
+    if auth_mode == "hmac_sha256":
+        _require_hmac_webhook_auth(
+            configured_secret=secret,
+            max_skew_seconds=max_skew_seconds,
+            body=body,
+            timestamp_header=timestamp_header,
+            signature_header=signature_header,
+        )
+        return
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"lifecycle webhook auth mode is not supported: {auth_mode}",
+    )
+
+
+def _configured_webhook_secret(configured_secret: str | None) -> str:
+    if not configured_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="lifecycle webhook secret is not configured",
+        )
+    return configured_secret
+
+
+def _require_shared_secret_webhook_auth(
+    *,
+    configured_secret: str,
+    provided_secret: str | None,
+) -> None:
+    if provided_secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="lifecycle webhook secret required",
+        )
+    if not hmac.compare_digest(provided_secret, configured_secret):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="lifecycle webhook secret rejected",
+        )
+
+
+def _require_hmac_webhook_auth(
+    *,
+    configured_secret: str,
+    max_skew_seconds: int,
+    body: bytes,
+    timestamp_header: str | None,
+    signature_header: str | None,
+) -> None:
+    if timestamp_header is None or signature_header is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="lifecycle webhook signature required",
+        )
+    try:
+        issued_at = int(timestamp_header)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="lifecycle webhook timestamp invalid",
+        ) from exc
+    safe_skew = max(max_skew_seconds, 1)
+    if abs(int(time.time()) - issued_at) > safe_skew:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="lifecycle webhook timestamp outside replay window",
+        )
+    expected_signature = _hmac_signature(
+        configured_secret=configured_secret,
+        timestamp=timestamp_header,
+        body=body,
+    )
+    if not hmac.compare_digest(signature_header, expected_signature):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="lifecycle webhook signature rejected",
+        )
+
+
+def _hmac_signature(*, configured_secret: str, timestamp: str, body: bytes) -> str:
+    digest = hmac.new(
+        configured_secret.encode("utf-8"),
+        timestamp.encode("utf-8") + b"." + body,
+        hashlib.sha256,
+    ).hexdigest()
+    return f"sha256={digest}"

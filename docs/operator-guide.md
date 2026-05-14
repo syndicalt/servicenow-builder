@@ -146,6 +146,29 @@ A valid `Draft` to `Ready` `LifecycleStateChangeEvent` returns `202 Accepted`, r
 
 The webhook request path does not execute fulfillment inline. Build evaluation, ServiceNow claim writeback, implementation packet generation, external build handoff, and Ready for Testing writeback must run in worker processing after a queued job is claimed.
 
+### Lifecycle Webhook Authentication
+
+The runtime has an explicit lifecycle webhook auth boundary. `JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=disabled` is accepted only when `JEDI_ENVIRONMENT=development`; any non-development runtime fails closed with `503` until webhook authentication is configured.
+
+For production-shaped deployments, start with timestamped HMAC request signing:
+
+```text
+JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=hmac_sha256
+JEDI_LIFECYCLE_WEBHOOK_SECRET=<shared signing secret>
+JEDI_LIFECYCLE_WEBHOOK_MAX_SKEW_SECONDS=300
+```
+
+Signed lifecycle calls must include:
+
+```text
+X-JEDI-Webhook-Timestamp: <unix epoch seconds>
+X-JEDI-Webhook-Signature: sha256=<hex hmac>
+```
+
+The signature base string is `<timestamp>.<raw request body>`, signed with `HMAC-SHA256` using `JEDI_LIFECYCLE_WEBHOOK_SECRET`. The receiver verifies the timestamp replay window before validating the event payload and rejects missing signatures with `401` and bad signatures with `403`.
+
+`shared_secret` is available only as a simpler interim mode using `X-JEDI-Webhook-Secret`; it is not replay-resistant and should not be the Federal production posture. `servicenow_oauth` is reserved and currently fails closed with `501` until the OAuth validation path is designed and tested.
+
 ## Artifact Retrieval API
 
 Runtime artifact reads are admin-only. Set `JEDI_ADMIN_API_TOKEN` in the API service environment and call artifact endpoints with:
@@ -426,7 +449,7 @@ The artifact also includes `servicenow_records`, a deterministic plan for the Se
 
 Each record includes an `insert_or_update` operation, lookup keys, and the fields to write. The planning command does not apply those records. Live apply must use this record plan, require explicit confirmation, and write audit evidence before making ServiceNow changes.
 
-The bootstrap writes the public endpoint to ServiceNow's `rest_endpoint` fields and resolves the REST method's `rest_message` parent by the installed REST Message `sys_id`. Verification normalizes ServiceNow boolean strings and reference field `{value, link}` responses before comparing the installed records with the reviewed spec. The current PDI bootstrap uses `no_authentication` because inbound webhook authentication is not implemented yet; authenticated webhook protection is required before any non-PDI use.
+The bootstrap writes the public endpoint to ServiceNow's `rest_endpoint` fields and resolves the REST method's `rest_message` parent by the installed REST Message `sys_id`. Verification normalizes ServiceNow boolean strings and reference field `{value, link}` responses before comparing the installed records with the reviewed spec. The current PDI bootstrap can continue using `no_authentication` only when the API runtime is in `development` with lifecycle webhook auth disabled. Before any non-PDI use, configure the ServiceNow emitter to send the `hmac_sha256` headers described in Lifecycle Webhook Authentication, or replace it with the approved OAuth-backed mode after that path is implemented.
 
 Use `apply-lifecycle-webhook` only after reviewing the generated lifecycle bootstrap artifact:
 
