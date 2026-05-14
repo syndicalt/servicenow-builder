@@ -25,6 +25,10 @@ Bootstrap a reviewed ServiceNow-side Update Set XML importer instead of automati
 - Confirmed the endpoint fails closed with `400 update_set_xml_required` when no XML is supplied.
 - Posted minimal reviewed XML to `/api/1860704/jedi_update_set_import`.
 - Verified ServiceNow created retrieved update set `JEDI XML Import Smoke 20260514 002` with sys_id `64c3e9d1b27a42479620114da017857a`, state `loaded`, and zero customer update rows.
+- Posted reviewed XML containing a retrieved update set header plus two customer update rows.
+- Verified ServiceNow created retrieved update set `JEDI XML Import Customer Updates Smoke 20260514 001` with sys_id `22221e3514c94fa3bde48148b0053e6f`.
+- Verified the imported customer updates were `sys_dictionary_rm_story_u_jedi_import_smoke_notes` and `sys_documentation_rm_story_u_jedi_import_smoke_notes_en`, both linked by `remote_update_set` with no local `update_set`.
+- Ran CI/CD preview only. Preview progress `d240c02ec330c710913fbf12b4013170` completed successfully, moved the retrieved update set to `previewed`, and reported zero preview problems.
 
 ## Decision
 

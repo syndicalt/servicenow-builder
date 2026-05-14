@@ -1198,6 +1198,11 @@ def test_operator_guide_documents_update_set_importer_bootstrap() -> None:
     assert "JEDI XML Import Smoke 20260514 002" in guide
     assert "64c3e9d1b27a42479620114da017857a" in guide
     assert "zero `sys_update_xml` rows" in guide
+    assert "JEDI XML Import Customer Updates Smoke 20260514 001" in guide
+    assert "22221e3514c94fa3bde48148b0053e6f" in guide
+    assert "sys_dictionary_rm_story_u_jedi_import_smoke_notes" in guide
+    assert "d240c02ec330c710913fbf12b4013170" in guide
+    assert "No commit was run" in guide
 
 
 def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
@@ -1213,3 +1218,7 @@ def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
     assert "400 update_set_xml_required" in change_log
     assert "JEDI XML Import Smoke 20260514 002" in change_log
     assert "64c3e9d1b27a42479620114da017857a" in change_log
+    assert "JEDI XML Import Customer Updates Smoke 20260514 001" in change_log
+    assert "22221e3514c94fa3bde48148b0053e6f" in change_log
+    assert "sys_documentation_rm_story_u_jedi_import_smoke_notes_en" in change_log
+    assert "zero preview problems" in change_log

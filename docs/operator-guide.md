@@ -271,6 +271,10 @@ This bootstrap only installs the importer endpoint. It does not send XML, previe
 
 The PDI importer smoke on May 14, 2026 posted a minimal reviewed XML payload to the discovered endpoint `/api/1860704/jedi_update_set_import`. ServiceNow returned `201` with `status=imported` and created retrieved update set `JEDI XML Import Smoke 20260514 002` with sys_id `64c3e9d1b27a42479620114da017857a`, state `loaded`, and zero `sys_update_xml` rows. This proves the server-side XML import bridge works for retrieved update set headers; the next smoke must include real customer update rows.
 
+The follow-on PDI smoke posted XML containing one `sys_remote_update_set` header plus two `sys_update_xml` customer update rows for a disposable field `u_jedi_import_smoke_notes`. ServiceNow created retrieved update set `JEDI XML Import Customer Updates Smoke 20260514 001` with sys_id `22221e3514c94fa3bde48148b0053e6f`, state `loaded`, and two remote customer updates: `sys_dictionary_rm_story_u_jedi_import_smoke_notes` and `sys_documentation_rm_story_u_jedi_import_smoke_notes_en`. Both rows were linked through `remote_update_set`; neither had a local `update_set`.
+
+The CI/CD preview smoke for that retrieved update set succeeded. `preview_cicd_update_set()` returned progress id `d240c02ec330c710913fbf12b4013170`; progress completed with `status_label=Successful`, `percent_complete=100`, `has_preview_problem=false`, and `remote_update_set_id=22221e3514c94fa3bde48148b0053e6f`. The retrieved update set state became `previewed`, and `sys_update_preview_problem` returned zero rows. No commit was run.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:
