@@ -169,6 +169,23 @@ GET /admin/jobs
 
 These endpoints do not replace ServiceNow as the work surface. They provide a safe API for the admin GUI and operator diagnostics to inspect generated implementation packets and candidates. Lifecycle webhook calls do not use this admin token, and unauthenticated artifact reads are rejected.
 
+## Admin Console
+
+The hosted API serves a read-only browser console at:
+
+```text
+GET /admin
+```
+
+Configure local Basic auth credentials in the API service environment:
+
+```text
+JEDI_ADMIN_CONSOLE_USERNAME=<operator username>
+JEDI_ADMIN_CONSOLE_PASSWORD=<strong password>
+```
+
+The console shows recent fulfillment jobs, recent lifecycle events, and Basic-auth artifact detail pages under `/admin/artifacts/{artifact_id}`. It does not expose raw lifecycle event payload JSON or ServiceNow sys_ids in the dashboard. It also does not provide retry, reject, rebuild, preview, commit, or other mutation actions; ServiceNow remains the work surface and update set preview/commit remains the human review point.
+
 ## Fulfillment Worker
 
 The worker boundary is `process_one_fulfillment_job()` in `jedi_devproject.fulfillment_worker`. It claims one queued job from PostgreSQL with `claim_next_fulfillment_job(worker_id=...)`, calls an injected fulfillment handler, and records the terminal job state.
@@ -189,7 +206,7 @@ Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject
 - `SERVICENOW_CLIENT_SECRET`
 - `JEDI_AUDIT_ROOT`
 
-Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, and `JEDI_BUILD_CLAIM_STATE`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
+Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, `JEDI_BUILD_CLAIM_STATE`, `JEDI_ADMIN_API_TOKEN`, `JEDI_ADMIN_CONSOLE_USERNAME`, and `JEDI_ADMIN_CONSOLE_PASSWORD`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
 
 For ServiceNow Table API integrations, prefer state values over labels. In the current PDI, `Ready` is `1` and `Work in progress` is `2`, so the Railway worker uses `JEDI_BUILD_CLAIM_FROM_STATE=1` and `JEDI_BUILD_CLAIM_STATE=2`.
 

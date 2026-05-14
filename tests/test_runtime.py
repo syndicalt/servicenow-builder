@@ -214,6 +214,15 @@ def _settings_with_admin_token(tmp_path: Path) -> RuntimeSettings:
     return _settings(tmp_path).model_copy(update={"admin_api_token": "admin-token"})
 
 
+def _settings_with_admin_console(tmp_path: Path) -> RuntimeSettings:
+    return _settings(tmp_path).model_copy(
+        update={
+            "admin_console_username": "console-admin",
+            "admin_console_password": "console-password",
+        }
+    )
+
+
 def _settings_with_openai(tmp_path: Path, *, apply: bool = False) -> RuntimeSettings:
     return _settings(tmp_path, apply=apply).model_copy(
         update={
@@ -400,6 +409,29 @@ def test_load_runtime_settings_reads_admin_api_token(tmp_path: Path) -> None:
     settings = load_runtime_settings(env_path)
 
     assert settings.admin_api_token == "admin-token"
+
+
+def test_load_runtime_settings_reads_admin_console_credentials(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_ADMIN_CONSOLE_USERNAME=console-admin",
+                "JEDI_ADMIN_CONSOLE_PASSWORD=console-password",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.admin_console_username == "console-admin"
+    assert settings.admin_console_password == "console-password"
 
 
 def test_load_runtime_settings_requires_explicit_model_provider_to_enable_openai(
@@ -669,7 +701,10 @@ def test_admin_lifecycle_events_lists_recent_events(tmp_path: Path) -> None:
             event_id="evt-002",
             event_type="story_state_changed",
             story_number="STRY0010002",
-            payload_json={"story_number": "STRY0010002", "story_sys_id": "hidden"},
+            payload_json={
+                "story_number": "STRY0010002",
+                "story_sys_id": "secret-sys-id-payload",
+            },
             received_at=datetime(2026, 5, 14, 18, 0, tzinfo=UTC),
             validation_status="accepted",
         )
@@ -737,6 +772,132 @@ def test_admin_jobs_lists_recent_fulfillment_jobs(tmp_path: Path) -> None:
             }
         ]
     }
+
+
+def test_admin_console_requires_configured_credentials(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin", auth=("console-admin", "console-password"))
+
+    assert response.status_code == 503
+
+
+def test_admin_console_requires_basic_auth(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_console(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == 'Basic realm="jedi-admin"'
+
+
+def test_admin_console_rejects_wrong_basic_auth(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_console(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin", auth=("console-admin", "wrong-password"))
+
+    assert response.status_code == 401
+
+
+def test_admin_console_renders_jobs_events_and_artifact_links(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.lifecycle_event_records = [
+        LifecycleEventRecord(
+            event_id="evt-002",
+            event_type="story_state_changed",
+            story_number="STRY0010002",
+            payload_json={"story_number": "STRY0010002", "story_sys_id": "hidden"},
+            received_at=datetime(2026, 5, 14, 18, 0, tzinfo=UTC),
+            validation_status="accepted",
+        )
+    ]
+    store.fulfillment_job_records = [
+        _job(event_id="evt-002", story_number="STRY0010002").model_copy(
+            update={"status": "rejected", "last_error": "Story returned to Draft"}
+        )
+    ]
+    store.artifact_ref_records["job-evt-002"] = [
+        ArtifactRefRecord(
+            id=3,
+            job_id="job-evt-002",
+            artifact_kind="implementation_candidate",
+            path="db://artifact_blobs/3",
+            sha256="c" * 64,
+            artifact_id=3,
+            created_at=datetime(2026, 5, 14, 18, 1, tzinfo=UTC),
+        )
+    ]
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_console(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin", auth=("console-admin", "console-password"))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "JEDI Admin Console" in response.text
+    assert "Fulfillment Jobs" in response.text
+    assert "Lifecycle Events" in response.text
+    assert "STRY0010002" in response.text
+    assert "rejected" in response.text
+    assert "Story returned to Draft" in response.text
+    assert "/admin/artifacts/3" in response.text
+    assert "implementation_candidate" in response.text
+    assert "story_sys_id" not in response.text
+    assert "secret-sys-id-payload" not in response.text
+
+
+def test_admin_console_artifact_view_renders_payload_with_basic_auth(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.artifact_blob_records[3] = ArtifactBlobRecord(
+        id=3,
+        job_id="job-evt-002",
+        story_number="STRY0010002",
+        artifact_kind="implementation_candidate",
+        schema_version="implementation-candidate-v1",
+        payload_json={
+            "story_number": "STRY0010002",
+            "changes": [{"fields": {"element": "u_vendor_reference"}}],
+        },
+        sha256="d" * 64,
+        created_at=datetime(2026, 5, 14, 18, 2, tzinfo=UTC),
+    )
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_console(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin/artifacts/3", auth=("console-admin", "console-password"))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Artifact 3" in response.text
+    assert "implementation_candidate" in response.text
+    assert "u_vendor_reference" in response.text
+    assert "&quot;" in response.text
 
 
 def test_process_one_runtime_fulfillment_wires_store_servicenow_and_handler(
