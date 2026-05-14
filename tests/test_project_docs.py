@@ -118,7 +118,7 @@ def test_readme_documents_postgres_operational_store() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
     assert "PostgreSQL operational state" in readme
-    assert "filesystem artifacts" in readme
+    assert "DB-backed JSON artifacts" in readme
 
 
 def test_operator_guide_documents_postgres_operational_store() -> None:
@@ -131,8 +131,9 @@ def test_operator_guide_documents_postgres_operational_store() -> None:
     assert "lifecycle_events" in guide
     assert "fulfillment_jobs" in guide
     assert "job_events" in guide
+    assert "artifact_blobs" in guide
     assert "artifact_refs" in guide
-    assert "filesystem artifacts" in guide
+    assert "DB-backed artifacts" in guide
 
 
 def test_operator_guide_documents_lifecycle_webhook_api() -> None:

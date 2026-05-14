@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from jedi_devproject.artifacts import write_candidate_artifact, write_json_artifact_once
 from jedi_devproject.enrichment import enrich_story
 from jedi_devproject.fulfillment_worker import (
     FulfillmentArtifactRef,
@@ -27,7 +24,6 @@ from jedi_devproject.writeback_orchestration import WritebackClient
 class ModelCandidateFulfillmentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    artifact_root: Path
     policy: AllowlistPolicy
     provider_policy: ProviderPolicy
     rags: SpecializedRags
@@ -57,23 +53,12 @@ def model_candidate_fulfillment_handler(
             provider=config.provider,
         )
 
-        packet_path = write_json_artifact_once(
-            config.artifact_root / "implementation-packets",
-            filename=f"{job.job_id}.json",
-            payload=packet.model_dump(mode="json"),
-        )
-        candidate_path = write_candidate_artifact(
-            config.artifact_root / "implementation-candidates",
-            run_id=job.job_id,
-            candidate=candidate,
-        )
-
         client.update_story_fields(
             stories[0].sys_id,
             {
                 "work_notes": (
                     f"Implementation candidate generated for {job.story_number}. "
-                    f"Packet: {packet_path}. Candidate: {candidate_path}."
+                    f"Artifacts are recorded under job {job.job_id}."
                 )
             },
         )
@@ -81,17 +66,17 @@ def model_candidate_fulfillment_handler(
         return FulfillmentExecutionResult(
             message=f"Implementation candidate generated for {job.story_number}",
             artifacts=[
-                _artifact_ref("implementation_packet", packet_path),
-                _artifact_ref("implementation_candidate", candidate_path),
+                FulfillmentArtifactRef(
+                    artifact_kind="implementation_packet",
+                    schema_version="implementation-packet-v1",
+                    payload_json=packet.model_dump(mode="json"),
+                ),
+                FulfillmentArtifactRef(
+                    artifact_kind="implementation_candidate",
+                    schema_version="implementation-candidate-v1",
+                    payload_json=candidate.model_dump(mode="json"),
+                ),
             ],
         )
 
     return handle
-
-
-def _artifact_ref(artifact_kind: str, path: Path) -> FulfillmentArtifactRef:
-    return FulfillmentArtifactRef(
-        artifact_kind=artifact_kind,
-        path=str(path),
-        sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-    )

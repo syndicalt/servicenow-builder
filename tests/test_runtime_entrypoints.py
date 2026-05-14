@@ -274,3 +274,14 @@ class _NoopStore:
         sha256: str,
     ) -> object:
         raise AssertionError("not called")
+
+    def record_json_artifact(
+        self,
+        *,
+        job_id: str,
+        story_number: str,
+        artifact_kind: str,
+        schema_version: str,
+        payload: dict[str, Any],
+    ) -> object:
+        raise AssertionError("not called")

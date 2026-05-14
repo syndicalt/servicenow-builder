@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -150,7 +149,7 @@ def _rags() -> SpecializedRags:
     )
 
 
-def test_model_candidate_handler_writes_packet_candidate_work_note_and_artifact_refs(
+def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note(
     tmp_path: Path,
 ) -> None:
     client = FakeModelClient()
@@ -158,7 +157,6 @@ def test_model_candidate_handler_writes_packet_candidate_work_note_and_artifact_
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
-            artifact_root=tmp_path,
             policy=_policy(),
             provider_policy=_provider_policy(),
             rags=_rags(),
@@ -173,15 +171,15 @@ def test_model_candidate_handler_writes_packet_candidate_work_note_and_artifact_
         "implementation_packet",
         "implementation_candidate",
     ]
-    packet_path = Path(result.artifacts[0].path)
-    candidate_path = Path(result.artifacts[1].path)
-    assert packet_path.exists()
-    assert candidate_path.exists()
-    packet = json.loads(packet_path.read_text(encoding="utf-8"))
-    candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+    assert result.artifacts[0].schema_version == "implementation-packet-v1"
+    assert result.artifacts[1].schema_version == "implementation-candidate-v1"
+    packet = result.artifacts[0].payload_json
+    candidate = result.artifacts[1].payload_json
+    assert packet is not None
+    assert candidate is not None
     assert packet["provider_id"] == "openai-chatgpt"
     assert packet["story"]["number"] == "STRY0010013"
-    assert "story-sys-id" not in packet_path.read_text(encoding="utf-8")
+    assert "story-sys-id" not in str(packet)
     assert candidate["status"] == "Ready for Review"
     assert candidate["changes"][0]["fields"]["element"] == "u_ai_review_notes"
     assert provider.payloads[0]["task"] == "generate_implementation_candidate"
@@ -191,7 +189,7 @@ def test_model_candidate_handler_writes_packet_candidate_work_note_and_artifact_
             "fields": {
                 "work_notes": (
                     "Implementation candidate generated for STRY0010013. "
-                    f"Packet: {packet_path}. Candidate: {candidate_path}."
+                    "Artifacts are recorded under job job-evt-001."
                 )
             },
         }
@@ -218,7 +216,6 @@ def test_model_candidate_handler_fails_closed_for_invalid_model_response(
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
-            artifact_root=tmp_path,
             policy=_policy(),
             provider_policy=_provider_policy(),
             rags=_rags(),

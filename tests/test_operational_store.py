@@ -13,6 +13,7 @@ from jedi_devproject.lifecycle_events import (
     LifecycleStateChangeEvent,
 )
 from jedi_devproject.operational_store import (
+    ArtifactBlobRecord,
     ArtifactRefRecord,
     FulfillmentJobRecord,
     OperationalConnection,
@@ -118,7 +119,11 @@ def test_postgres_migration_defines_operational_schema() -> None:
     assert "locked_at TIMESTAMPTZ" in migration
     assert "CREATE TABLE IF NOT EXISTS job_events" in migration
     assert "BIGSERIAL PRIMARY KEY" in migration
+    assert "CREATE TABLE IF NOT EXISTS artifact_blobs" in migration
+    assert "payload_json JSONB NOT NULL" in migration
+    assert "schema_version TEXT NOT NULL" in migration
     assert "CREATE TABLE IF NOT EXISTS artifact_refs" in migration
+    assert "artifact_id BIGINT REFERENCES artifact_blobs(id)" in migration
 
 
 def test_packaged_operational_store_migration_matches_reviewed_sql() -> None:
@@ -318,3 +323,96 @@ def test_record_artifact_ref_uses_postgres_returning_row() -> None:
     assert "RETURNING" in joined_sql
     assert artifact_ref == ArtifactRefRecord.model_validate(row)
     assert connection.transaction_count == 1
+
+
+def test_record_json_artifact_persists_payload_and_db_backed_ref() -> None:
+    blob_row: dict[str, Any] = {
+        "id": 7,
+        "job_id": "job-evt-job",
+        "story_number": "STRY0010013",
+        "artifact_kind": "implementation_packet",
+        "schema_version": "implementation-packet-v1",
+        "payload_json": {"story": {"number": "STRY0010013"}, "task": "generate"},
+        "sha256": "b" * 64,
+        "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+    }
+    ref_row: dict[str, Any] = {
+        "id": 8,
+        "job_id": "job-evt-job",
+        "artifact_kind": "implementation_packet",
+        "path": "db://artifact_blobs/7",
+        "sha256": "b" * 64,
+        "artifact_id": 7,
+        "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+    }
+    connection = ScriptedPostgresConnection(rows=[blob_row, ref_row])
+    store = _store(connection)
+
+    artifact = store.record_json_artifact(
+        job_id="job-evt-job",
+        story_number="STRY0010013",
+        artifact_kind="implementation_packet",
+        schema_version="implementation-packet-v1",
+        payload={"task": "generate", "story": {"number": "STRY0010013"}},
+    )
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "INSERT INTO artifact_blobs" in joined_sql
+    assert "INSERT INTO artifact_refs" in joined_sql
+    assert "db://artifact_blobs/" in joined_sql
+    assert artifact == ArtifactBlobRecord.model_validate(blob_row)
+    assert connection.executed[0][1][4] == (
+        '{"story":{"number":"STRY0010013"},"task":"generate"}'
+    )
+    assert connection.transaction_count == 1
+
+
+def test_artifact_refs_include_artifact_id_when_present() -> None:
+    row: dict[str, Any] = {
+        "id": 8,
+        "job_id": "job-evt-job",
+        "artifact_kind": "implementation_packet",
+        "path": "db://artifact_blobs/7",
+        "sha256": "b" * 64,
+        "artifact_id": 7,
+        "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+    }
+    connection = ScriptedPostgresConnection(rows=[[row]])
+    store = _store(connection)
+
+    refs = store.artifact_refs_for_job("job-evt-job")
+
+    assert refs == [ArtifactRefRecord.model_validate(row)]
+
+
+def test_get_artifact_blob_returns_typed_payload() -> None:
+    row: dict[str, Any] = {
+        "id": 7,
+        "job_id": "job-evt-job",
+        "story_number": "STRY0010013",
+        "artifact_kind": "implementation_candidate",
+        "schema_version": "implementation-candidate-v1",
+        "payload_json": {"story_number": "STRY0010013", "changes": []},
+        "sha256": "c" * 64,
+        "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+    }
+    connection = ScriptedPostgresConnection(rows=[row])
+    store = _store(connection)
+
+    artifact = store.get_artifact_blob(7)
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "FROM artifact_blobs" in joined_sql
+    assert artifact == ArtifactBlobRecord.model_validate(row)
+
+
+def test_get_artifact_blob_raises_for_missing_artifact() -> None:
+    connection = ScriptedPostgresConnection(rows=[None])
+    store = _store(connection)
+
+    try:
+        store.get_artifact_blob(404)
+    except KeyError as exc:
+        assert "Artifact blob not found: 404" in str(exc)
+    else:
+        raise AssertionError("missing artifact blob did not raise")

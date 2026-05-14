@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -19,6 +20,7 @@ class FakeWorkerStore:
         self.completed_jobs: list[tuple[str, str]] = []
         self.failed_jobs: list[tuple[str, str]] = []
         self.artifact_refs: list[tuple[str, str, str, str]] = []
+        self.json_artifacts: list[tuple[str, str, str, str, dict[str, Any]]] = []
 
     def claim_next_fulfillment_job(
         self,
@@ -59,6 +61,20 @@ class FakeWorkerStore:
         sha256: str,
     ) -> object:
         self.artifact_refs.append((job_id, artifact_kind, path, sha256))
+        return object()
+
+    def record_json_artifact(
+        self,
+        *,
+        job_id: str,
+        story_number: str,
+        artifact_kind: str,
+        schema_version: str,
+        payload: dict[str, Any],
+    ) -> object:
+        self.json_artifacts.append(
+            (job_id, story_number, artifact_kind, schema_version, payload)
+        )
         return object()
 
 
@@ -143,6 +159,41 @@ def test_worker_records_artifact_refs_before_completing_job() -> None:
             "implementation_candidate",
             "artifacts/job-evt-001/STRY0010013.json",
             "a" * 64,
+        )
+    ]
+    assert store.completed_jobs == [("job-evt-001", "processed STRY0010013")]
+
+
+def test_worker_records_json_artifacts_before_completing_job() -> None:
+    store = FakeWorkerStore(claimed_job=_job())
+
+    def handler(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
+        return FulfillmentExecutionResult(
+            message=f"processed {job.story_number}",
+            artifacts=[
+                FulfillmentArtifactRef(
+                    artifact_kind="implementation_packet",
+                    schema_version="implementation-packet-v1",
+                    payload_json={"task": "generate", "story": {"number": job.story_number}},
+                )
+            ],
+        )
+
+    result = process_one_fulfillment_job(
+        store=store,
+        worker_id="worker-1",
+        handler=handler,
+    )
+
+    assert result.status == "completed"
+    assert store.artifact_refs == []
+    assert store.json_artifacts == [
+        (
+            "job-evt-001",
+            "STRY0010013",
+            "implementation_packet",
+            "implementation-packet-v1",
+            {"task": "generate", "story": {"number": "STRY0010013"}},
         )
     ]
     assert store.completed_jobs == [("job-evt-001", "processed STRY0010013")]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,6 +27,7 @@ class FakeRuntimeStore:
         self.completed_jobs: list[tuple[str, str]] = []
         self.failed_jobs: list[tuple[str, str]] = []
         self.artifact_refs: list[tuple[str, str, str, str]] = []
+        self.json_artifacts: list[tuple[str, str, str, str, dict[str, Any]]] = []
         self.closed = False
 
     def __enter__(self) -> FakeRuntimeStore:
@@ -98,6 +100,20 @@ class FakeRuntimeStore:
         sha256: str,
     ) -> object:
         self.artifact_refs.append((job_id, artifact_kind, path, sha256))
+        return object()
+
+    def record_json_artifact(
+        self,
+        *,
+        job_id: str,
+        story_number: str,
+        artifact_kind: str,
+        schema_version: str,
+        payload: dict[str, Any],
+    ) -> object:
+        self.json_artifacts.append(
+            (job_id, story_number, artifact_kind, schema_version, payload)
+        )
         return object()
 
 
@@ -420,7 +436,8 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
                     "output_text": (
                         '{"changes":[{"table":"sys_dictionary","operation":"insert",'
                         '"fields":[{"name":"name","value":"rm_story"},'
-                        '{"name":"element","value":"u_ai_review_notes"}]}],'
+                        '{"name":"element","value":"u_ai_review_notes"}],'
+                        '"sys_id":null,"rationale":null}],'
                         '"test_plan":["Confirm the field exists."],'
                         '"rollback_notes":["Remove the field."]}'
                     )
@@ -450,11 +467,17 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
     assert transport.requests[5].url == "https://api.openai.com/v1/responses"
     assert transport.requests[5].headers["Authorization"] == "Bearer openai-key"
     assert "openai-key" not in repr(transport.requests[5].body)
-    assert len(store.artifact_refs) == 2
-    assert store.artifact_refs[0][1] == "implementation_packet"
-    assert store.artifact_refs[1][1] == "implementation_candidate"
-    assert Path(store.artifact_refs[0][2]).exists()
-    assert Path(store.artifact_refs[1][2]).exists()
+    assert store.artifact_refs == []
+    assert [artifact[2] for artifact in store.json_artifacts] == [
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    assert store.json_artifacts[0][3] == "implementation-packet-v1"
+    assert store.json_artifacts[1][3] == "implementation-candidate-v1"
+    assert store.json_artifacts[0][4]["story"]["number"] == "STRY0010013"
+    assert store.json_artifacts[1][4]["changes"][0]["fields"]["element"] == (
+        "u_ai_review_notes"
+    )
     assert "Implementation candidate generated" in transport.requests[-1].body["work_notes"]
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,13 +38,25 @@ class FulfillmentWorkerStore(Protocol):
         sha256: str,
     ) -> object: ...
 
+    def record_json_artifact(
+        self,
+        *,
+        job_id: str,
+        story_number: str,
+        artifact_kind: str,
+        schema_version: str,
+        payload: dict[str, Any],
+    ) -> object: ...
+
 
 class FulfillmentArtifactRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_kind: str
-    path: str
-    sha256: str
+    path: str = ""
+    sha256: str = ""
+    schema_version: str | None = None
+    payload_json: dict[str, Any] | None = None
 
 
 class FulfillmentExecutionResult(BaseModel):
@@ -109,12 +121,21 @@ def process_one_fulfillment_job(
         )
 
     for artifact in execution_result.artifacts:
-        store.record_artifact_ref(
-            job_id=job.job_id,
-            artifact_kind=artifact.artifact_kind,
-            path=artifact.path,
-            sha256=artifact.sha256,
-        )
+        if artifact.payload_json is None:
+            store.record_artifact_ref(
+                job_id=job.job_id,
+                artifact_kind=artifact.artifact_kind,
+                path=artifact.path,
+                sha256=artifact.sha256,
+            )
+        else:
+            store.record_json_artifact(
+                job_id=job.job_id,
+                story_number=job.story_number,
+                artifact_kind=artifact.artifact_kind,
+                schema_version=artifact.schema_version or artifact.artifact_kind,
+                payload=artifact.payload_json,
+            )
 
     store.complete_fulfillment_job(
         job_id=job.job_id,

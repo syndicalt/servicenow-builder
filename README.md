@@ -63,7 +63,7 @@ This project should be treated as **FedRAMP-aligned and authorization-boundary r
 |---|---|---|
 | **Language** | Python 3.11+ | Mature API, validation, testing, and data tooling |
 | **Data Models** | Pydantic | Strict schemas, validation, and JSON serialization |
-| **Storage (MVP)** | PostgreSQL operational state plus filesystem artifacts under a controlled workspace | Production-shaped event/job tracking, row-level worker claims, and reviewable artifact files |
+| **Storage (MVP)** | PostgreSQL operational state plus DB-backed JSON artifacts | Production-shaped event/job tracking, row-level worker claims, and durable implementation packet/candidate records |
 | **Storage (Production)** | Approved PostgreSQL plus boundary-approved object storage if needed | Must match customer boundary, encryption, retention, and audit needs |
 | **ServiceNow Integration** | REST Table API + OAuth 2.0 | Standard controlled ingestion for `rm_story`, `rm_epic`, project, and metadata tables |
 | **Model Layer** | Provider adapter with policy allowlist | Enables Now Assist/native first, then approved external models only when authorized |

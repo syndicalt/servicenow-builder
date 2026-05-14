@@ -28,20 +28,38 @@ CREATE TABLE IF NOT EXISTS job_events (
     created_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS artifact_blobs (
+    id BIGSERIAL PRIMARY KEY,
+    job_id TEXT NOT NULL REFERENCES fulfillment_jobs(job_id),
+    story_number TEXT NOT NULL,
+    artifact_kind TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    payload_json JSONB NOT NULL,
+    sha256 TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS artifact_refs (
     id BIGSERIAL PRIMARY KEY,
     job_id TEXT NOT NULL REFERENCES fulfillment_jobs(job_id),
     artifact_kind TEXT NOT NULL,
     path TEXT NOT NULL,
     sha256 TEXT NOT NULL,
+    artifact_id BIGINT REFERENCES artifact_blobs(id),
     created_at TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE artifact_refs
+    ADD COLUMN IF NOT EXISTS artifact_id BIGINT REFERENCES artifact_blobs(id);
 
 CREATE INDEX IF NOT EXISTS idx_fulfillment_jobs_status_created
     ON fulfillment_jobs(status, created_at, job_id);
 
 CREATE INDEX IF NOT EXISTS idx_job_events_job_id
     ON job_events(job_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_blobs_job_id
+    ON artifact_blobs(job_id, id);
 
 CREATE INDEX IF NOT EXISTS idx_artifact_refs_job_id
     ON artifact_refs(job_id, id);

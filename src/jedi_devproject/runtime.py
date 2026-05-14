@@ -137,7 +137,6 @@ def _runtime_handler(
     model_handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
-            artifact_root=settings.audit_root,
             policy=_default_model_allowlist_policy(),
             provider_policy=_default_openai_provider_policy(),
             rags=_default_runtime_rags(),

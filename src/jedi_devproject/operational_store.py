@@ -6,7 +6,7 @@ from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from importlib import resources
 from types import TracebackType
-from typing import Any, Protocol, Self, cast
+from typing import Any, Protocol, Self, SupportsInt, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -91,6 +91,20 @@ class ArtifactRefRecord(BaseModel):
     job_id: str
     artifact_kind: str
     path: str
+    sha256: str
+    artifact_id: int | None = None
+    created_at: datetime
+
+
+class ArtifactBlobRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    job_id: str
+    story_number: str
+    artifact_kind: str
+    schema_version: str
+    payload_json: dict[str, Any]
     sha256: str
     created_at: datetime
 
@@ -440,10 +454,76 @@ class PostgresOperationalStore:
             raise RuntimeError("PostgreSQL did not return an artifact ref row")
         return ArtifactRefRecord.model_validate(row)
 
+    def record_json_artifact(
+        self,
+        *,
+        job_id: str,
+        story_number: str,
+        artifact_kind: str,
+        schema_version: str,
+        payload: dict[str, Any],
+    ) -> ArtifactBlobRecord:
+        canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        artifact_sha256 = _sha256_text(canonical_payload)
+        now = _utc_now()
+        with self._connection.transaction():
+            blob_row = self._connection.fetch_one(
+                """
+                INSERT INTO artifact_blobs (
+                    job_id,
+                    story_number,
+                    artifact_kind,
+                    schema_version,
+                    payload_json,
+                    sha256,
+                    created_at
+                )
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s)
+                RETURNING id, job_id, story_number, artifact_kind, schema_version,
+                          payload_json, sha256, created_at
+                """,
+                (
+                    job_id,
+                    story_number,
+                    artifact_kind,
+                    schema_version,
+                    canonical_payload,
+                    artifact_sha256,
+                    now,
+                ),
+            )
+            if blob_row is None:
+                raise RuntimeError("PostgreSQL did not return an artifact blob row")
+            artifact_id = int(cast(SupportsInt, blob_row["id"]))
+            self._connection.fetch_one(
+                """
+                INSERT INTO artifact_refs (
+                    job_id,
+                    artifact_kind,
+                    path,
+                    sha256,
+                    artifact_id,
+                    created_at
+                )
+                VALUES (%s, %s, 'db://artifact_blobs/' || %s, %s, %s, %s)
+                RETURNING id, job_id, artifact_kind, path, sha256,
+                          artifact_id, created_at
+                """,
+                (
+                    job_id,
+                    artifact_kind,
+                    artifact_id,
+                    artifact_sha256,
+                    artifact_id,
+                    now,
+                ),
+            )
+        return ArtifactBlobRecord.model_validate(blob_row)
+
     def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]:
         rows = self._connection.fetch_all(
             """
-            SELECT id, job_id, artifact_kind, path, sha256, created_at
+            SELECT id, job_id, artifact_kind, path, sha256, artifact_id, created_at
             FROM artifact_refs
             WHERE job_id = %s
             ORDER BY id
@@ -452,8 +532,28 @@ class PostgresOperationalStore:
         )
         return [ArtifactRefRecord.model_validate(row) for row in rows]
 
+    def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord:
+        row = self._connection.fetch_one(
+            """
+            SELECT id, job_id, story_number, artifact_kind, schema_version,
+                   payload_json, sha256, created_at
+            FROM artifact_blobs
+            WHERE id = %s
+            """,
+            (artifact_id,),
+        )
+        if row is None:
+            raise KeyError(f"Artifact blob not found: {artifact_id}")
+        return ArtifactBlobRecord.model_validate(row)
+
 
 OperationalStore = PostgresOperationalStore
+
+
+def _sha256_text(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def connect_operational_store(database_url: str) -> PostgresOperationalStore:
