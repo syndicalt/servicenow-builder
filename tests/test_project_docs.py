@@ -1158,3 +1158,26 @@ def test_sprint_eighty_seven_change_log_documents_cicd_capability_probe() -> Non
     assert "ServiceNowClient.probe_cicd_update_set_endpoint" in change_log
     assert "raw XML import API" in change_log
     assert "reviewed ServiceNow-side importer" in change_log
+
+
+def test_operator_guide_documents_cicd_update_set_lifecycle_methods() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "retrieve_cicd_update_set()" in guide
+    assert "preview_cicd_update_set()" in guide
+    assert "commit_cicd_update_set()" in guide
+    assert "fetch_cicd_progress()" in guide
+    assert "/api/sn_cicd/update_set/preview/{remote_update_set_id}" in guide
+    assert "/api/sn_cicd/update_set/commit/{remote_update_set_id}" in guide
+    assert "not wired into automated fulfillment yet" in guide
+
+
+def test_sprint_eighty_eight_change_log_documents_cicd_lifecycle_methods() -> None:
+    change_log = Path("docs/sprints/sprint-88-change-log.md").read_text(encoding="utf-8")
+
+    assert "retrieve_cicd_update_set()" in change_log
+    assert "preview_cicd_update_set()" in change_log
+    assert "commit_cicd_update_set()" in change_log
+    assert "fetch_cicd_progress()" in change_log
+    assert "force_commit=false" in change_log
+    assert "build/source ServiceNow instance" in change_log

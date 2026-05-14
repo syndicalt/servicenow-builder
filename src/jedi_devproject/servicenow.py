@@ -112,6 +112,25 @@ def _http_error_body_to_json(body: bytes) -> dict[str, Any]:
     return {"error": {"message": raw_body}}
 
 
+def _servicenow_response_body_or_raise(
+    *,
+    response: HttpResponse,
+    context: str,
+) -> dict[str, Any]:
+    if response.status_code >= 400:
+        raise ServiceNowApiError(
+            f"ServiceNow API {context} failed with status {response.status_code}: "
+            f"{redact_secrets(response.json_body)}"
+        )
+    body = dict(response.json_body)
+    body["status_code"] = response.status_code
+    return body
+
+
+def _bool_query_value(value: bool) -> str:
+    return "true" if value else "false"
+
+
 class OAuthClientCredentials:
     def __init__(
         self,
@@ -461,6 +480,90 @@ class ServiceNowClient:
         body = dict(response.json_body)
         body["status_code"] = response.status_code
         return body
+
+    def retrieve_cicd_update_set(
+        self,
+        *,
+        update_set_id: str,
+        update_source_id: str | None = None,
+        update_source_instance_id: str | None = None,
+        auto_preview: bool = False,
+        cleanup_retrieved: bool = False,
+    ) -> dict[str, Any]:
+        params = {
+            "update_set_id": update_set_id,
+            "auto_preview": _bool_query_value(auto_preview),
+            "cleanup_retrieved": _bool_query_value(cleanup_retrieved),
+        }
+        if update_source_id:
+            params["update_source_id"] = update_source_id
+        if update_source_instance_id:
+            params["update_source_instance_id"] = update_source_instance_id
+        return self._send_cicd_update_set_request(
+            method="POST",
+            action="retrieve",
+            params=params,
+        )
+
+    def preview_cicd_update_set(self, *, remote_update_set_id: str) -> dict[str, Any]:
+        return self._send_cicd_update_set_request(
+            method="POST",
+            action=f"preview/{remote_update_set_id}",
+        )
+
+    def commit_cicd_update_set(
+        self,
+        *,
+        remote_update_set_id: str,
+        force_commit: bool = False,
+    ) -> dict[str, Any]:
+        return self._send_cicd_update_set_request(
+            method="POST",
+            action=f"commit/{remote_update_set_id}",
+            body={"force_commit": _bool_query_value(force_commit)},
+        )
+
+    def fetch_cicd_progress(self, *, progress_id: str) -> dict[str, Any]:
+        response = self._transport.send(
+            HttpRequest(
+                method="GET",
+                url=f"{self._settings.base_url}/api/sn_cicd/progress/{progress_id}",
+                headers={
+                    "Authorization": self._auth.authorization_header(),
+                    "Accept": "application/json",
+                },
+            )
+        )
+        return _servicenow_response_body_or_raise(
+            response=response,
+            context=f"GET sn_cicd/progress/{progress_id}",
+        )
+
+    def _send_cicd_update_set_request(
+        self,
+        *,
+        method: str,
+        action: str,
+        params: dict[str, str] | None = None,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        response = self._transport.send(
+            HttpRequest(
+                method=method,
+                url=f"{self._settings.base_url}/api/sn_cicd/update_set/{action}",
+                headers={
+                    "Authorization": self._auth.authorization_header(),
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                params=params or {},
+                body=body or {},
+            )
+        )
+        return _servicenow_response_body_or_raise(
+            response=response,
+            context=f"{method} sn_cicd/update_set/{action}",
+        )
 
     def attach_story_file(
         self,

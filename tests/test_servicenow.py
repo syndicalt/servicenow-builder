@@ -905,6 +905,132 @@ def test_servicenow_client_probes_cicd_update_set_endpoint_without_state_change(
     assert "client-secret" not in repr(request.sanitized())
 
 
+def test_servicenow_client_retrieves_cicd_update_set_from_update_source() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=202,
+                json_body={
+                    "result": {
+                        "links": {
+                            "progress": {
+                                "id": "progress-sys-id",
+                                "url": "https://dev205693.service-now.com/api/sn_cicd/progress/progress-sys-id",
+                            }
+                        },
+                        "status": "0",
+                        "status_label": "Pending",
+                        "status_message": "",
+                        "status_detail": "",
+                        "error": "",
+                        "percent_complete": 0,
+                    }
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    result = client.retrieve_cicd_update_set(
+        update_set_id="source-update-set-sys-id",
+        update_source_id="update-source-sys-id",
+        auto_preview=True,
+        cleanup_retrieved=True,
+    )
+
+    request = transport.requests[1]
+    assert result["status_code"] == 202
+    assert result["result"]["links"]["progress"]["id"] == "progress-sys-id"
+    assert request.method == "POST"
+    assert request.url.endswith("/api/sn_cicd/update_set/retrieve")
+    assert request.params == {
+        "update_set_id": "source-update-set-sys-id",
+        "update_source_id": "update-source-sys-id",
+        "auto_preview": "true",
+        "cleanup_retrieved": "true",
+    }
+    assert request.body == {}
+
+
+def test_servicenow_client_previews_commits_and_fetches_cicd_progress() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=202,
+                json_body={
+                    "result": {
+                        "links": {"progress": {"id": "preview-progress-sys-id"}},
+                        "status": "0",
+                        "status_label": "Pending",
+                    }
+                },
+            ),
+            HttpResponse(
+                status_code=202,
+                json_body={
+                    "result": {
+                        "links": {"progress": {"id": "commit-progress-sys-id"}},
+                        "status": "0",
+                        "status_label": "Pending",
+                    }
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": {
+                        "status": "2",
+                        "status_label": "Successful",
+                        "percent_complete": 100,
+                    }
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    preview = client.preview_cicd_update_set(remote_update_set_id="remote-update-set-sys-id")
+    commit = client.commit_cicd_update_set(
+        remote_update_set_id="remote-update-set-sys-id",
+        force_commit=False,
+    )
+    progress = client.fetch_cicd_progress(progress_id="commit-progress-sys-id")
+
+    preview_request = transport.requests[1]
+    commit_request = transport.requests[2]
+    progress_request = transport.requests[3]
+    assert preview["result"]["links"]["progress"]["id"] == "preview-progress-sys-id"
+    assert commit["result"]["links"]["progress"]["id"] == "commit-progress-sys-id"
+    assert progress["result"]["status_label"] == "Successful"
+    assert preview_request.method == "POST"
+    assert preview_request.url.endswith("/api/sn_cicd/update_set/preview/remote-update-set-sys-id")
+    assert commit_request.method == "POST"
+    assert commit_request.url.endswith("/api/sn_cicd/update_set/commit/remote-update-set-sys-id")
+    assert commit_request.body == {"force_commit": "false"}
+    assert progress_request.method == "GET"
+    assert progress_request.url.endswith("/api/sn_cicd/progress/commit-progress-sys-id")
+
+
 def test_servicenow_client_fetches_table_record_by_lookup() -> None:
     transport = RecordingTransport(
         [

@@ -221,6 +221,15 @@ The command is read-only. It sends non-mutating `POST /api/sn_cicd/update_set/cr
 
 This probe does not prove that generated XML can be imported directly. The CI/CD Update Set API is the preferred lifecycle surface for create/retrieve/preview/commit/backout operations, but retrieval still expects a ServiceNow update source and source update set identity. If generated implementation XML remains the handoff artifact, a reviewed ServiceNow-side importer or a separate build/source instance is still required before CI/CD preview and commit can become the production path.
 
+`ServiceNowClient` exposes explicit CI/CD Update Set lifecycle methods for future orchestration:
+
+- `retrieve_cicd_update_set()` calls `POST /api/sn_cicd/update_set/retrieve` with `update_set_id`, optional update source identity, `auto_preview`, and `cleanup_retrieved`.
+- `preview_cicd_update_set()` calls `POST /api/sn_cicd/update_set/preview/{remote_update_set_id}`.
+- `commit_cicd_update_set()` calls `POST /api/sn_cicd/update_set/commit/{remote_update_set_id}` with `force_commit=false` by default.
+- `fetch_cicd_progress()` calls `GET /api/sn_cicd/progress/{progress_id}`.
+
+These methods are not wired into automated fulfillment yet. Commit remains intentionally unreachable from runtime story processing until the promotion source, preview review, and approval gates are designed.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:
