@@ -185,6 +185,32 @@ The compose file expects ServiceNow OAuth values in the host environment: `SERVI
 
 `JEDI_BUILD_CLAIM_APPLY` defaults to `false` in compose. Keep it false for local runtime verification until the story, webhook, and writeback behavior have been reviewed for the target PDI.
 
+## Container Lifecycle Smoke
+
+Use `plan_container_lifecycle_smoke()` in `jedi_devproject.container_smoke` to produce the safe smoke sequence for the local runtime. The smoke plan keeps apply disabled and uses a synthetic `Draft` to `Ready` lifecycle event for the selected story number.
+
+The manual sequence is:
+
+```bash
+docker compose up -d postgres api
+```
+
+Post the planned event payload to:
+
+```text
+POST http://localhost:8000/lifecycle/events
+```
+
+Then run one worker pass:
+
+```bash
+docker compose run --rm worker
+```
+
+The smoke should enqueue and claim the job, then dry-run the build claim through the existing guarded writeback path. It must not mutate ServiceNow while `JEDI_BUILD_CLAIM_APPLY=false`.
+
+If the worker reports `fresh_story_state_mismatch`, treat that as a safety pass for stale synthetic input rather than a runtime failure. It means the live ServiceNow story no longer matches the `Draft` to `Ready` event used to enqueue the job. A full fulfillment smoke should be driven by the actual ServiceNow transition that creates the lifecycle event.
+
 ## Lifecycle Event Contract
 
 ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.

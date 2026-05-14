@@ -8,6 +8,7 @@ def test_dockerfile_builds_runtime_image_without_copying_local_secrets() -> None
     dockerignore = Path(".dockerignore").read_text(encoding="utf-8")
 
     assert "FROM python:" in dockerfile
+    assert "libpq5" in dockerfile
     assert "pip install" in dockerfile
     assert "uvicorn" in dockerfile
     assert "jedi_devproject.runtime_api:build_app" in dockerfile

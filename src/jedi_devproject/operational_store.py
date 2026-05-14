@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
-from pathlib import Path
+from importlib import resources
 from types import TracebackType
 from typing import Any, Protocol, Self, cast
 
@@ -12,9 +12,8 @@ from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.lifecycle_events import LifecycleStateChangeEvent
 
-MIGRATION_PATH = (
-    Path(__file__).resolve().parents[2] / "db" / "migrations" / "0001_operational_store.sql"
-)
+MIGRATION_PACKAGE = "jedi_devproject.migrations"
+MIGRATION_FILENAME = "0001_operational_store.sql"
 
 
 def _utc_now() -> datetime:
@@ -22,7 +21,11 @@ def _utc_now() -> datetime:
 
 
 def load_operational_store_migration() -> str:
-    return MIGRATION_PATH.read_text(encoding="utf-8")
+    return (
+        resources.files(MIGRATION_PACKAGE)
+        .joinpath(MIGRATION_FILENAME)
+        .read_text(encoding="utf-8")
+    )
 
 
 class OperationalConnection(Protocol):
@@ -205,43 +208,55 @@ class PostgresOperationalStore:
     ) -> FulfillmentJobRecord:
         job_id = f"job-{event_id}"
         now = _utc_now()
-        row = self._connection.fetch_one(
-            """
-            WITH inserted_job AS (
-                INSERT INTO fulfillment_jobs (
+        with self._connection.transaction():
+            row = self._connection.fetch_one(
+                """
+                WITH inserted_job AS (
+                    INSERT INTO fulfillment_jobs (
+                        job_id,
+                        event_id,
+                        story_number,
+                        status,
+                        attempt_count,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, 'queued', 0, %s, %s)
+                    ON CONFLICT (event_id) DO NOTHING
+                    RETURNING job_id, event_id, story_number, status, attempt_count,
+                              created_at, updated_at, locked_by, locked_at, last_error
+                ),
+                inserted_job_event AS (
+                    INSERT INTO job_events (job_id, status, message, created_at)
+                    SELECT job_id, 'queued', %s, %s
+                    FROM inserted_job
+                ),
+                selected_job AS (
+                    SELECT job_id, event_id, story_number, status, attempt_count,
+                           created_at, updated_at, locked_by, locked_at, last_error
+                    FROM inserted_job
+                    UNION ALL
+                    SELECT job_id, event_id, story_number, status, attempt_count,
+                           created_at, updated_at, locked_by, locked_at, last_error
+                    FROM fulfillment_jobs
+                    WHERE event_id = %s
+                      AND NOT EXISTS (SELECT 1 FROM inserted_job)
+                )
+                SELECT job_id, event_id, story_number, status, attempt_count,
+                       created_at, updated_at, locked_by, locked_at, last_error
+                FROM selected_job
+                """,
+                (
                     job_id,
                     event_id,
                     story_number,
-                    status,
-                    attempt_count,
-                    created_at,
-                    updated_at
-                )
-                VALUES (%s, %s, %s, 'queued', 0, %s, %s)
-                ON CONFLICT (event_id) DO NOTHING
-                RETURNING job_id
-            ),
-            inserted_job_event AS (
-                INSERT INTO job_events (job_id, status, message, created_at)
-                SELECT job_id, 'queued', %s, %s
-                FROM inserted_job
+                    now,
+                    now,
+                    "Fulfillment job queued",
+                    now,
+                    event_id,
+                ),
             )
-            SELECT job_id, event_id, story_number, status, attempt_count,
-                   created_at, updated_at, locked_by, locked_at, last_error
-            FROM fulfillment_jobs
-            WHERE event_id = %s
-            """,
-            (
-                job_id,
-                event_id,
-                story_number,
-                now,
-                now,
-                "Fulfillment job queued",
-                now,
-                event_id,
-            ),
-        )
         if row is None:
             raise RuntimeError(f"Fulfillment job was not returned for event: {event_id}")
         return FulfillmentJobRecord.model_validate(row)
@@ -406,20 +421,21 @@ class PostgresOperationalStore:
         path: str,
         sha256: str,
     ) -> ArtifactRefRecord:
-        row = self._connection.fetch_one(
-            """
-            INSERT INTO artifact_refs (
-                job_id,
-                artifact_kind,
-                path,
-                sha256,
-                created_at
+        with self._connection.transaction():
+            row = self._connection.fetch_one(
+                """
+                INSERT INTO artifact_refs (
+                    job_id,
+                    artifact_kind,
+                    path,
+                    sha256,
+                    created_at
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, job_id, artifact_kind, path, sha256, created_at
+                """,
+                (job_id, artifact_kind, path, sha256, _utc_now()),
             )
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id, job_id, artifact_kind, path, sha256, created_at
-            """,
-            (job_id, artifact_kind, path, sha256, _utc_now()),
-        )
         if row is None:
             raise RuntimeError("PostgreSQL did not return an artifact ref row")
         return ArtifactRefRecord.model_validate(row)
@@ -444,7 +460,11 @@ def connect_operational_store(database_url: str) -> PostgresOperationalStore:
     import psycopg
     from psycopg.rows import dict_row
 
-    raw_connection = psycopg.connect(database_url, row_factory=dict_row)
+    raw_connection = psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+        autocommit=True,
+    )
     store = PostgresOperationalStore(PsycopgOperationalConnection(raw_connection))
     store.initialize_schema()
     return store

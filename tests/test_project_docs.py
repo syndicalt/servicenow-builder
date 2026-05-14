@@ -238,6 +238,18 @@ def test_sprint_seventy_three_change_log_documents_runtime_wiring() -> None:
     assert "DATABASE_URL" in change_log
 
 
+def test_sprint_seventy_five_change_log_documents_container_smoke() -> None:
+    change_log = Path("docs/sprints/sprint-75-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "container_smoke" in change_log
+    assert "plan_container_lifecycle_smoke" in change_log
+    assert "Draft" in change_log
+    assert "Ready" in change_log
+    assert "apply disabled" in change_log
+
+
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
     change_log = Path("docs/sprints/sprint-29-change-log.md").read_text(
         encoding="utf-8"

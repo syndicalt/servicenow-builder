@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 from jedi_devproject.lifecycle_events import (
@@ -16,6 +18,7 @@ from jedi_devproject.operational_store import (
     OperationalConnection,
     PostgresOperationalStore,
     connect_operational_store,
+    load_operational_store_migration,
 )
 
 ScriptedRow = dict[str, object]
@@ -118,8 +121,69 @@ def test_postgres_migration_defines_operational_schema() -> None:
     assert "CREATE TABLE IF NOT EXISTS artifact_refs" in migration
 
 
+def test_packaged_operational_store_migration_matches_reviewed_sql() -> None:
+    reviewed_migration = Path("db/migrations/0001_operational_store.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert load_operational_store_migration() == reviewed_migration
+
+
 def test_connect_operational_store_requires_postgres_database_url() -> None:
     assert connect_operational_store.__annotations__["database_url"] == "str"
+
+
+def test_connect_operational_store_enables_autocommit_for_request_safe_reads(
+    monkeypatch: Any,
+) -> None:
+    connect_calls: list[dict[str, object]] = []
+
+    class FakeRawConnection:
+        def cursor(self) -> Any:
+            return ScriptedCursor()
+
+        @contextmanager
+        def transaction(self) -> Iterator[None]:
+            yield
+
+        def close(self) -> None:
+            pass
+
+    class ScriptedCursor:
+        def __enter__(self) -> ScriptedCursor:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            pass
+
+        def execute(self, _sql: str, _params: tuple[object, ...] = ()) -> None:
+            pass
+
+    def fake_connect(*args: object, **kwargs: object) -> FakeRawConnection:
+        connect_calls.append({"args": args, "kwargs": kwargs})
+        return FakeRawConnection()
+
+    psycopg_module = ModuleType("psycopg")
+    psycopg_module.connect = fake_connect  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "psycopg", psycopg_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg.rows",
+        SimpleNamespace(dict_row=object()),
+    )
+
+    store = connect_operational_store("postgresql://jedi:test@localhost:5432/jedi")
+
+    store.close()
+    assert connect_calls == [
+        {
+            "args": ("postgresql://jedi:test@localhost:5432/jedi",),
+            "kwargs": {
+                "row_factory": sys.modules["psycopg.rows"].dict_row,
+                "autocommit": True,
+            },
+        }
+    ]
 
 
 def test_record_lifecycle_event_uses_postgres_idempotency() -> None:
@@ -158,8 +222,11 @@ def test_enqueue_fulfillment_job_uses_postgres_idempotency_and_job_event() -> No
 
     joined_sql = "\n".join(sql for sql, _params in connection.executed)
     assert "ON CONFLICT (event_id) DO NOTHING" in joined_sql
+    assert "UNION ALL" in joined_sql
+    assert "NOT EXISTS (SELECT 1 FROM inserted_job)" in joined_sql
     assert "INSERT INTO job_events" in joined_sql
     assert job == FulfillmentJobRecord.model_validate(_job_row())
+    assert connection.transaction_count == 1
 
 
 def test_claim_next_fulfillment_job_uses_skip_locked_worker_claim() -> None:
@@ -250,3 +317,4 @@ def test_record_artifact_ref_uses_postgres_returning_row() -> None:
     assert "INSERT INTO artifact_refs" in joined_sql
     assert "RETURNING" in joined_sql
     assert artifact_ref == ArtifactRefRecord.model_validate(row)
+    assert connection.transaction_count == 1
