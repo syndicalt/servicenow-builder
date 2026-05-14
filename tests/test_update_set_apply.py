@@ -60,6 +60,37 @@ class FakeApplyClient:
             "caption": "Notes",
         }:
             return [{"sys_id": "notes-section-sys-id", "caption": "Notes"}]
+        if table == "sys_ui_section" and lookup == {"name": "rm_story"}:
+            return [
+                {
+                    "sys_id": "main-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "schedule-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "Schedule",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "scrum-main-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "",
+                    "view": {"display_value": "Scrum", "value": "scrum-view-sys-id"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "personal-main-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "",
+                    "view": {"display_value": "Scrum", "value": "scrum-view-sys-id"},
+                    "sys_user": "user-sys-id",
+                },
+            ]
         if table == "sys_ui_element" and lookup == {
             "name": "rm_story",
             "sys_ui_section": "notes-section-sys-id",
@@ -322,6 +353,18 @@ def test_apply_candidate_places_description_anchored_field_on_all_main_story_vie
     )
 
     assert result.applied_change_count == 3
+    assert {
+        "table": "sys_ui_section",
+        "lookup": {"name": "rm_story"},
+        "fields": ["sys_id", "name", "caption", "view", "sys_user"],
+        "limit": 100,
+    } in client.fetches
+    assert {
+        "table": "sys_ui_element",
+        "lookup": {"name": "rm_story", "element": "description"},
+        "fields": ["sys_id", "element", "position", "sys_ui_section", "sys_user"],
+        "limit": 50,
+    } not in client.fetches
     assert client.upserts[2:] == [
         {
             "table": "sys_ui_element",

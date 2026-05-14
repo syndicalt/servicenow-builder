@@ -269,23 +269,19 @@ def _plan_description_anchor_form_layout_changes(
     table_name: str,
     element: str,
 ) -> list[PlannedFormLayoutChange]:
-    anchors = client.fetch_table_records(
-        table="sys_ui_element",
-        lookup={"name": table_name, "element": "description"},
-        fields=["sys_id", "element", "position", "sys_ui_section", "sys_user"],
-        limit=50,
+    sections = client.fetch_table_records(
+        table="sys_ui_section",
+        lookup={"name": table_name},
+        fields=["sys_id", "name", "caption", "view", "sys_user"],
+        limit=100,
     )
-    section_ids = sorted(
-        {
-            section_sys_id
-            for anchor in anchors
-            if _reference_value(anchor.get("sys_user")).strip() == ""
-            for section_sys_id in [_reference_value(anchor.get("sys_ui_section"))]
-            if section_sys_id.strip() != ""
-        }
-    )
+    section_ids = [
+        _reference_value(section.get("sys_id"))
+        for section in sections
+        if _is_global_main_story_view_section(section)
+    ]
     if not section_ids:
-        raise RuntimeError("description form element lookup found no global rm_story sections")
+        raise RuntimeError("description form placement found no global rm_story main sections")
     changes: list[PlannedFormLayoutChange] = []
     for section_sys_id in section_ids:
         section_elements = client.fetch_table_records(
@@ -312,6 +308,23 @@ def _plan_description_anchor_form_layout_changes(
             )
         )
     return changes
+
+
+def _is_global_main_story_view_section(section: dict[str, Any]) -> bool:
+    if _reference_value(section.get("sys_user")).strip() != "":
+        return False
+    if _reference_value(section.get("caption")).strip() != "":
+        return False
+    view = section.get("view")
+    view_values: set[str] = set()
+    if isinstance(view, dict):
+        view_values = {
+            str(view.get("value") or "").strip().lower(),
+            str(view.get("display_value") or "").strip().lower(),
+        }
+    else:
+        view_values = {str(view or "").strip().lower()}
+    return bool(view_values.intersection({"", "default", "default view", "scrum"}))
 
 
 def _plan_section_form_layout_change(
