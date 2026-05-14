@@ -223,6 +223,12 @@ def test_build_implementation_packet_marks_missing_instance_context_for_retrieva
     assert packet.to_model_payload()["controls"]["context_sufficiency"]["status"] == (
         "needs_retrieval"
     )
+    assert packet.to_model_payload()["controls"]["context_escalation"] == {
+        "action": "retrieve_live_instance_context",
+        "should_retrieve": True,
+        "should_call_model": False,
+        "reasons": ["live_instance_context_missing"],
+    }
 
 
 def test_implementation_packet_payload_is_model_ready_and_minimized() -> None:

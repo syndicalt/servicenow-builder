@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from jedi_devproject.capabilities import SuitabilityOutcome
 from jedi_devproject.capability_analysis import analyze_story_capabilities
+from jedi_devproject.context_escalation import plan_context_escalation
 from jedi_devproject.instance_discovery import InstanceDiscoveryContext
 from jedi_devproject.models import (
     CandidateChange,
@@ -70,6 +71,9 @@ class ImplementationPacket(BaseModel):
                 "capability_assessment": self.capability_assessment,
                 "normalized_intent": self.normalized_intent,
                 "context_sufficiency": self.context_sufficiency,
+                "context_escalation": plan_context_escalation(
+                    self.context_sufficiency
+                ).model_dump(mode="json"),
             },
             "instance_context": self.instance_context,
             "context": self.context_sections,
