@@ -323,14 +323,15 @@ The project continued beyond the original Sprint 0-9 baseline to close the SPM-a
 | Sprint 73 | Runtime environment wiring |
 | Sprint 74 | Containerized local runtime |
 | Sprint 75 | Container lifecycle smoke and packaged runtime fixes |
+| Sprint 76 | Public lifecycle webhook bootstrap verification |
 
 Controlled story writeback is now explicitly scoped to build claim, external build completion evidence, and `Ready for Testing` transition handling. Direct Update Set imports, deployments, production promotion, and unvalidated ServiceNow mutation remain out of scope.
 
 ## Next Roadmap Focus
 
-The current product boundary is the local API and worker runtime. The sidecar can already prepare implementation packets, validate implementation candidates, bootstrap lifecycle webhook records, verify ServiceNow lifecycle records, accept lifecycle webhook events, claim fulfillment jobs, run the guarded build-claim handler, load runtime settings, run in local containers, plan and execute the container lifecycle smoke, record controlled writeback, and manage reviewed delivery handoff artifacts. The operational store targets PostgreSQL so the runtime can use database-backed event intake and worker claiming from the start.
+The current product boundary is the public API and worker runtime. The sidecar can already prepare implementation packets, validate implementation candidates, bootstrap lifecycle webhook records, verify ServiceNow lifecycle records, accept lifecycle webhook events, claim fulfillment jobs, run the guarded build-claim handler, load runtime settings, run in local containers, plan and execute the container lifecycle smoke, record controlled writeback, and manage reviewed delivery handoff artifacts. The operational store targets PostgreSQL so the runtime can use database-backed event intake and worker claiming from the start.
 
-- API: receive ServiceNow lifecycle webhook events, validate payloads, persist `lifecycle_events`, enqueue `fulfillment_jobs`, and return fast acknowledgements. The first API intake boundary is implemented.
+- API: receive ServiceNow lifecycle webhook events, validate payloads, persist `lifecycle_events`, enqueue `fulfillment_jobs`, and return fast acknowledgements. The first API intake boundary is implemented and publicly reachable through Railway.
 - Worker: claim queued jobs using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`, run evaluation/build orchestration asynchronously, and write state transitions back to ServiceNow through existing guarded boundaries. The first claim/complete/fail boundary and build-claim handler are implemented.
 - Runtime: package the API, worker, and PostgreSQL dependency for local container deployment with explicit environment variables and health checks. Environment-driven API and worker wiring, local compose topology, packaged migrations, request-safe PostgreSQL autocommit, and container smoke execution are implemented.
 - Evidence: preserve lifecycle manifests, implementation packets, candidate artifacts, build results, writeback audits, reviewed delivery jobs, handoff reports, and delivery attachment plans.
@@ -338,5 +339,5 @@ The current product boundary is the local API and worker runtime. The sidecar ca
 The following roadmap items should be prioritized:
 
 1. Full lifecycle smoke from a live PDI `Draft` to `Ready` transition through build claim and controlled writeback.
-2. Replace manual synthetic event posting with a ServiceNow-emitted lifecycle event from the bootstrap Business Rule.
+2. Add authenticated inbound webhook protection before any non-PDI use.
 3. ATO evidence refresh: data flow, threat model, control mapping, residual risk register, and sprint evidence index.

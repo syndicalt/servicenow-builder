@@ -1092,6 +1092,10 @@ class FakeServiceNowClient:
             "fields": fields,
         }
         self.upserted_table_records.append(payload)
+        self.table_records[f"{table}:{lookup}"] = {
+            **fields,
+            "sys_id": f"{table}-sys-id",
+        }
         return {"sys_id": f"{table}-sys-id"}
 
     def fetch_table_record(
@@ -3221,16 +3225,26 @@ def test_cli_verify_lifecycle_webhook_reports_matching_records(
         ]
     )
     spec_path = spec_root / "lifecycle-business-rule-001.json"
-    payload = json.loads(spec_path.read_text(encoding="utf-8"))
     fake_client = FakeServiceNowClient()
-    for record in payload["servicenow_records"]:
-        fake_client.table_records[f"{record['table']}:{record['lookup']}"] = {
-            **record["fields"],
-            "sys_id": f"{record['table']}-sys-id",
-        }
     report_root = tmp_path / "verification"
 
     with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        apply_exit_code = main(
+            [
+                "apply-lifecycle-webhook",
+                "--env-file",
+                str(env_path),
+                "--spec-file",
+                str(spec_path),
+                "--confirm-table",
+                "rm_story",
+                "--confirm-records",
+                "--audit-root",
+                str(tmp_path / "audit"),
+                "--run-id",
+                "lifecycle-webhook-apply-001",
+            ]
+        )
         exit_code = main(
             [
                 "verify-lifecycle-webhook",
@@ -3248,6 +3262,7 @@ def test_cli_verify_lifecycle_webhook_reports_matching_records(
     captured = capsys.readouterr()
     report = json.loads((report_root / "lifecycle-webhook-verify-001.json").read_text())
 
+    assert apply_exit_code == 0
     assert exit_code == 0
     assert "lifecycle_webhook_verified=True" in captured.out
     assert "matched_records=3" in captured.out
@@ -3299,7 +3314,8 @@ def test_cli_verify_lifecycle_webhook_reports_mismatches(
     first_record = payload["servicenow_records"][0]
     fake_client.table_records[f"{first_record['table']}:{first_record['lookup']}"] = {
         **first_record["fields"],
-        "endpoint": "https://wrong.example.gov/lifecycle/events",
+        "rest_endpoint": "https://wrong.example.gov/lifecycle/events",
+        "sys_id": "sys_rest_message-sys-id",
     }
 
     with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):

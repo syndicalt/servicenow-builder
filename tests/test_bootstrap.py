@@ -49,7 +49,13 @@ class FakeLifecycleWebhookClient:
         fields: dict[str, object],
     ) -> dict[str, object]:
         self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
-        return {"sys_id": f"{table}-sys-id"}
+        existing = self.fetch_table_record(table=table, lookup=lookup)
+        if existing is not None:
+            existing.update(fields)
+            return {"sys_id": existing.get("sys_id", f"{table}-sys-id")}
+        sys_id = f"{table}-sys-id"
+        self.records[f"{table}:{lookup}"] = {**fields, "sys_id": sys_id}
+        return {"sys_id": sys_id}
 
     def fetch_table_record(
         self,
@@ -200,7 +206,7 @@ def test_lifecycle_webhook_bootstrap_spec_includes_rest_message_and_business_rul
     assert spec.rest_message.name == "Jedi DevProject Lifecycle Event API"
     assert spec.rest_message.endpoint_url == "https://sidecar.example.gov/lifecycle/events"
     assert spec.rest_message.http_method == "POST"
-    assert spec.rest_message.authentication == "configured_in_servicenow"
+    assert spec.rest_message.authentication == "no_authentication"
     assert spec.business_rule.table == "rm_story"
     assert "new sn_ws.RESTMessageV2(" in spec.business_rule.script
     assert "'Jedi DevProject Lifecycle Event API'" in spec.business_rule.script
@@ -237,12 +243,15 @@ def test_lifecycle_webhook_servicenow_record_plan_has_explicit_tables() -> None:
     ]
     assert plan[0]["operation"] == "insert_or_update"
     assert plan[0]["lookup"] == {"name": "Jedi DevProject Lifecycle Event API"}
-    assert plan[0]["fields"]["endpoint"] == "https://sidecar.example.gov/lifecycle/events"
+    assert plan[0]["fields"]["rest_endpoint"] == "https://sidecar.example.gov/lifecycle/events"
+    assert plan[0]["fields"]["authentication_type"] == "no_authentication"
     assert plan[1]["lookup"] == {
         "rest_message_name": "Jedi DevProject Lifecycle Event API",
         "function_name": "post_event",
     }
-    assert plan[1]["fields"]["http_method"] == "POST"
+    assert plan[1]["fields"]["rest_endpoint"] == "https://sidecar.example.gov/lifecycle/events"
+    assert plan[1]["fields"]["http_method"] == "post"
+    assert "content_type" not in plan[1]["fields"]
     assert plan[2]["lookup"] == {
         "name": "Jedi DevProject lifecycle event emitter",
         "collection": "rm_story",
@@ -303,6 +312,16 @@ def test_apply_lifecycle_webhook_records_upserts_planned_records() -> None:
         "sys_rest_message_fn",
         "sys_script",
     ]
+    assert client.upserts[1]["lookup"] == {
+        "rest_message": "sys_rest_message-sys-id",
+        "function_name": "post_event",
+    }
+    method_fields = client.upserts[1]["fields"]
+    assert isinstance(method_fields, dict)
+    assert method_fields["rest_message"] == "sys_rest_message-sys-id"
+    assert method_fields["rest_endpoint"] == (
+        "https://sidecar.example.gov/lifecycle/events"
+    )
 
 
 def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
@@ -315,11 +334,26 @@ def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
         draft_state_value="-6",
         ready_state_value="1",
     )
-    for record in lifecycle_webhook_servicenow_record_plan(spec):
-        client.records[f"{record['table']}:{record['lookup']}"] = {
-            **record["fields"],
-            "sys_id": f"{record['table']}-sys-id",
-        }
+    apply_lifecycle_webhook_records(
+        client,
+        spec=spec,
+        confirm_table="rm_story",
+        confirm_records=True,
+    )
+    script_key = (
+        "sys_script:{'name': 'Jedi DevProject lifecycle event emitter', "
+        "'collection': 'rm_story'}"
+    )
+    client.records[script_key]["action_update"] = "true"
+    client.records[script_key]["active"] = "true"
+    method_key = (
+        "sys_rest_message_fn:{'rest_message': 'sys_rest_message-sys-id', "
+        "'function_name': 'post_event'}"
+    )
+    client.records[method_key]["rest_message"] = {
+        "link": "https://example.service-now.com/api/now/table/sys_rest_message/sys_rest_message-sys-id",
+        "value": "sys_rest_message-sys-id",
+    }
 
     result = verify_lifecycle_webhook_records(client, spec=spec)
 
@@ -347,7 +381,8 @@ def test_verify_lifecycle_webhook_records_reports_missing_and_mismatched_records
     plan = lifecycle_webhook_servicenow_record_plan(spec)
     client.records[f"{plan[0]['table']}:{plan[0]['lookup']}"] = {
         **plan[0]["fields"],
-        "endpoint": "https://wrong.example.gov/lifecycle/events",
+        "rest_endpoint": "https://wrong.example.gov/lifecycle/events",
+        "sys_id": "sys_rest_message-sys-id",
     }
 
     result = verify_lifecycle_webhook_records(client, spec=spec)
@@ -355,7 +390,7 @@ def test_verify_lifecycle_webhook_records_reports_missing_and_mismatched_records
     assert result.verified is False
     assert result.missing_records == ["sys_rest_message_fn", "sys_script"]
     assert result.mismatched_fields == {
-        "sys_rest_message": ["endpoint"],
+        "sys_rest_message": ["rest_endpoint"],
     }
     assert "record_missing" in result.reasons
     assert "field_mismatch" in result.reasons

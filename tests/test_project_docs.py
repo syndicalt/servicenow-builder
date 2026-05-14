@@ -250,6 +250,17 @@ def test_sprint_seventy_five_change_log_documents_container_smoke() -> None:
     assert "apply disabled" in change_log
 
 
+def test_sprint_seventy_six_change_log_documents_public_lifecycle_bootstrap() -> None:
+    change_log = Path("docs/sprints/sprint-76-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "rest_endpoint" in change_log
+    assert "sys_rest_message_fn.rest_message" in change_log
+    assert "jedi-devproject-0-jedi.up.railway.app/lifecycle/events" in change_log
+    assert "no_authentication" in change_log
+
+
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
     change_log = Path("docs/sprints/sprint-29-change-log.md").read_text(
         encoding="utf-8"
@@ -403,7 +414,7 @@ def test_sprint_plan_documents_delivery_lifecycle_roadmap_through_sprint_56() ->
     assert "Reviewed delivery lifecycle manifest" in sprint_plan
     assert "Next Roadmap Focus" in sprint_plan
     assert "PostgreSQL operational store retarget" in sprint_plan
-    assert "local API and worker runtime" in sprint_plan
+    assert "public API and worker runtime" in sprint_plan
     assert "SELECT ... FOR UPDATE SKIP LOCKED" in sprint_plan
 
 

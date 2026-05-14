@@ -275,7 +275,7 @@ def build_lifecycle_rest_message_spec(
         method_name="post_event",
         endpoint_url=endpoint_url,
         http_method="POST",
-        authentication="configured_in_servicenow",
+        authentication="no_authentication",
         content_type="application/json",
     )
 
@@ -290,7 +290,7 @@ def lifecycle_webhook_servicenow_record_plan(
             "lookup": {"name": spec.rest_message.name},
             "fields": {
                 "name": spec.rest_message.name,
-                "endpoint": spec.rest_message.endpoint_url,
+                "rest_endpoint": spec.rest_message.endpoint_url,
                 "authentication_type": spec.rest_message.authentication,
             },
         },
@@ -303,8 +303,8 @@ def lifecycle_webhook_servicenow_record_plan(
             },
             "fields": {
                 "function_name": spec.rest_message.method_name,
-                "http_method": spec.rest_message.http_method,
-                "content_type": spec.rest_message.content_type,
+                "rest_endpoint": spec.rest_message.endpoint_url,
+                "http_method": spec.rest_message.http_method.lower(),
             },
         },
         {
@@ -342,12 +342,43 @@ def apply_lifecycle_webhook_records(
         )
 
     upserted_records: list[dict[str, Any]] = []
-    for record in lifecycle_webhook_servicenow_record_plan(spec):
+    for record in _servicenow_apply_records(spec, rest_message_sys_id=None):
         result = client.upsert_table_record(
             table=str(record["table"]),
             lookup=record["lookup"],
             fields=record["fields"],
         )
+        if record["table"] == "sys_rest_message":
+            rest_message_sys_id = str(result.get("sys_id") or "")
+            upserted_records.append(
+                {
+                    "table": record["table"],
+                    "lookup": record["lookup"],
+                    "sys_id": result.get("sys_id"),
+                }
+            )
+            if rest_message_sys_id:
+                for method_record in _servicenow_apply_records(
+                    spec,
+                    rest_message_sys_id=rest_message_sys_id,
+                ):
+                    if method_record["table"] != "sys_rest_message_fn":
+                        continue
+                    method_result = client.upsert_table_record(
+                        table=str(method_record["table"]),
+                        lookup=method_record["lookup"],
+                        fields=method_record["fields"],
+                    )
+                    upserted_records.append(
+                        {
+                            "table": method_record["table"],
+                            "lookup": method_record["lookup"],
+                            "sys_id": method_result.get("sys_id"),
+                        }
+                    )
+            continue
+        if record["table"] == "sys_rest_message_fn":
+            continue
         upserted_records.append(
             {
                 "table": record["table"],
@@ -372,7 +403,7 @@ def verify_lifecycle_webhook_records(
     missing_records: list[str] = []
     mismatched_fields: dict[str, list[str]] = {}
 
-    for planned_record in lifecycle_webhook_servicenow_record_plan(spec):
+    for planned_record in _servicenow_verification_records(spec, rest_message_sys_id=None):
         table = str(planned_record["table"])
         actual_record = client.fetch_table_record(
             table=table,
@@ -383,15 +414,34 @@ def verify_lifecycle_webhook_records(
             continue
 
         expected_fields = planned_record["fields"]
-        mismatches = [
-            field_name
-            for field_name, expected_value in expected_fields.items()
-            if actual_record.get(field_name) != expected_value
-        ]
+        mismatches = _mismatched_fields(actual_record, expected_fields)
         if mismatches:
             mismatched_fields[table] = mismatches
         else:
             matched_records.append(table)
+
+        if table != "sys_rest_message":
+            continue
+        rest_message_sys_id = str(actual_record.get("sys_id") or "")
+        if not rest_message_sys_id:
+            missing_records.append("sys_rest_message_fn")
+            continue
+        for method_record in _servicenow_verification_records(
+            spec,
+            rest_message_sys_id=rest_message_sys_id,
+        ):
+            actual_method = client.fetch_table_record(
+                table=str(method_record["table"]),
+                lookup=method_record["lookup"],
+            )
+            if actual_method is None:
+                missing_records.append(str(method_record["table"]))
+                continue
+            method_mismatches = _mismatched_fields(actual_method, method_record["fields"])
+            if method_mismatches:
+                mismatched_fields[str(method_record["table"])] = method_mismatches
+            else:
+                matched_records.append(str(method_record["table"]))
 
     reasons: list[str] = []
     if missing_records:
@@ -405,6 +455,87 @@ def verify_lifecycle_webhook_records(
         mismatched_fields=mismatched_fields,
         reasons=reasons,
     )
+
+
+def _servicenow_apply_records(
+    spec: LifecycleWebhookBootstrapSpec,
+    *,
+    rest_message_sys_id: str | None,
+) -> list[dict[str, Any]]:
+    plan = lifecycle_webhook_servicenow_record_plan(spec)
+    records: list[dict[str, Any]] = []
+    for record in plan:
+        if record["table"] != "sys_rest_message_fn":
+            records.append(record)
+            continue
+        if rest_message_sys_id is None:
+            continue
+        records.append(
+            {
+                **record,
+                "lookup": {
+                    "rest_message": rest_message_sys_id,
+                    "function_name": spec.rest_message.method_name,
+                },
+                "fields": {
+                    **record["fields"],
+                    "rest_message": rest_message_sys_id,
+                },
+            }
+        )
+    return records
+
+
+def _servicenow_verification_records(
+    spec: LifecycleWebhookBootstrapSpec,
+    *,
+    rest_message_sys_id: str | None,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for record in lifecycle_webhook_servicenow_record_plan(spec):
+        if rest_message_sys_id is None and record["table"] == "sys_rest_message_fn":
+            continue
+        if rest_message_sys_id is not None and record["table"] != "sys_rest_message_fn":
+            continue
+        if record["table"] == "sys_rest_message_fn":
+            records.append(
+                {
+                    **record,
+                    "lookup": {
+                        "rest_message": rest_message_sys_id,
+                        "function_name": spec.rest_message.method_name,
+                    },
+                    "fields": {
+                        **record["fields"],
+                        "rest_message": rest_message_sys_id,
+                    },
+                }
+            )
+        else:
+            records.append(record)
+    return records
+
+
+def _mismatched_fields(
+    actual_record: dict[str, Any],
+    expected_fields: dict[str, Any],
+) -> list[str]:
+    return [
+        field_name
+        for field_name, expected_value in expected_fields.items()
+        if _normalise_servicenow_value(actual_record.get(field_name))
+        != _normalise_servicenow_value(expected_value)
+    ]
+
+
+def _normalise_servicenow_value(value: Any) -> Any:
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str) and value.lower() in {"true", "false"}:
+        return value.lower()
+    return value
 
 
 def _require_non_empty(field_name: str, value: str) -> None:

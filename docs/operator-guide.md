@@ -267,6 +267,8 @@ The artifact also includes `servicenow_records`, a deterministic plan for the Se
 
 Each record includes an `insert_or_update` operation, lookup keys, and the fields to write. The planning command does not apply those records. Live apply must use this record plan, require explicit confirmation, and write audit evidence before making ServiceNow changes.
 
+The bootstrap writes the public endpoint to ServiceNow's `rest_endpoint` fields and resolves the REST method's `rest_message` parent by the installed REST Message `sys_id`. Verification normalizes ServiceNow boolean strings and reference field `{value, link}` responses before comparing the installed records with the reviewed spec. The current PDI bootstrap uses `no_authentication` because inbound webhook authentication is not implemented yet; authenticated webhook protection is required before any non-PDI use.
+
 Use `apply-lifecycle-webhook` only after reviewing the generated lifecycle bootstrap artifact:
 
 ```bash
