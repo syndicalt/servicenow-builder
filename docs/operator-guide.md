@@ -167,6 +167,24 @@ Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject
 
 Optional values are `JEDI_WORKER_ID` and `JEDI_BUILD_CLAIM_APPLY`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
 
+## Container Runtime
+
+The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:
+
+- `postgres`: PostgreSQL operational state.
+- `api`: FastAPI lifecycle receiver.
+- `worker`: one-shot fulfillment worker process.
+
+Run the local stack with:
+
+```bash
+docker compose up --build
+```
+
+The compose file expects ServiceNow OAuth values in the host environment: `SERVICENOW_INSTANCE_URL`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET`. It sets `DATABASE_URL` to the local `postgres` service and writes audit output under `/app/artifacts/audit`.
+
+`JEDI_BUILD_CLAIM_APPLY` defaults to `false` in compose. Keep it false for local runtime verification until the story, webhook, and writeback behavior have been reviewed for the target PDI.
+
 ## Lifecycle Event Contract
 
 ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol, cast
@@ -54,8 +55,10 @@ StoreFactory = Callable[[str], RuntimeStore]
 DEFAULT_STORE_FACTORY = cast(StoreFactory, connect_operational_store)
 
 
-def load_runtime_settings(env_path: Path) -> RuntimeSettings:
-    values = load_dotenv_values(env_path)
+def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
+    values = dict(os.environ)
+    if env_path is not None and env_path.exists():
+        values.update(load_dotenv_values(env_path))
     required = [
         "DATABASE_URL",
         "SERVICENOW_INSTANCE_URL",
