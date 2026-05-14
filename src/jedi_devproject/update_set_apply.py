@@ -65,8 +65,13 @@ def apply_candidate_to_update_set(
 ) -> UpdateSetApplyResult:
     if request.candidate.status is not CandidateStatus.READY_FOR_REVIEW:
         raise ValueError("candidate is not ready for Update Set apply")
+    custom_dictionary_elements = _custom_dictionary_elements(request.candidate.changes)
     prepared_changes = [
-        _prepare_supported_change(client=client, change=change)
+        _prepare_supported_change(
+            client=client,
+            change=change,
+            custom_dictionary_elements=custom_dictionary_elements,
+        )
         for change in request.candidate.changes
     ]
 
@@ -94,7 +99,7 @@ def apply_candidate_to_update_set(
     if not customer_updates:
         raise RuntimeError(
             f"no customer updates captured for generated Update Set {request.update_set_sys_id}"
-    )
+        )
     return UpdateSetApplyResult(
         applied_change_count=len(prepared_changes),
         customer_update_count=len(customer_updates),
@@ -105,11 +110,16 @@ def _prepare_supported_change(
     *,
     client: UpdateSetApplyClient,
     change: CandidateChange,
+    custom_dictionary_elements: list[str],
 ) -> CandidateChange | PlannedFormLayoutChange:
     if change.table == "sys_dictionary":
         return _normalize_dictionary_change(change)
     if change.table == "sys_ui_form":
-        return _plan_form_layout_change(client=client, change=change)
+        return _plan_form_layout_change(
+            client=client,
+            change=change,
+            custom_dictionary_elements=custom_dictionary_elements,
+        )
     raise ValueError(f"unsupported update-set apply table: {change.table}")
 
 
@@ -127,9 +137,7 @@ def _normalize_dictionary_change(change: CandidateChange) -> CandidateChange:
         if str(fields.get(field_name) or "").strip() == ""
     ]
     if missing:
-        raise ValueError(
-            "sys_dictionary change missing required fields: " + ", ".join(missing)
-        )
+        raise ValueError("sys_dictionary change missing required fields: " + ", ".join(missing))
     return change.model_copy(update={"fields": _service_now_field_values(fields)})
 
 
@@ -137,12 +145,15 @@ def _plan_form_layout_change(
     *,
     client: UpdateSetApplyClient,
     change: CandidateChange,
+    custom_dictionary_elements: list[str],
 ) -> PlannedFormLayoutChange:
     if change.operation != "update":
         raise ValueError(f"unsupported update-set apply operation: {change.operation}")
     table_name = str(change.fields.get("table") or change.fields.get("name") or "")
-    element = str(change.fields.get("field") or change.fields.get("element") or "")
-    position = str(change.fields.get("position") or "")
+    element = _form_target_element(
+        change=change, custom_dictionary_elements=custom_dictionary_elements
+    )
+    position = str(change.fields.get("position") or "description")
     view = str(change.fields.get("view") or "default").strip().lower()
     if table_name != "rm_story":
         raise ValueError("sys_ui_form change must target rm_story")
@@ -192,6 +203,31 @@ def _plan_form_layout_change(
         position=insert_position,
         shifted_elements=shifted_elements,
     )
+
+
+def _custom_dictionary_elements(changes: list[CandidateChange]) -> list[str]:
+    elements: list[str] = []
+    for change in changes:
+        if change.table != "sys_dictionary":
+            continue
+        fields = dict(change.fields)
+        element = str(fields.get("element") or fields.get("column_name") or "")
+        if element.startswith("u_"):
+            elements.append(element)
+    return sorted(set(elements))
+
+
+def _form_target_element(
+    *,
+    change: CandidateChange,
+    custom_dictionary_elements: list[str],
+) -> str:
+    element = str(change.fields.get("field") or change.fields.get("element") or "")
+    if element:
+        return element
+    if len(custom_dictionary_elements) == 1:
+        return custom_dictionary_elements[0]
+    raise ValueError("sys_ui_form change must identify one custom field")
 
 
 def _service_now_field_values(fields: dict[str, Any]) -> dict[str, Any]:
