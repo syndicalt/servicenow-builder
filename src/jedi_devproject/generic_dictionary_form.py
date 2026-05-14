@@ -259,18 +259,24 @@ def _form_layout_payload(
 ) -> str:
     caption = _reference_value(section.get("caption"))
     view = section.get("view")
-    view_name = ""
+    view_name = _view_payload_value(view)
     if isinstance(view, dict):
-        view_name = str(view.get("display_value") or view.get("value") or "")
-        if view_name == "Default view":
-            view_name = ""
+        view_display = str(view.get("display_value") or view.get("value") or "")
+    else:
+        view_display = str(view or "")
+    section_update_name = f"sys_ui_section_{section_sys_id}"
     element_xml = "".join(
         '<sys_ui_element action="INSERT_OR_UPDATE">'
         f"<element>{escape(element['element'])}</element>"
         f"<position>{escape(element['position'])}</position>"
         f"<sys_id>{escape(element.get('sys_id', ''))}</sys_id>"
-        f'<sys_ui_section display_value="{escape(caption)}" name="{escape(table_name)}" '
-        f'view="{escape(view_name)}">{escape(section_sys_id)}</sys_ui_section>'
+        "<sys_mod_count>0</sys_mod_count>"
+        "<sys_ui_formatter/>"
+        f'<sys_ui_section caption="{escape(caption or "NULL")}" display_value="" '
+        f'name="{escape(table_name)}" sys_domain="global" view="{escape(view_display)}">'
+        f"{escape(section_sys_id)}</sys_ui_section>"
+        "<sys_user/>"
+        f"<type>{_element_type(element['element'])}</type>"
         "</sys_ui_element>"
         for element in elements
     )
@@ -278,11 +284,40 @@ def _form_layout_payload(
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<record_update>"
         f'<sys_ui_section caption="{escape(caption)}" section_id="{escape(section_sys_id)}" '
-        f'table="{escape(table_name)}" view="{escape(view_name)}">'
+        f'sys_domain="global" table="{escape(table_name)}" version="3" '
+        f'view="{escape(view_name)}">'
         f"{element_xml}"
+        '<sys_ui_section action="INSERT_OR_UPDATE">'
+        f"<caption>{escape(caption)}</caption>"
+        "<header>false</header>"
+        f"<name>{escape(table_name)}</name>"
+        "<roles/>"
+        "<sys_class_name>sys_ui_section</sys_class_name>"
+        "<sys_domain>global</sys_domain>"
+        f"<sys_id>{escape(section_sys_id)}</sys_id>"
+        '<sys_scope display_value="Global">global</sys_scope>'
+        f"<sys_update_name>{escape(section_update_name)}</sys_update_name>"
+        "<sys_user/>"
+        "<title>true</title>"
+        f'<view display_value="{escape(view_display)}" name="NULL">{escape(view_name)}</view>'
+        "<view_name/>"
+        "</sys_ui_section>"
         "</sys_ui_section>"
         "</record_update>"
     )
+
+
+def _view_payload_value(view: Any) -> str:
+    if isinstance(view, dict):
+        value = str(view.get("value") or "")
+        display = str(view.get("display_value") or "")
+        return "" if value.lower() in {"default", "default view"} else display or value
+    text = str(view or "")
+    return "" if text.lower() in {"default", "default view"} else text
+
+
+def _element_type(element: str) -> str:
+    return escape(element) if element.startswith(".") else ""
 
 
 def _target_name(intent: DictionaryFormIntent) -> str:

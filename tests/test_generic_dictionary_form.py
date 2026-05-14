@@ -70,6 +70,14 @@ def test_generic_dictionary_form_updates_incident_field_and_form() -> None:
     assert "<element>u_antics</element>" in updates[0]["payload"]
     assert "<max_length>4000</max_length>" in updates[0]["payload"]
     assert "<label>Antics</label>" in updates[1]["payload"]
+    assert updates[2]["type"] == "Form Layout"
+    assert '<sys_ui_section caption="" section_id="incident-main-section"' in updates[2]["payload"]
+    assert 'table="incident" version="3" view=""' in updates[2]["payload"]
+    assert '<sys_ui_section action="INSERT_OR_UPDATE">' in updates[2]["payload"]
+    assert (
+        '<sys_ui_section caption="NULL" display_value="" name="incident" '
+        'sys_domain="global" view="Default view">incident-main-section</sys_ui_section>'
+    ) in updates[2]["payload"]
     assert "<element>u_antics</element><position>3</position>" in updates[2]["payload"]
 
 
