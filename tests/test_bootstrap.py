@@ -287,6 +287,8 @@ def test_lifecycle_business_rule_spec_emits_ready_and_complete_events() -> None:
     assert "current.state == '1'" in spec.condition
     assert "previous.state == '-7'" in spec.condition
     assert "current.state == '3'" in spec.condition
+    assert "(previous.state == '-7' && current.state == '1')" in spec.condition
+    assert "(previous.state == '-7' && current.state == '-6')" in spec.condition
     assert "story_state_changed" in spec.script
     assert "servicenow-business-rule" in spec.script
     assert "jedi-devproject-lifecycle-integration" in spec.script
@@ -296,6 +298,8 @@ def test_lifecycle_business_rule_spec_emits_ready_and_complete_events() -> None:
     assert "currentStateLabel" in spec.script
     assert "Ready for Testing" in spec.script
     assert "Complete" in spec.script
+    assert "currentStateLabel = 'Ready'" in spec.script
+    assert "currentStateLabel = 'Draft'" in spec.script
     assert "https://sidecar.example.gov/lifecycle/events" not in spec.script
     assert "current.number.toString()" in spec.script
     assert "current.sys_id" not in spec.script

@@ -419,6 +419,117 @@ class PostgresOperationalStore:
             return None
         return FulfillmentJobRecord.model_validate(row)
 
+    def record_rework_requested_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+        target_state: str,
+    ) -> FulfillmentJobRecord | None:
+        now = _utc_now()
+        with self._connection.transaction():
+            row = self._connection.fetch_one(
+                """
+                WITH latest_story_job AS (
+                    SELECT job_id
+                    FROM fulfillment_jobs
+                    WHERE story_number = %s
+                    ORDER BY created_at DESC, job_id DESC
+                    LIMIT 1
+                    FOR UPDATE
+                ),
+                selected_job AS (
+                    SELECT job_id, event_id, story_number, status, attempt_count,
+                           created_at, updated_at, locked_by, locked_at, last_error
+                    FROM fulfillment_jobs
+                    WHERE job_id = (SELECT job_id FROM latest_story_job)
+                ),
+                inserted_job_event AS (
+                    INSERT INTO job_events (job_id, status, message, created_at)
+                    SELECT job_id, %s, %s, %s
+                    FROM selected_job
+                )
+                SELECT job_id, event_id, story_number, status, attempt_count,
+                       created_at, updated_at, locked_by, locked_at, last_error
+                FROM selected_job
+                """,
+                (
+                    story_number,
+                    "rework_requested",
+                    (
+                        f"Story returned to {target_state} from Ready for Testing "
+                        f"by lifecycle event {event_id}"
+                    ),
+                    now,
+                ),
+            )
+        if row is None:
+            return None
+        return FulfillmentJobRecord.model_validate(row)
+
+    def reject_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None:
+        now = _utc_now()
+        rejected_message = (
+            f"Story returned to Draft from Ready for Testing by lifecycle event {event_id}"
+        )
+        with self._connection.transaction():
+            row = self._connection.fetch_one(
+                """
+                WITH latest_story_job AS (
+                    SELECT job_id
+                    FROM fulfillment_jobs
+                    WHERE story_number = %s
+                    ORDER BY created_at DESC, job_id DESC
+                    LIMIT 1
+                    FOR UPDATE
+                ),
+                updated_job AS (
+                    UPDATE fulfillment_jobs
+                    SET status = 'rejected',
+                        updated_at = %s,
+                        locked_by = NULL,
+                        locked_at = NULL,
+                        last_error = %s
+                    FROM latest_story_job
+                    WHERE fulfillment_jobs.job_id = latest_story_job.job_id
+                    RETURNING fulfillment_jobs.job_id,
+                              fulfillment_jobs.event_id,
+                              fulfillment_jobs.story_number,
+                              fulfillment_jobs.status,
+                              fulfillment_jobs.attempt_count,
+                              fulfillment_jobs.created_at,
+                              fulfillment_jobs.updated_at,
+                              fulfillment_jobs.locked_by,
+                              fulfillment_jobs.locked_at,
+                              fulfillment_jobs.last_error
+                ),
+                inserted_job_event AS (
+                    INSERT INTO job_events (job_id, status, message, created_at)
+                    SELECT job_id, %s, %s, %s
+                    FROM updated_job
+                )
+                SELECT job_id, event_id, story_number, status, attempt_count,
+                       created_at, updated_at, locked_by, locked_at, last_error
+                FROM updated_job
+                """,
+                (
+                    story_number,
+                    now,
+                    rejected_message,
+                    "story_rejected",
+                    rejected_message,
+                    now,
+                ),
+            )
+        if row is None:
+            return None
+        return FulfillmentJobRecord.model_validate(row)
+
     def fail_fulfillment_job(
         self,
         *,

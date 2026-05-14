@@ -14,6 +14,8 @@ class FakeOperationalStore:
         self.recorded_events: list[LifecycleStateChangeEvent] = []
         self.enqueued_jobs: list[tuple[str, str]] = []
         self.closed_story_jobs: list[tuple[str, str]] = []
+        self.rework_story_jobs: list[tuple[str, str, str]] = []
+        self.rejected_story_jobs: list[tuple[str, str]] = []
 
     def record_lifecycle_event(
         self,
@@ -71,6 +73,47 @@ class FakeOperationalStore:
             last_error=None,
         )
 
+    def record_rework_requested_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+        target_state: str,
+    ) -> FulfillmentJobRecord | None:
+        self.rework_story_jobs.append((story_number, event_id, target_state))
+        return FulfillmentJobRecord(
+            job_id=f"job-prior-{story_number}",
+            event_id="evt-prior-ready",
+            story_number=story_number,
+            status="completed",
+            attempt_count=1,
+            created_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 14, 19, 10, tzinfo=UTC),
+            locked_by=None,
+            locked_at=None,
+            last_error=None,
+        )
+
+    def reject_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None:
+        self.rejected_story_jobs.append((story_number, event_id))
+        return FulfillmentJobRecord(
+            job_id=f"job-prior-{story_number}",
+            event_id="evt-prior-ready",
+            story_number=story_number,
+            status="rejected",
+            attempt_count=1,
+            created_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 14, 19, 12, tzinfo=UTC),
+            locked_by=None,
+            locked_at=None,
+            last_error="Story returned to Draft from Ready for Testing",
+        )
+
 
 def _ready_event_payload() -> dict[str, str]:
     return {
@@ -97,6 +140,32 @@ def _complete_event_payload() -> dict[str, str]:
             "current_state": "Complete",
             "occurred_at": "2026-05-14T18:45:00Z",
             "correlation_id": "STRY0010002-ReadyForTesting-Complete-20260514T184500Z",
+        }
+    )
+    return payload
+
+
+def _ready_rework_event_payload() -> dict[str, str]:
+    payload = _complete_event_payload()
+    payload.update(
+        {
+            "event_id": "evt-20260514-uat-rework",
+            "current_state": "Ready",
+            "occurred_at": "2026-05-14T19:10:00Z",
+            "correlation_id": "STRY0010002-ReadyForTesting-Ready-20260514T191000Z",
+        }
+    )
+    return payload
+
+
+def _draft_rejected_event_payload() -> dict[str, str]:
+    payload = _complete_event_payload()
+    payload.update(
+        {
+            "event_id": "evt-20260514-story-rejected",
+            "current_state": "Draft",
+            "occurred_at": "2026-05-14T19:12:00Z",
+            "correlation_id": "STRY0010002-ReadyForTesting-Draft-20260514T191200Z",
         }
     )
     return payload
@@ -142,6 +211,54 @@ def test_lifecycle_webhook_records_complete_event_and_closes_related_job() -> No
     assert [event.event_id for event in store.recorded_events] == ["evt-20260514-uat-complete"]
     assert store.enqueued_jobs == []
     assert store.closed_story_jobs == [("STRY0010002", "evt-20260514-uat-complete")]
+    assert store.rework_story_jobs == []
+    assert store.rejected_story_jobs == []
+
+
+def test_lifecycle_webhook_records_rework_event_without_enqueueing_build() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(create_lifecycle_api(store=store))
+
+    response = client.post("/lifecycle/events", json=_ready_rework_event_payload())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "accepted": True,
+        "event_id": "evt-20260514-uat-rework",
+        "story_number": "STRY0010002",
+        "should_evaluate": False,
+        "lifecycle_action": "rework_requested",
+        "job_id": "job-prior-STRY0010002",
+        "reasons": [],
+    }
+    assert [event.event_id for event in store.recorded_events] == ["evt-20260514-uat-rework"]
+    assert store.enqueued_jobs == []
+    assert store.closed_story_jobs == []
+    assert store.rework_story_jobs == [("STRY0010002", "evt-20260514-uat-rework", "Ready")]
+    assert store.rejected_story_jobs == []
+
+
+def test_lifecycle_webhook_records_story_rejected_reset_without_enqueueing_build() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(create_lifecycle_api(store=store))
+
+    response = client.post("/lifecycle/events", json=_draft_rejected_event_payload())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "accepted": True,
+        "event_id": "evt-20260514-story-rejected",
+        "story_number": "STRY0010002",
+        "should_evaluate": False,
+        "lifecycle_action": "story_rejected",
+        "job_id": "job-prior-STRY0010002",
+        "reasons": [],
+    }
+    assert [event.event_id for event in store.recorded_events] == ["evt-20260514-story-rejected"]
+    assert store.enqueued_jobs == []
+    assert store.closed_story_jobs == []
+    assert store.rework_story_jobs == []
+    assert store.rejected_story_jobs == [("STRY0010002", "evt-20260514-story-rejected")]
 
 
 def test_lifecycle_webhook_records_unsupported_transition_without_enqueueing() -> None:

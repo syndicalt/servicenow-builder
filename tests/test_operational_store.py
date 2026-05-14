@@ -298,6 +298,60 @@ def test_close_latest_fulfillment_job_for_story_records_uat_complete_event() -> 
     assert "STRY0010013" in executed_params
 
 
+def test_record_rework_requested_for_story_records_rework_event_without_reopening_job() -> None:
+    connection = ScriptedPostgresConnection(rows=[_job_row(status="completed", attempt_count=1)])
+    store = _store(connection)
+
+    job = store.record_rework_requested_for_story(
+        story_number="STRY0010013",
+        event_id="evt-uat-rework",
+        target_state="Ready",
+    )
+
+    executed_sql = connection.executed[0][0]
+    executed_params = connection.executed[0][1]
+    assert job is not None
+    assert job.status == "completed"
+    assert job.story_number == "STRY0010013"
+    assert "WHERE story_number = %s" in executed_sql
+    assert "ORDER BY created_at DESC, job_id DESC" in executed_sql
+    assert "INSERT INTO job_events" in executed_sql
+    assert "UPDATE fulfillment_jobs" not in executed_sql
+    assert "rework_requested" in executed_params
+    assert (
+        "Story returned to Ready from Ready for Testing by lifecycle event evt-uat-rework"
+        in executed_params
+    )
+    assert "STRY0010013" in executed_params
+
+
+def test_reject_latest_fulfillment_job_marks_rejected_without_deleting_artifacts() -> None:
+    rejected_row = _job_row(status="rejected", attempt_count=1)
+    rejected_row["last_error"] = "Story returned to Draft from Ready for Testing"
+    connection = ScriptedPostgresConnection(rows=[rejected_row])
+    store = _store(connection)
+
+    job = store.reject_latest_fulfillment_job_for_story(
+        story_number="STRY0010013",
+        event_id="evt-story-rejected",
+    )
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    executed_params = connection.executed[0][1]
+    assert job is not None
+    assert job.status == "rejected"
+    assert job.story_number == "STRY0010013"
+    assert "UPDATE fulfillment_jobs" in joined_sql
+    assert "status = 'rejected'" in joined_sql
+    assert "DELETE FROM artifact_refs" not in joined_sql
+    assert "DELETE FROM artifact_blobs" not in joined_sql
+    assert "story_rejected" in executed_params
+    assert (
+        "Story returned to Draft from Ready for Testing by lifecycle event evt-story-rejected"
+        in executed_params
+    )
+
+
 def test_fail_fulfillment_job_marks_failed_and_preserves_error() -> None:
     failed_row = _job_row(status="failed", attempt_count=1)
     failed_row["last_error"] = "provider unavailable"

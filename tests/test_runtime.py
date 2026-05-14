@@ -30,6 +30,8 @@ class FakeRuntimeStore:
         self.recorded_events: list[str] = []
         self.enqueued_jobs: list[tuple[str, str]] = []
         self.closed_story_jobs: list[tuple[str, str]] = []
+        self.rework_story_jobs: list[tuple[str, str, str]] = []
+        self.rejected_story_jobs: list[tuple[str, str]] = []
         self.completed_jobs: list[tuple[str, str]] = []
         self.failed_jobs: list[tuple[str, str]] = []
         self.artifact_refs: list[tuple[str, str, str, str]] = []
@@ -82,6 +84,29 @@ class FakeRuntimeStore:
         self.closed_story_jobs.append((story_number, event_id))
         return _job(event_id="evt-prior-ready", story_number=story_number).model_copy(
             update={"status": "completed"}
+        )
+
+    def record_rework_requested_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+        target_state: str,
+    ) -> FulfillmentJobRecord | None:
+        self.rework_story_jobs.append((story_number, event_id, target_state))
+        return _job(event_id="evt-prior-ready", story_number=story_number).model_copy(
+            update={"status": "completed"}
+        )
+
+    def reject_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None:
+        self.rejected_story_jobs.append((story_number, event_id))
+        return _job(event_id="evt-prior-ready", story_number=story_number).model_copy(
+            update={"status": "rejected"}
         )
 
     def claim_next_fulfillment_job(

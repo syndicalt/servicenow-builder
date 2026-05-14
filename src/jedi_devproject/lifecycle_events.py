@@ -89,6 +89,40 @@ def plan_story_ready_lifecycle_event(
             reasons=[],
         )
 
+    if (
+        event.event_type is LifecycleEventType.STORY_STATE_CHANGED
+        and event.table == "rm_story"
+        and event.previous_state == "Ready for Testing"
+        and event.current_state == "Ready"
+    ):
+        return StoryReadyLifecyclePlan(
+            should_evaluate=False,
+            lifecycle_action="rework_requested",
+            story_number=event.story_number,
+            from_state=event.previous_state,
+            current_state=event.current_state,
+            claim_state=None,
+            idempotency_key=event.event_id,
+            reasons=[],
+        )
+
+    if (
+        event.event_type is LifecycleEventType.STORY_STATE_CHANGED
+        and event.table == "rm_story"
+        and event.previous_state == "Ready for Testing"
+        and event.current_state == "Draft"
+    ):
+        return StoryReadyLifecyclePlan(
+            should_evaluate=False,
+            lifecycle_action="story_rejected",
+            story_number=event.story_number,
+            from_state=event.previous_state,
+            current_state=event.current_state,
+            claim_state=None,
+            idempotency_key=event.event_id,
+            reasons=[],
+        )
+
     return StoryReadyLifecyclePlan(
         should_evaluate=False,
         lifecycle_action=None,

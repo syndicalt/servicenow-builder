@@ -285,6 +285,14 @@ def build_lifecycle_business_rule_spec(
         assert complete_state_value is not None
         transition_conditions.append(
             f"(previous.state == {_js_string(ready_for_testing_state_value)} && "
+            f"current.state == {_js_string(ready_state_value)})"
+        )
+        transition_conditions.append(
+            f"(previous.state == {_js_string(ready_for_testing_state_value)} && "
+            f"current.state == {_js_string(draft_state_value)})"
+        )
+        transition_conditions.append(
+            f"(previous.state == {_js_string(ready_for_testing_state_value)} && "
             f"current.state == {_js_string(complete_state_value)})"
         )
 
@@ -292,6 +300,18 @@ def build_lifecycle_business_rule_spec(
     complete_label_branch = ""
     if complete_transition_enabled:
         complete_label_branch = f"""
+    }} else if (
+        previous.state == {_js_string(ready_for_testing_state_value or "")} &&
+        current.state == {_js_string(ready_state_value)}
+    ) {{
+        previousStateLabel = 'Ready for Testing';
+        currentStateLabel = 'Ready';
+    }} else if (
+        previous.state == {_js_string(ready_for_testing_state_value or "")} &&
+        current.state == {_js_string(draft_state_value)}
+    ) {{
+        previousStateLabel = 'Ready for Testing';
+        currentStateLabel = 'Draft';
     }} else if (
         previous.state == {_js_string(ready_for_testing_state_value or "")} &&
         current.state == {_js_string(complete_state_value or "")}

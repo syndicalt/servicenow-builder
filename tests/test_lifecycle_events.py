@@ -109,6 +109,62 @@ def test_ready_for_testing_to_complete_event_plans_story_closeout_without_build(
     assert plan.reasons == []
 
 
+def test_ready_for_testing_to_ready_plans_rework_without_build() -> None:
+    event = LifecycleStateChangeEvent.model_validate(
+        {
+            "event_id": "evt-20260514-rework-ready",
+            "event_type": LifecycleEventType.STORY_STATE_CHANGED,
+            "source": "servicenow-business-rule",
+            "table": "rm_story",
+            "story_number": "STRY0010002",
+            "previous_state": "Ready for Testing",
+            "current_state": "Ready",
+            "occurred_at": "2026-05-14T19:10:00Z",
+            "correlation_id": "STRY0010002-ReadyForTesting-Ready-20260514T191000Z",
+            "emitted_by": "jedi-devproject-lifecycle-integration",
+        }
+    )
+
+    plan = plan_story_ready_lifecycle_event(event)
+
+    assert plan.should_evaluate is False
+    assert plan.lifecycle_action == "rework_requested"
+    assert plan.story_number == "STRY0010002"
+    assert plan.from_state == "Ready for Testing"
+    assert plan.current_state == "Ready"
+    assert plan.claim_state is None
+    assert plan.idempotency_key == event.event_id
+    assert plan.reasons == []
+
+
+def test_ready_for_testing_to_draft_plans_story_rejected_reset_without_build() -> None:
+    event = LifecycleStateChangeEvent.model_validate(
+        {
+            "event_id": "evt-20260514-story-rejected",
+            "event_type": LifecycleEventType.STORY_STATE_CHANGED,
+            "source": "servicenow-business-rule",
+            "table": "rm_story",
+            "story_number": "STRY0010002",
+            "previous_state": "Ready for Testing",
+            "current_state": "Draft",
+            "occurred_at": "2026-05-14T19:12:00Z",
+            "correlation_id": "STRY0010002-ReadyForTesting-Draft-20260514T191200Z",
+            "emitted_by": "jedi-devproject-lifecycle-integration",
+        }
+    )
+
+    plan = plan_story_ready_lifecycle_event(event)
+
+    assert plan.should_evaluate is False
+    assert plan.lifecycle_action == "story_rejected"
+    assert plan.story_number == "STRY0010002"
+    assert plan.from_state == "Ready for Testing"
+    assert plan.current_state == "Draft"
+    assert plan.claim_state is None
+    assert plan.idempotency_key == "evt-20260514-story-rejected"
+    assert plan.reasons == []
+
+
 def test_lifecycle_event_requires_idempotency_and_source_context() -> None:
     with pytest.raises(ValidationError) as exc:
         LifecycleStateChangeEvent.model_validate(

@@ -34,6 +34,21 @@ class LifecycleEventStore(Protocol):
         event_id: str,
     ) -> FulfillmentJobRecord | None: ...
 
+    def record_rework_requested_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+        target_state: str,
+    ) -> FulfillmentJobRecord | None: ...
+
+    def reject_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None: ...
+
 
 class LifecycleWebhookResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -81,6 +96,19 @@ def create_lifecycle_api(*, store: LifecycleEventStore) -> FastAPI:
                 event_id=event.event_id,
             )
             job_id = closeout_job.job_id if closeout_job is not None else None
+        elif plan.lifecycle_action == "rework_requested":
+            rework_job = store.record_rework_requested_for_story(
+                story_number=event.story_number,
+                event_id=event.event_id,
+                target_state=event.current_state,
+            )
+            job_id = rework_job.job_id if rework_job is not None else None
+        elif plan.lifecycle_action == "story_rejected":
+            rejected_job = store.reject_latest_fulfillment_job_for_story(
+                story_number=event.story_number,
+                event_id=event.event_id,
+            )
+            job_id = rejected_job.job_id if rejected_job is not None else None
 
         return LifecycleWebhookResponse(
             accepted=True,
