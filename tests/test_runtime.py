@@ -719,10 +719,41 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
                         '{"changes":[{"table":"sys_dictionary","operation":"insert",'
                         '"fields":[{"name":"name","value":"rm_story"},'
                         '{"name":"element","value":"u_ai_review_notes"}],'
+                        '"sys_id":null,"rationale":null},'
+                        '{"table":"sys_ui_form","operation":"update",'
+                        '"fields":[{"name":"name","value":"rm_story"},'
+                        '{"name":"field_order","value":"u_ai_review_notes"},'
+                        '{"name":"placement_anchor","value":"description"},'
+                        '{"name":"placement_position","value":"below"}],'
                         '"sys_id":null,"rationale":null}],'
                         '"test_plan":["Confirm the field exists."],'
                         '"rollback_notes":["Remove the field."]}'
                     )
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "rm-story-main-section",
+                            "name": "rm_story",
+                            "caption": "",
+                            "view": {"display_value": "Default view", "value": "default"},
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "description-element",
+                            "element": "description",
+                            "position": "2",
+                        }
+                    ]
                 },
             ),
             HttpResponse(
@@ -779,6 +810,8 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "POST",
         "GET",
+        "GET",
+        "GET",
         "POST",
         "GET",
         "GET",
@@ -799,19 +832,25 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
     assert transport.requests[10].url == "https://api.openai.com/v1/responses"
     assert transport.requests[10].headers["Authorization"] == "Bearer openai-key"
     assert "openai-key" not in repr(transport.requests[10].body)
-    assert transport.requests[11].url.endswith("/api/now/table/sys_ws_operation")
-    assert transport.requests[11].params["sysparm_query"] == (
+    assert transport.requests[11].url.endswith("/api/now/table/sys_ui_section")
+    assert transport.requests[11].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[12].url.endswith("/api/now/table/sys_ui_element")
+    assert transport.requests[12].params["sysparm_query"] == (
+        "name=rm_story^sys_ui_section=rm-story-main-section"
+    )
+    assert transport.requests[13].url.endswith("/api/now/table/sys_ws_operation")
+    assert transport.requests[13].params["sysparm_query"] == (
         "web_service_definition.service_id=jedi_update_set_import"
         "^name=import_update_set_xml^active=true"
     )
-    assert transport.requests[12].url.endswith("/api/1860704/jedi_update_set_import")
+    assert transport.requests[14].url.endswith("/api/1860704/jedi_update_set_import")
     assert (
-        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[12].body["update_set_xml"]
+        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[14].body["update_set_xml"]
     )
-    assert transport.requests[13].url.endswith("/api/now/table/sys_remote_update_set")
-    assert transport.requests[13].params["sysparm_query"].startswith("remote_sys_id=")
-    assert transport.requests[14].url.endswith("/api/now/table/sys_choice")
-    assert transport.requests[14].params["sysparm_query"] == (
+    assert transport.requests[15].url.endswith("/api/now/table/sys_remote_update_set")
+    assert transport.requests[15].params["sysparm_query"].startswith("remote_sys_id=")
+    assert transport.requests[16].url.endswith("/api/now/table/sys_choice")
+    assert transport.requests[16].params["sysparm_query"] == (
         "name=rm_story^element=state^inactive=false"
     )
     assert store.artifact_refs == []

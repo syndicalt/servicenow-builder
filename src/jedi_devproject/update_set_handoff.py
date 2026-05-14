@@ -7,6 +7,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
+from jedi_devproject.generic_dictionary_form import (
+    DictionaryFormIntent,
+    dictionary_form_customer_updates,
+)
 from jedi_devproject.models import CandidateChange, CandidateStatus, UpdateSetCandidate
 from jedi_devproject.servicenow import StoryStateChoice
 from jedi_devproject.writeback import build_state_mapping_from_choices
@@ -237,235 +241,126 @@ def _customer_updates_for_candidate(
     candidate: UpdateSetCandidate,
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    updates: list[dict[str, Any]] = []
-    for change in candidate.changes:
-        if change.table == "sys_dictionary":
-            updates.extend(
-                _dictionary_customer_updates(
-                    change=change,
-                    remote_update_set_sys_id=remote_update_set_sys_id,
-                )
-            )
-        elif change.table == "sys_ui_form":
-            updates.extend(
-                _form_layout_customer_updates(
-                    client=client,
-                    change=change,
-                    remote_update_set_sys_id=remote_update_set_sys_id,
-                )
-            )
-        else:
-            raise ValueError(f"unsupported retrieved Update Set table: {change.table}")
+    unsupported_tables = {
+        change.table
+        for change in candidate.changes
+        if change.table not in {"sys_dictionary", "sys_ui_form"}
+    }
+    if unsupported_tables:
+        raise ValueError(f"unsupported retrieved Update Set table: {sorted(unsupported_tables)[0]}")
+    intent = _dictionary_form_intent(candidate.changes)
+    updates = dictionary_form_customer_updates(
+        client=client,
+        intent=intent,
+        remote_update_set_sys_id=remote_update_set_sys_id,
+    )
     if not updates:
         raise ValueError("retrieved Update Set handoff requires at least one customer update")
     return updates
 
 
-def _form_layout_customer_updates(
-    *,
-    client: UpdateSetHandoffClient,
-    change: CandidateChange,
-    remote_update_set_sys_id: str,
-) -> list[dict[str, Any]]:
-    table_name = _story_table_name(change.fields)
-    element = str(
-        change.fields.get("field")
-        or change.fields.get("element")
-        or change.fields.get("field_name")
-        or _custom_field_value(change.fields.get("field_order"))
-        or "u_ai_review_notes"
+def _dictionary_form_intent(changes: list[CandidateChange]) -> DictionaryFormIntent:
+    dictionary_change = next(
+        (change for change in changes if change.table == "sys_dictionary"),
+        None,
     )
-    if table_name != "rm_story" or not element.startswith("u_"):
-        raise ValueError("sys_ui_form retrieved handoff must target an rm_story custom field")
-    sections = client.fetch_table_records(
-        table="sys_ui_section",
-        lookup={"name": table_name},
-        fields=["sys_id", "name", "caption", "view", "sys_user"],
-        limit=100,
-    )
-    updates: list[dict[str, Any]] = []
-    for section in sections:
-        if not _is_global_main_story_view_section(section):
-            continue
-        section_sys_id = _reference_value(section.get("sys_id"))
-        elements = client.fetch_table_records(
-            table="sys_ui_element",
-            lookup={"name": table_name, "sys_ui_section": section_sys_id},
-            fields=["sys_id", "element", "position"],
-            limit=200,
-        )
-        description_positions = [
-            _record_position(record)
-            for record in elements
-            if str(record.get("element") or "") == "description"
-        ]
-        if len(description_positions) != 1:
-            raise ValueError("description form element lookup was ambiguous")
-        insert_position = description_positions[0] + 1
-        planned_elements = _form_elements_with_inserted_field(
-            elements=elements,
-            field_element=element,
-            insert_position=insert_position,
-        )
-        update_name = f"sys_ui_section_{section_sys_id}"
-        updates.append(
-            {
-                "name": update_name,
-                "remote_update_set": remote_update_set_sys_id,
-                "action": "INSERT_OR_UPDATE",
-                "type": "Form Layout",
-                "target_name": "Story",
-                "payload": _form_layout_payload(
-                    table_name=table_name,
-                    section_sys_id=section_sys_id,
-                    section=section,
-                    elements=planned_elements,
-                ),
-                "application": "global",
-            }
-        )
-    if not updates:
-        raise ValueError("sys_ui_form retrieved handoff found no rm_story main sections")
-    return updates
+    if dictionary_change is None:
+        raise ValueError("dictionary/form handoff requires a sys_dictionary change")
+    form_change = next((change for change in changes if change.table == "sys_ui_form"), None)
+    if form_change is None:
+        raise ValueError("dictionary/form handoff requires a sys_ui_form change")
 
+    dictionary_fields = dict(dictionary_change.fields)
+    form_fields = dict(form_change.fields)
+    target_table = _story_table_name(dictionary_fields)
+    form_table = _form_table_name(form_fields, default=target_table)
+    if form_table != target_table:
+        raise ValueError("dictionary/form handoff changes must target the same table")
 
-def _is_global_main_story_view_section(section: dict[str, Any]) -> bool:
-    if _reference_value(section.get("sys_user")).strip() != "":
-        return False
-    if _reference_value(section.get("caption")).strip() != "":
-        return False
-    view = section.get("view")
-    if isinstance(view, dict):
-        values = {
-            str(view.get("display_value") or "").strip().lower(),
-            str(view.get("value") or "").strip().lower(),
-        }
-    else:
-        values = {str(view or "").strip().lower()}
-    return bool(values.intersection({"", "default", "default view", "scrum"}))
-
-
-def _form_elements_with_inserted_field(
-    *,
-    elements: list[dict[str, Any]],
-    field_element: str,
-    insert_position: int,
-) -> list[dict[str, str]]:
-    planned: list[dict[str, str]] = []
-    inserted = False
-    for record in sorted(elements, key=_record_position):
-        element = str(record.get("element") or "")
-        if element == field_element:
-            continue
-        position = _record_position(record)
-        if not inserted and position >= insert_position:
-            planned.append({"element": field_element, "position": str(insert_position)})
-            inserted = True
-        planned.append(
-            {
-                "sys_id": _reference_value(record.get("sys_id")),
-                "element": element,
-                "position": str(position + 1 if position >= insert_position else position),
-            }
-        )
-    if not inserted:
-        planned.append({"element": field_element, "position": str(insert_position)})
-    return planned
-
-
-def _form_layout_payload(
-    *,
-    table_name: str,
-    section_sys_id: str,
-    section: dict[str, Any],
-    elements: list[dict[str, str]],
-) -> str:
-    caption = _reference_value(section.get("caption"))
-    view = section.get("view")
-    view_name = ""
-    if isinstance(view, dict):
-        view_name = str(view.get("display_value") or view.get("value") or "")
-        if view_name == "Default view":
-            view_name = ""
-    element_xml = "".join(
-        '<sys_ui_element action="INSERT_OR_UPDATE">'
-        f"<element>{escape(element['element'])}</element>"
-        f"<position>{escape(element['position'])}</position>"
-        f"<sys_id>{escape(element.get('sys_id', ''))}</sys_id>"
-        f'<sys_ui_section display_value="{escape(caption)}" name="{escape(table_name)}" '
-        f'view="{escape(view_name)}">{escape(section_sys_id)}</sys_ui_section>'
-        "</sys_ui_element>"
-        for element in elements
-    )
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        f'<sys_ui_section caption="{escape(caption)}" section_id="{escape(section_sys_id)}" '
-        f'table="{escape(table_name)}" view="{escape(view_name)}">'
-        f"{element_xml}"
-        "</sys_ui_section>"
-        "</record_update>"
-    )
-
-
-def _dictionary_customer_updates(
-    *,
-    change: CandidateChange,
-    remote_update_set_sys_id: str,
-) -> list[dict[str, Any]]:
-    fields = dict(change.fields)
-    table_name = _story_table_name(fields)
-    element = str(
-        fields.get("element")
-        or fields.get("field_name")
-        or fields.get("column_name")
-        or _custom_field_value(fields.get("name"))
+    field_name = str(
+        dictionary_fields.get("element")
+        or dictionary_fields.get("field_name")
+        or dictionary_fields.get("column_name")
+        or _custom_field_value(dictionary_fields.get("name"))
+        or _custom_field_value(form_fields.get("field_order"))
+        or form_fields.get("field")
+        or form_fields.get("element")
+        or form_fields.get("field_name")
         or ""
     )
-    label = str(
-        fields.get("column_label") or fields.get("field_label") or fields.get("label") or ""
+    field_label = str(
+        dictionary_fields.get("column_label")
+        or dictionary_fields.get("field_label")
+        or dictionary_fields.get("label")
+        or ""
     )
-    if element == "u_ai_review_notes" and label.strip() == "":
-        label = "AI Review Notes"
-    internal_type = str(fields.get("internal_type") or fields.get("type") or "string")
-    max_length = str(fields.get("max_length") or "8000")
-    mandatory = _bool_text(fields.get("mandatory"))
-    if table_name.strip() == "" or element.strip() == "" or label.strip() == "":
+    if field_name == "u_ai_review_notes" and field_label.strip() == "":
+        field_label = "AI Review Notes"
+    field_type = str(
+        dictionary_fields.get("internal_type") or dictionary_fields.get("type") or "string"
+    )
+    if target_table.strip() == "" or field_name.strip() == "" or field_label.strip() == "":
         raise ValueError("sys_dictionary change missing required retrieved update fields")
-    dictionary_name = f"sys_dictionary_{table_name}_{element}"
-    documentation_name = f"sys_documentation_{table_name}_{element}_en"
-    target_name = f"{_table_label(table_name)}.{label}"
-    return [
-        {
-            "name": dictionary_name,
-            "remote_update_set": remote_update_set_sys_id,
-            "action": "INSERT_OR_UPDATE",
-            "type": "Dictionary",
-            "target_name": target_name,
-            "payload": _dictionary_payload(
-                table_name=table_name,
-                element=element,
-                label=label,
-                internal_type=internal_type,
-                max_length=max_length,
-                mandatory=mandatory,
-            ),
-            "application": "global",
-        },
-        {
-            "name": documentation_name,
-            "remote_update_set": remote_update_set_sys_id,
-            "action": "INSERT_OR_UPDATE",
-            "type": "Field Label",
-            "target_name": target_name,
-            "payload": _documentation_payload(
-                table_name=table_name,
-                element=element,
-                label=label,
-            ),
-            "application": "global",
-        },
-    ]
+
+    return DictionaryFormIntent(
+        target_table=target_table,
+        field_label=field_label,
+        field_name=field_name,
+        field_type=field_type,
+        max_length=_optional_int(dictionary_fields.get("max_length")),
+        mandatory=_bool_value(dictionary_fields.get("mandatory")),
+        default_value=str(dictionary_fields.get("default_value") or ""),
+        placement_anchor=_placement_anchor(form_fields),
+        placement_position=_placement_position(form_fields),
+    )
+
+
+def _form_table_name(fields: dict[str, Any], *, default: str) -> str:
+    raw_table = (
+        fields.get("table")
+        or fields.get("table_name")
+        or fields.get("form_name")
+        or fields.get("name")
+    )
+    if raw_table:
+        text = str(raw_table)
+        if not text.startswith("u_"):
+            return text
+    return default
+
+
+def _placement_anchor(fields: dict[str, Any]) -> str | None:
+    explicit_anchor = fields.get("placement_anchor")
+    if explicit_anchor:
+        return str(explicit_anchor)
+    position_hint = str(fields.get("position_hint") or "").strip().lower()
+    if "description" in position_hint:
+        return "description"
+    field_order = str(fields.get("field_order") or "").strip().lower()
+    if field_order == "after_description":
+        return "description"
+    return None
+
+
+def _placement_position(fields: dict[str, Any]) -> str:
+    explicit_position = str(fields.get("placement_position") or "").strip().lower()
+    if explicit_position in {"above", "below", "end"}:
+        return explicit_position
+    position_hint = str(fields.get("position_hint") or "").strip().lower()
+    if "above" in position_hint:
+        return "above"
+    if "end" in position_hint:
+        return "end"
+    return "below"
+
+
+def _optional_int(value: Any) -> int | None:
+    text = str(value or "").strip()
+    return int(text) if text.isdigit() else None
+
+
+def _bool_value(value: Any) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes"}
 
 
 def _story_table_name(fields: dict[str, Any]) -> str:
@@ -481,80 +376,6 @@ def _story_table_name(fields: dict[str, Any]) -> str:
 def _custom_field_value(value: Any) -> str:
     text = str(value or "").strip()
     return text if text.startswith("u_") else ""
-
-
-def _dictionary_payload(
-    *,
-    table_name: str,
-    element: str,
-    label: str,
-    internal_type: str,
-    max_length: str,
-    mandatory: str,
-) -> str:
-    update_name = f"sys_dictionary_{table_name}_{element}"
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        f'<sys_dictionary action="INSERT_OR_UPDATE" element="{escape(element)}" '
-        f'table="{escape(table_name)}">'
-        "<active>true</active>"
-        f"<column_label>{escape(label)}</column_label>"
-        f"<element>{escape(element)}</element>"
-        f'<internal_type display_value="{escape(internal_type.title())}">'
-        f"{escape(internal_type)}</internal_type>"
-        f"<mandatory>{mandatory}</mandatory>"
-        f"<max_length>{escape(max_length)}</max_length>"
-        f"<name>{escape(table_name)}</name>"
-        "<read_only>false</read_only>"
-        "<sys_class_name>sys_dictionary</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        "</sys_dictionary>"
-        "</record_update>"
-    )
-
-
-def _documentation_payload(*, table_name: str, element: str, label: str) -> str:
-    update_name = f"sys_documentation_{table_name}_{element}_en"
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        f'<sys_documentation element="{escape(element)}" label="{escape(label)}" '
-        f'language="en" table="{escape(table_name)}">'
-        '<sys_documentation action="INSERT_OR_UPDATE">'
-        f"<element>{escape(element)}</element>"
-        f"<label>{escape(label)}</label>"
-        "<language>en</language>"
-        f"<name>{escape(table_name)}</name>"
-        f"<plural>{escape(label)}</plural>"
-        "<sys_class_name>sys_documentation</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        "</sys_documentation>"
-        "</sys_documentation>"
-        "</record_update>"
-    )
-
-
-def _bool_text(value: Any) -> str:
-    return "true" if str(value).strip().lower() in {"1", "true", "yes"} else "false"
-
-
-def _table_label(table_name: str) -> str:
-    if table_name == "rm_story":
-        return "Story"
-    return table_name
-
-
-def _reference_value(value: Any) -> str:
-    if isinstance(value, dict):
-        return str(value.get("value") or "")
-    return str(value or "")
-
-
-def _record_position(record: dict[str, Any]) -> int:
-    return int(str(record.get("position") or "0"))
 
 
 def _change_summary_lines(candidate: UpdateSetCandidate) -> list[str]:

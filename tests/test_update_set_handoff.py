@@ -150,7 +150,18 @@ def _candidate() -> UpdateSetCandidate:
                     "column_label": "AI Review Notes",
                 },
                 rationale="Add the requested review notes field.",
-            )
+            ),
+            CandidateChange(
+                table="sys_ui_form",
+                operation="update",
+                fields={
+                    "name": "rm_story",
+                    "field_order": "u_ai_review_notes",
+                    "placement_anchor": "description",
+                    "placement_position": "below",
+                },
+                rationale="Place the requested field on the Story form.",
+            ),
         ],
         reviewer_notes=["Confirm the field exists."],
         artifact_hash="a" * 64,
@@ -158,23 +169,7 @@ def _candidate() -> UpdateSetCandidate:
 
 
 def _dictionary_form_candidate() -> UpdateSetCandidate:
-    return _candidate().model_copy(
-        update={
-            "changes": [
-                *_candidate().changes,
-                CandidateChange(
-                    table="sys_ui_form",
-                    operation="update",
-                    fields={
-                        "table": "rm_story",
-                        "field": "u_ai_review_notes",
-                        "position_hint": "below Description",
-                    },
-                    rationale="Place the requested field on the Story form.",
-                ),
-            ]
-        }
-    )
+    return _candidate()
 
 
 def _aliased_dictionary_form_candidate() -> UpdateSetCandidate:
@@ -400,6 +395,89 @@ def test_create_update_set_handoff_normalizes_minimal_model_shape() -> None:
     assert "sys_ui_section_default-main-section-sys-id" in imported_xml
 
 
+def test_create_update_set_handoff_accepts_table_aliases_and_position_hints() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "table": "rm_story",
+                        "field_name": "u_alias_field",
+                        "field_label": "Alias Field",
+                        "type": "string",
+                        "mandatory": "true",
+                    },
+                    rationale="Create the alias field.",
+                ),
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "table_name": "rm_story",
+                        "field": "u_alias_field",
+                        "position_hint": "above Description",
+                    },
+                    rationale="Place the alias field above Description.",
+                ),
+            ]
+        }
+    )
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/31",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_dictionary_rm_story_u_alias_field" in imported_xml
+    assert "<mandatory>true</mandatory>" in imported_xml
+    assert "<element>u_alias_field</element><position>4</position>" in imported_xml
+
+
+def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                *_candidate().changes,
+                CandidateChange(
+                    table="sys_script_include",
+                    operation="insert",
+                    fields={"name": "BadIdea"},
+                    rationale="Unsupported script change.",
+                ),
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/32",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "unsupported retrieved Update Set table: sys_script_include" in str(exc)
+    else:
+        raise AssertionError("unsupported candidate table was accepted")
+
+    assert client.imports == []
+
+
 def test_create_update_set_handoff_rejects_non_reviewable_candidate() -> None:
     client = FakeUpdateSetClient()
     candidate = _candidate().model_copy(update={"status": CandidateStatus.REJECTED})
@@ -421,4 +499,108 @@ def test_create_update_set_handoff_rejects_non_reviewable_candidate() -> None:
         raise AssertionError("rejected candidate was handed off")
 
     assert client.upserts == []
+    assert client.story_updates == []
+
+
+def test_create_update_set_handoff_requires_dictionary_and_form_changes() -> None:
+    client = FakeUpdateSetClient()
+    dictionary_only = _candidate().model_copy(update={"changes": [_candidate().changes[0]]})
+    form_only = _candidate().model_copy(update={"changes": [_candidate().changes[1]]})
+
+    for candidate, expected_message in [
+        (dictionary_only, "dictionary/form handoff requires a sys_ui_form change"),
+        (form_only, "dictionary/form handoff requires a sys_dictionary change"),
+    ]:
+        try:
+            create_update_set_handoff(
+                client=client,
+                request=UpdateSetHandoffRequest(
+                    story_sys_id="story-sys-id",
+                    story_number="STRY0010013",
+                    candidate=candidate,
+                    candidate_artifact_ref="db://artifact_blobs/2",
+                    instance_url="https://dev205693.service-now.com",
+                ),
+            )
+        except ValueError as exc:
+            assert expected_message in str(exc)
+        else:
+            raise AssertionError("incomplete dictionary/form candidate was handed off")
+
+    assert client.imports == []
+    assert client.story_updates == []
+
+
+def test_create_update_set_handoff_rejects_missing_dictionary_required_fields() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={"name": "rm_story", "element": "u_missing_label"},
+                    rationale="Missing label.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/33",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "sys_dictionary change missing required retrieved update fields" in str(exc)
+    else:
+        raise AssertionError("dictionary change with missing required fields was accepted")
+
+    assert client.imports == []
+
+
+def test_create_update_set_handoff_rejects_mismatched_dictionary_and_form_tables() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                _candidate().changes[0],
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "name": "incident",
+                        "field_order": "u_ai_review_notes",
+                        "placement_anchor": "description",
+                    },
+                    rationale="Wrong form target.",
+                ),
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/2",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "dictionary/form handoff changes must target the same table" in str(exc)
+    else:
+        raise AssertionError("mismatched dictionary/form tables were accepted")
+
+    assert client.imports == []
     assert client.story_updates == []

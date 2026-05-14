@@ -162,7 +162,17 @@ class RecordingModelProvider:
                         "column_label": "AI Review Notes",
                         "internal_type": "journal_input",
                     },
-                }
+                },
+                {
+                    "table": "sys_ui_form",
+                    "operation": "update",
+                    "fields": {
+                        "name": "rm_story",
+                        "field_order": "u_ai_review_notes",
+                        "placement_anchor": "description",
+                        "placement_position": "below",
+                    },
+                },
             ],
             "test_plan": ["Confirm AI Review Notes is available for review notes."],
             "rollback_notes": ["Remove u_ai_review_notes from rm_story."],
