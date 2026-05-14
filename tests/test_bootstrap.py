@@ -17,6 +17,7 @@ class FakeBootstrapClient:
     def __init__(self, fields: list[StoryDictionaryField]) -> None:
         self.fields = fields
         self.created_fields: list[dict[str, object]] = []
+        self.upserted_records: list[dict[str, object]] = []
 
     def fetch_story_dictionary_fields(self) -> list[StoryDictionaryField]:
         return self.fields
@@ -28,6 +29,7 @@ class FakeBootstrapClient:
         column_label: str,
         internal_type: str,
         max_length: int | None,
+        read_only: bool,
     ) -> dict[str, object]:
         self.created_fields.append(
             {
@@ -35,9 +37,20 @@ class FakeBootstrapClient:
                 "column_label": column_label,
                 "internal_type": internal_type,
                 "max_length": max_length,
+                "read_only": read_only,
             }
         )
         return {"element": element}
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, object],
+    ) -> dict[str, object]:
+        self.upserted_records.append({"table": table, "lookup": lookup, "fields": fields})
+        return {"sys_id": f"{table}-sys-id"}
 
 
 class FakeLifecycleWebhookClient:
@@ -89,11 +102,18 @@ def test_bootstrap_plan_only_includes_missing_custom_writeback_fields() -> None:
     )
 
     assert plan.table == "rm_story"
-    assert plan.missing_fields == ["u_ai_build_reference", "u_ai_candidate_artifact"]
-    assert [field.element for field in plan.fields_to_create] == [
-        "u_ai_build_reference",
-        "u_ai_candidate_artifact",
+    assert plan.missing_fields == [
+        "u_ai_handoff_type",
+        "u_ai_handoff_reference",
+        "u_ai_artifact_reference",
     ]
+    assert [field.element for field in plan.fields_to_create] == [
+        "u_ai_handoff_type",
+        "u_ai_handoff_reference",
+        "u_ai_artifact_reference",
+    ]
+    assert all(field.read_only for field in plan.fields_to_create)
+    assert plan.fields_to_update_read_only == ["u_ai_status"]
     assert "state" not in [field.element for field in plan.fields_to_create]
     assert plan.requires_apply_confirmation is True
     assert plan.form_layout_changes == []
@@ -107,24 +127,35 @@ def test_bootstrap_plan_is_noop_when_custom_fields_exist() -> None:
                 column_label="AI Status",
                 internal_type="string",
                 active=True,
+                read_only=True,
             ),
             StoryDictionaryField(
-                element="u_ai_build_reference",
-                column_label="AI Build Reference",
+                element="u_ai_handoff_type",
+                column_label="AI Handoff Type",
                 internal_type="string",
                 active=True,
+                read_only=True,
             ),
             StoryDictionaryField(
-                element="u_ai_candidate_artifact",
-                column_label="AI Candidate Artifact",
+                element="u_ai_handoff_reference",
+                column_label="AI Handoff Reference",
                 internal_type="string",
                 active=True,
+                read_only=True,
+            ),
+            StoryDictionaryField(
+                element="u_ai_artifact_reference",
+                column_label="AI Artifact Reference",
+                internal_type="string",
+                active=True,
+                read_only=True,
             ),
         ]
     )
 
     assert plan.missing_fields == []
     assert plan.fields_to_create == []
+    assert plan.fields_to_update_read_only == []
     assert plan.ready is True
 
 
@@ -139,8 +170,10 @@ def test_apply_bootstrap_fields_requires_explicit_confirmation() -> None:
 
     assert result.applied is False
     assert result.created_fields == []
+    assert result.updated_read_only_fields == []
     assert result.reasons == ["bootstrap_confirmation_required"]
     assert client.created_fields == []
+    assert client.upserted_records == []
 
 
 def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
@@ -151,6 +184,7 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
                 column_label="AI Status",
                 internal_type="string",
                 active=True,
+                read_only=True,
             )
         ]
     )
@@ -162,13 +196,74 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
     )
 
     assert result.applied is True
-    assert result.created_fields == ["u_ai_build_reference", "u_ai_candidate_artifact"]
-    assert [field["element"] for field in client.created_fields] == [
-        "u_ai_build_reference",
-        "u_ai_candidate_artifact",
+    assert result.created_fields == [
+        "u_ai_handoff_type",
+        "u_ai_handoff_reference",
+        "u_ai_artifact_reference",
     ]
+    assert [field["element"] for field in client.created_fields] == [
+        "u_ai_handoff_type",
+        "u_ai_handoff_reference",
+        "u_ai_artifact_reference",
+    ]
+    assert all(field["read_only"] is True for field in client.created_fields)
+    assert result.updated_read_only_fields == []
+    assert client.upserted_records == []
     assert "state" not in result.created_fields
     assert result.form_layout_changes == []
+
+
+def test_apply_bootstrap_fields_patches_existing_operational_fields_read_only() -> None:
+    client = FakeBootstrapClient(
+        [
+            StoryDictionaryField(
+                element="u_ai_status",
+                column_label="AI Status",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+            StoryDictionaryField(
+                element="u_ai_handoff_type",
+                column_label="AI Handoff Type",
+                internal_type="string",
+                active=True,
+                read_only=True,
+            ),
+            StoryDictionaryField(
+                element="u_ai_handoff_reference",
+                column_label="AI Handoff Reference",
+                internal_type="string",
+                active=True,
+                read_only=True,
+            ),
+            StoryDictionaryField(
+                element="u_ai_artifact_reference",
+                column_label="AI Artifact Reference",
+                internal_type="string",
+                active=True,
+                read_only=True,
+            ),
+        ]
+    )
+
+    result = apply_bootstrap_fields(
+        client,
+        confirm_table="rm_story",
+        confirm_fields=True,
+    )
+
+    assert result.applied is True
+    assert result.created_fields == []
+    assert result.updated_read_only_fields == ["u_ai_status"]
+    assert client.created_fields == []
+    assert client.upserted_records == [
+        {
+            "table": "sys_dictionary",
+            "lookup": {"name": "rm_story", "element": "u_ai_status"},
+            "fields": {"read_only": "true"},
+        }
+    ]
 
 
 def test_lifecycle_business_rule_spec_emits_draft_to_ready_event_only() -> None:

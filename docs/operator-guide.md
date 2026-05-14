@@ -217,7 +217,7 @@ For example, `STRY0010001` classifies as an automated Incident dictionary/form c
 
 Stories that are clear but require unsupported capabilities such as `acl_modify`, `flow_modify`, `business_rule_create`, `data_migration`, or `integration_modify` receive human-review feedback naming the unsupported capability. Stories missing required details receive clarification feedback through `u_ai_status=Needs Clarification` and a work note naming the missing details.
 
-After the implementation candidate artifact is durably stored, the worker generates reviewed Update Set XML for `JEDI <story number> - AI Candidate` and posts it to the ServiceNow-side importer `jedi_update_set_import`. The XML contains a `sys_remote_update_set` header and candidate customer updates linked through `remote_update_set`, never through a local `update_set`. After import, the worker looks up the retrieved update set by `remote_sys_id`, discovers the active `Ready for Testing` state choice for `rm_story`, and updates the story with `state=<Ready for Testing value>`, `u_ai_status=Ready for Testing`, and a work note containing a direct `sys_remote_update_set.do?sys_id=...` link.
+After the implementation candidate artifact is durably stored, the worker generates reviewed Update Set XML for `JEDI <story number> - AI Candidate` and posts it to the ServiceNow-side importer `jedi_update_set_import`. The XML contains a `sys_remote_update_set` header and candidate customer updates linked through `remote_update_set`, never through a local `update_set`. After import, the worker looks up the retrieved update set by `remote_sys_id`, discovers the active `Ready for Testing` state choice for `rm_story`, and updates the story with `state=<Ready for Testing value>`, `u_ai_status=Ready for Testing`, `u_ai_handoff_type=retrieved_update_set`, `u_ai_handoff_reference=<retrieved update set sys_id>`, `u_ai_artifact_reference=<candidate artifact ref>`, and a work note containing a direct `sys_remote_update_set.do?sys_id=...` link.
 
 This retrieved Update Set is the ServiceNow-native review surface. It is not automatically committed and it does not mutate `sys_dictionary`, `sys_ui_element`, or local `sys_update_set` records during fulfillment. Reviewers must preview, scan, resolve, and commit the retrieved Update Set inside ServiceNow. The story entering Ready for Testing means the automated handoff is ready for human test/review; it does not mean the retrieved Update Set has been approved or committed. `JEDI_UPDATE_SET_APPLY` is retained only as a backward-compatible runtime setting; generated implementation candidates now use the retrieved Update Set handoff path and do not perform local apply-under-update-set mutation.
 
@@ -479,13 +479,16 @@ Use `plan-bootstrap-fields` to inspect the missing custom fields required for wr
 python3 -m jedi_devproject.cli plan-bootstrap-fields --env-file .env
 ```
 
-The bootstrap plan only covers custom fields on `rm_story`:
+The bootstrap plan only covers read-only custom fields on `rm_story`:
 
 - `u_ai_status`
-- `u_ai_build_reference`
-- `u_ai_candidate_artifact`
+- `u_ai_handoff_type`
+- `u_ai_handoff_reference`
+- `u_ai_artifact_reference`
 
-It does not create `state`, and it does not plan form layout changes. Project teams can decide later whether these operational fields should be visible on the Story form.
+`u_ai_build_reference` and `u_ai_candidate_artifact` are legacy external-build fields. Existing instances may keep them for historical records, but the retrieved Update Set handoff path no longer requires them.
+
+If an operational field already exists but is editable, the apply command patches the `sys_dictionary` record to `read_only=true`. It does not create `state`, and it does not plan form layout changes. Project teams can decide later whether these operational fields should be visible on the Story form.
 
 Use `apply-bootstrap-fields` to create the missing custom table fields after reviewing the plan:
 

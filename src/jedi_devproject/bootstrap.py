@@ -14,23 +14,26 @@ class BootstrapFieldSpec(BaseModel):
     column_label: str
     internal_type: str
     max_length: int | None = None
+    read_only: bool = True
 
 
 class BootstrapFieldPlan(BaseModel):
     table: str
     missing_fields: list[str]
     fields_to_create: list[BootstrapFieldSpec]
+    fields_to_update_read_only: list[str] = []
     form_layout_changes: list[str]
     requires_apply_confirmation: bool
 
     @property
     def ready(self) -> bool:
-        return not self.missing_fields
+        return not self.missing_fields and not self.fields_to_update_read_only
 
 
 class BootstrapApplyResult(BaseModel):
     applied: bool
     created_fields: list[str]
+    updated_read_only_fields: list[str] = []
     form_layout_changes: list[str]
     reasons: list[str]
 
@@ -116,8 +119,18 @@ class BootstrapClient(Protocol):
         column_label: str,
         internal_type: str,
         max_length: int | None,
+        read_only: bool,
     ) -> dict[str, object]:
         """Create a dictionary field on rm_story."""
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create or update a ServiceNow table record."""
 
 
 class LifecycleWebhookClient(Protocol):
@@ -149,14 +162,20 @@ REQUIRED_BOOTSTRAP_FIELDS = [
         max_length=80,
     ),
     BootstrapFieldSpec(
-        element="u_ai_build_reference",
-        column_label="AI Build Reference",
+        element="u_ai_handoff_type",
+        column_label="AI Handoff Type",
         internal_type="string",
         max_length=255,
     ),
     BootstrapFieldSpec(
-        element="u_ai_candidate_artifact",
-        column_label="AI Candidate Artifact",
+        element="u_ai_handoff_reference",
+        column_label="AI Handoff Reference",
+        internal_type="string",
+        max_length=1024,
+    ),
+    BootstrapFieldSpec(
+        element="u_ai_artifact_reference",
+        column_label="AI Artifact Reference",
         internal_type="string",
         max_length=1024,
     ),
@@ -166,14 +185,22 @@ REQUIRED_BOOTSTRAP_FIELDS = [
 def plan_bootstrap_fields(
     dictionary_fields: list[StoryDictionaryField],
 ) -> BootstrapFieldPlan:
-    existing_fields = {field.element for field in dictionary_fields if field.active}
+    existing_fields = {field.element: field for field in dictionary_fields if field.active}
     fields_to_create = [
         field for field in REQUIRED_BOOTSTRAP_FIELDS if field.element not in existing_fields
+    ]
+    fields_to_update_read_only = [
+        field.element
+        for field in REQUIRED_BOOTSTRAP_FIELDS
+        if field.element in existing_fields
+        and field.read_only
+        and not existing_fields[field.element].read_only
     ]
     return BootstrapFieldPlan(
         table=BOOTSTRAP_TABLE,
         missing_fields=[field.element for field in fields_to_create],
         fields_to_create=fields_to_create,
+        fields_to_update_read_only=fields_to_update_read_only,
         form_layout_changes=[],
         requires_apply_confirmation=True,
     )
@@ -189,6 +216,7 @@ def apply_bootstrap_fields(
         return BootstrapApplyResult(
             applied=False,
             created_fields=[],
+            updated_read_only_fields=[],
             form_layout_changes=[],
             reasons=["bootstrap_confirmation_required"],
         )
@@ -201,12 +229,23 @@ def apply_bootstrap_fields(
             column_label=field.column_label,
             internal_type=field.internal_type,
             max_length=field.max_length,
+            read_only=field.read_only,
         )
         created_fields.append(field.element)
 
+    updated_read_only_fields: list[str] = []
+    for element in plan.fields_to_update_read_only:
+        client.upsert_table_record(
+            table="sys_dictionary",
+            lookup={"name": BOOTSTRAP_TABLE, "element": element},
+            fields={"read_only": "true"},
+        )
+        updated_read_only_fields.append(element)
+
     return BootstrapApplyResult(
-        applied=bool(created_fields),
+        applied=bool(created_fields or updated_read_only_fields),
         created_fields=created_fields,
+        updated_read_only_fields=updated_read_only_fields,
         form_layout_changes=[],
         reasons=[],
     )

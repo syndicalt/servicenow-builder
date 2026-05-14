@@ -644,7 +644,9 @@ def test_servicenow_client_fetches_active_story_dictionary_fields() -> None:
     request = transport.requests[1]
     assert request.url == "https://dev205693.service-now.com/api/now/table/sys_dictionary"
     assert request.params["sysparm_query"] == "name=rm_story^active=true"
-    assert request.params["sysparm_fields"] == "element,column_label,internal_type,active"
+    assert request.params["sysparm_fields"] == (
+        "element,column_label,internal_type,active,read_only"
+    )
     assert fields == [
         StoryDictionaryField(
             element="u_ai_status",
@@ -686,6 +688,7 @@ def test_servicenow_client_creates_story_dictionary_field() -> None:
         column_label="AI Status",
         internal_type="string",
         max_length=80,
+        read_only=True,
     )
 
     request = transport.requests[1]
@@ -700,6 +703,7 @@ def test_servicenow_client_creates_story_dictionary_field() -> None:
         "internal_type": "string",
         "max_length": "80",
         "active": "true",
+        "read_only": "true",
     }
     assert "client-secret" not in repr(request.sanitized())
 

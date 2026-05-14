@@ -1037,6 +1037,7 @@ def main(argv: list[str] | None = None) -> int:
             f"ready={bootstrap_plan.ready} table={bootstrap_plan.table} "
             f"missing_fields={missing_fields} "
             f"fields_to_create={len(bootstrap_plan.fields_to_create)} "
+            f"fields_to_update_read_only={len(bootstrap_plan.fields_to_update_read_only)} "
             f"form_layout_changes={len(bootstrap_plan.form_layout_changes)}"
         )
         return 0 if bootstrap_plan.ready else 1
@@ -1059,6 +1060,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"applied={bootstrap_result.applied} "
             f"created_fields={len(bootstrap_result.created_fields)} "
+            f"updated_read_only_fields={len(bootstrap_result.updated_read_only_fields)} "
             f"form_layout_changes={len(bootstrap_result.form_layout_changes)} "
             f"{reasons}".strip()
         )

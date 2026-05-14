@@ -289,6 +289,9 @@ def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story(
             "fields": {
                 "state": "-7",
                 "u_ai_status": "Ready for Testing",
+                "u_ai_handoff_type": "retrieved_update_set",
+                "u_ai_handoff_reference": "remote-update-set-sys-id",
+                "u_ai_artifact_reference": "db://artifact_blobs/2",
                 "work_notes": (
                     "ServiceNow retrieved Update Set handoff created for STRY0010013. "
                     "Retrieved Update Set: JEDI STRY0010013 - AI Candidate\n"

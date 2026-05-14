@@ -113,6 +113,9 @@ def create_update_set_handoff(
         {
             "state": ready_for_testing_state,
             "u_ai_status": "Ready for Testing",
+            "u_ai_handoff_type": "retrieved_update_set",
+            "u_ai_handoff_reference": update_set_sys_id,
+            "u_ai_artifact_reference": request.candidate_artifact_ref,
             "work_notes": (
                 f"ServiceNow retrieved Update Set handoff created for {request.story_number}. "
                 f"Retrieved Update Set: {update_set_name}\n"

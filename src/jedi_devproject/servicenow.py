@@ -53,6 +53,7 @@ class StoryDictionaryField(BaseModel):
     column_label: str
     internal_type: str
     active: bool = True
+    read_only: bool = False
 
 
 class HttpTransport(Protocol):
@@ -213,6 +214,9 @@ class ServiceNowClient:
                     "priority",
                     "state",
                     "u_ai_status",
+                    "u_ai_handoff_type",
+                    "u_ai_handoff_reference",
+                    "u_ai_artifact_reference",
                     "u_ai_build_reference",
                     "u_ai_candidate_artifact",
                 ]
@@ -275,7 +279,7 @@ class ServiceNowClient:
             },
             params={
                 "sysparm_query": "name=rm_story^active=true",
-                "sysparm_fields": "element,column_label,internal_type,active",
+                "sysparm_fields": "element,column_label,internal_type,active,read_only",
             },
         )
         response = self._transport.send(request)
@@ -300,6 +304,7 @@ class ServiceNowClient:
         column_label: str,
         internal_type: str,
         max_length: int | None,
+        read_only: bool,
     ) -> dict[str, Any]:
         body = {
             "name": "rm_story",
@@ -307,6 +312,7 @@ class ServiceNowClient:
             "column_label": column_label,
             "internal_type": internal_type,
             "active": "true",
+            "read_only": _bool_query_value(read_only),
         }
         if max_length is not None:
             body["max_length"] = str(max_length)
@@ -717,6 +723,9 @@ def _story_from_record(record: dict[str, Any]) -> Story:
             key: str(record[key])
             for key in [
                 "u_ai_status",
+                "u_ai_handoff_type",
+                "u_ai_handoff_reference",
+                "u_ai_artifact_reference",
                 "u_ai_build_reference",
                 "u_ai_candidate_artifact",
             ]
@@ -740,6 +749,7 @@ def _dictionary_field_from_record(record: dict[str, Any]) -> StoryDictionaryFiel
         column_label=str(record.get("column_label") or record["element"]),
         internal_type=str(record.get("internal_type") or ""),
         active=_truthy(record.get("active", True)),
+        read_only=_truthy(record.get("read_only")),
     )
 
 
