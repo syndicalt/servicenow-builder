@@ -189,6 +189,44 @@ def test_claim_next_fulfillment_job_returns_none_when_no_job_is_available() -> N
     assert connection.transaction_count == 1
 
 
+def test_complete_fulfillment_job_marks_completed_and_records_event() -> None:
+    connection = ScriptedPostgresConnection(rows=[_job_row(status="completed", attempt_count=1)])
+    store = _store(connection)
+
+    completed_job = store.complete_fulfillment_job(
+        job_id="job-evt-job",
+        message="Fulfillment completed",
+    )
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "UPDATE fulfillment_jobs" in joined_sql
+    assert connection.executed[0][1][0] == "completed"
+    assert "locked_by = NULL" in joined_sql
+    assert "INSERT INTO job_events" in joined_sql
+    assert completed_job.status == "completed"
+    assert completed_job.locked_by is None
+
+
+def test_fail_fulfillment_job_marks_failed_and_preserves_error() -> None:
+    failed_row = _job_row(status="failed", attempt_count=1)
+    failed_row["last_error"] = "provider unavailable"
+    connection = ScriptedPostgresConnection(rows=[failed_row])
+    store = _store(connection)
+
+    failed_job = store.fail_fulfillment_job(
+        job_id="job-evt-job",
+        error_message="provider unavailable",
+    )
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "UPDATE fulfillment_jobs" in joined_sql
+    assert connection.executed[0][1][0] == "failed"
+    assert "last_error = %s" in joined_sql
+    assert "INSERT INTO job_events" in joined_sql
+    assert failed_job.status == "failed"
+    assert failed_job.last_error == "provider unavailable"
+
+
 def test_record_artifact_ref_uses_postgres_returning_row() -> None:
     row: dict[str, Any] = {
         "id": 1,

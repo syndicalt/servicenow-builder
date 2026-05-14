@@ -145,6 +145,16 @@ def test_operator_guide_documents_lifecycle_webhook_api() -> None:
     assert "DATABASE_URL" in guide
 
 
+def test_operator_guide_documents_fulfillment_worker() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Fulfillment Worker" in guide
+    assert "process_one_fulfillment_job" in guide
+    assert "complete_fulfillment_job" in guide
+    assert "fail_fulfillment_job" in guide
+    assert "outside the webhook request" in guide
+
+
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
     change_log = Path("docs/sprints/sprint-68-change-log.md").read_text(
         encoding="utf-8"
@@ -179,6 +189,18 @@ def test_sprint_seventy_change_log_documents_lifecycle_webhook_api() -> None:
     assert "POST /lifecycle/events" in change_log
     assert "202 Accepted" in change_log
     assert "non-blocking" in change_log
+
+
+def test_sprint_seventy_one_change_log_documents_fulfillment_worker() -> None:
+    change_log = Path("docs/sprints/sprint-71-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "fulfillment_worker" in change_log
+    assert "process_one_fulfillment_job" in change_log
+    assert "complete_fulfillment_job" in change_log
+    assert "fail_fulfillment_job" in change_log
+    assert "outside the webhook request" in change_log
 
 
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:

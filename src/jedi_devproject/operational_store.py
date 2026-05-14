@@ -315,6 +315,77 @@ class PostgresOperationalStore:
             raise KeyError(f"Fulfillment job not found: {job_id}")
         return FulfillmentJobRecord.model_validate(row)
 
+    def complete_fulfillment_job(
+        self,
+        *,
+        job_id: str,
+        message: str,
+    ) -> FulfillmentJobRecord:
+        now = _utc_now()
+        row = self._transition_fulfillment_job(
+            job_id=job_id,
+            status="completed",
+            message=message,
+            now=now,
+            last_error=None,
+        )
+        if row is None:
+            raise KeyError(f"Fulfillment job not found: {job_id}")
+        return FulfillmentJobRecord.model_validate(row)
+
+    def fail_fulfillment_job(
+        self,
+        *,
+        job_id: str,
+        error_message: str,
+    ) -> FulfillmentJobRecord:
+        now = _utc_now()
+        row = self._transition_fulfillment_job(
+            job_id=job_id,
+            status="failed",
+            message=error_message,
+            now=now,
+            last_error=error_message,
+        )
+        if row is None:
+            raise KeyError(f"Fulfillment job not found: {job_id}")
+        return FulfillmentJobRecord.model_validate(row)
+
+    def _transition_fulfillment_job(
+        self,
+        *,
+        job_id: str,
+        status: str,
+        message: str,
+        now: datetime,
+        last_error: str | None,
+    ) -> Mapping[str, object] | None:
+        with self._connection.transaction():
+            return self._connection.fetch_one(
+                """
+                WITH updated_job AS (
+                    UPDATE fulfillment_jobs
+                    SET status = %s,
+                        updated_at = %s,
+                        locked_by = NULL,
+                        locked_at = NULL,
+                        last_error = %s
+                    WHERE job_id = %s
+                    RETURNING job_id, event_id, story_number, status, attempt_count,
+                              created_at, updated_at, locked_by, locked_at, last_error
+                ),
+                inserted_job_event AS (
+                    INSERT INTO job_events (job_id, status, message, created_at)
+                    SELECT job_id, %s, %s, %s
+                    FROM updated_job
+                )
+                SELECT job_id, event_id, story_number, status, attempt_count,
+                       created_at, updated_at, locked_by, locked_at, last_error
+                FROM updated_job
+                """,
+                (status, now, last_error, job_id, status, message, now),
+            )
+
     def job_events_for_job(self, job_id: str) -> list[JobEventRecord]:
         rows = self._connection.fetch_all(
             """

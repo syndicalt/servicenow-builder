@@ -145,6 +145,14 @@ A valid `Draft` to `Ready` `LifecycleStateChangeEvent` returns `202 Accepted`, r
 
 The webhook request path does not execute fulfillment inline. Build evaluation, ServiceNow claim writeback, implementation packet generation, external build handoff, and Ready for Testing writeback must run in worker processing after a queued job is claimed.
 
+## Fulfillment Worker
+
+The worker boundary is `process_one_fulfillment_job()` in `jedi_devproject.fulfillment_worker`. It claims one queued job from PostgreSQL with `claim_next_fulfillment_job(worker_id=...)`, calls an injected fulfillment handler, and records the terminal job state.
+
+Successful handlers call `complete_fulfillment_job()` and append a `completed` job event. Handler failures call `fail_fulfillment_job()`, store the error in `last_error`, clear the worker lock, and append a `failed` job event.
+
+The worker runs outside the webhook request. The webhook should only validate, record, enqueue, and acknowledge lifecycle events.
+
 ## Lifecycle Event Contract
 
 ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.
