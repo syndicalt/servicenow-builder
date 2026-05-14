@@ -150,6 +150,7 @@ def test_operator_guide_documents_fulfillment_worker() -> None:
 
     assert "Fulfillment Worker" in guide
     assert "process_one_fulfillment_job" in guide
+    assert "build_claim_fulfillment_handler" in guide
     assert "complete_fulfillment_job" in guide
     assert "fail_fulfillment_job" in guide
     assert "outside the webhook request" in guide
@@ -201,6 +202,18 @@ def test_sprint_seventy_one_change_log_documents_fulfillment_worker() -> None:
     assert "complete_fulfillment_job" in change_log
     assert "fail_fulfillment_job" in change_log
     assert "outside the webhook request" in change_log
+
+
+def test_sprint_seventy_two_change_log_documents_build_claim_handler() -> None:
+    change_log = Path("docs/sprints/sprint-72-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "fulfillment_handler" in change_log
+    assert "build_claim_fulfillment_handler" in change_log
+    assert "execute_build_claim" in change_log
+    assert "FulfillmentBlocked" in change_log
+    assert "Work in Progress" in change_log
 
 
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:

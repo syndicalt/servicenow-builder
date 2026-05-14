@@ -151,6 +151,8 @@ The worker boundary is `process_one_fulfillment_job()` in `jedi_devproject.fulfi
 
 Successful handlers call `complete_fulfillment_job()` and append a `completed` job event. Handler failures call `fail_fulfillment_job()`, store the error in `last_error`, clear the worker lock, and append a `failed` job event.
 
+The first production handler is `build_claim_fulfillment_handler()` in `jedi_devproject.fulfillment_handler`. It converts a claimed fulfillment job into an `execute_build_claim()` request, using the job story number and lifecycle event id to move the story from `Ready` to `Work in Progress` through the existing guarded writeback path.
+
 The worker runs outside the webhook request. The webhook should only validate, record, enqueue, and acknowledge lifecycle events.
 
 ## Lifecycle Event Contract
