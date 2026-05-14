@@ -167,10 +167,9 @@ def _is_global_main_view_section(section: dict[str, Any]) -> bool:
         return False
     view = section.get("view")
     if isinstance(view, dict):
-        values = {
-            str(view.get("display_value") or "").strip().lower(),
-            str(view.get("value") or "").strip().lower(),
-        }
+        display_value = str(view.get("display_value") or "").strip().lower()
+        reference_value = str(view.get("value") or "").strip().lower()
+        values = {display_value or reference_value}
     else:
         values = {str(view or "").strip().lower()}
     return bool(values.intersection({"", "default", "default view", "scrum"}))

@@ -73,6 +73,62 @@ def test_generic_dictionary_form_updates_incident_field_and_form() -> None:
     assert "<element>u_antics</element><position>3</position>" in updates[2]["payload"]
 
 
+def test_generic_dictionary_form_ignores_non_default_reference_views_without_display() -> None:
+    class ViewMetadataClient(FakeMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_ui_section" and lookup == {"name": "incident"}:
+                return [
+                    {
+                        "sys_id": "default-section",
+                        "name": "incident",
+                        "caption": "",
+                        "view": {"display_value": "Default view", "value": "default"},
+                        "sys_user": "",
+                    },
+                    {
+                        "sys_id": "workspace-section",
+                        "name": "incident",
+                        "caption": "",
+                        "view": {"display_value": "", "value": "workspace-view-sys-id"},
+                        "sys_user": "",
+                    },
+                ]
+            if table == "sys_ui_element":
+                return [
+                    {"sys_id": "description-element", "element": "description", "position": "2"}
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    updates = dictionary_form_customer_updates(
+        client=ViewMetadataClient(),
+        intent=DictionaryFormIntent(
+            target_table="incident",
+            field_label="Antics",
+            field_name="u_antics",
+            field_type="string",
+            placement_anchor="description",
+            placement_position="below",
+        ),
+        remote_update_set_sys_id="remote-sys-id",
+    )
+
+    assert [update["name"] for update in updates if update["type"] == "Form Layout"] == [
+        "sys_ui_section_default-section"
+    ]
+
+
 def test_generic_dictionary_form_fails_when_anchor_missing() -> None:
     try:
         dictionary_form_customer_updates(
