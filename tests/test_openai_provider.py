@@ -144,8 +144,36 @@ def test_openai_responses_provider_fails_closed_for_api_error() -> None:
         ),
     )
 
-    with pytest.raises(OpenAIProviderError, match="status 500"):
+    with pytest.raises(OpenAIProviderError, match="status 500: boom"):
         provider.generate(_payload())
+
+
+def test_openai_responses_provider_reports_rate_limit_error_details() -> None:
+    provider = OpenAIResponsesProvider(
+        settings=_settings(),
+        transport=RecordingTransport(
+            HttpResponse(
+                status_code=429,
+                json_body={
+                    "error": {
+                        "message": "You exceeded your current quota.",
+                        "type": "insufficient_quota",
+                        "code": "insufficient_quota",
+                    }
+                },
+            )
+        ),
+    )
+
+    with pytest.raises(OpenAIProviderError) as exc:
+        provider.generate(_payload())
+
+    error = str(exc.value)
+    assert "status 429" in error
+    assert "You exceeded your current quota." in error
+    assert "type=insufficient_quota" in error
+    assert "code=insufficient_quota" in error
+    assert "openai-key" not in error
 
 
 def test_openai_responses_provider_fails_closed_for_invalid_json() -> None:

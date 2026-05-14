@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -81,9 +82,15 @@ class UrllibTransport:
             method=request.method,
         )
 
-        with urllib.request.urlopen(raw_request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            return HttpResponse(status_code=response.status, json_body=payload)
+        try:
+            with urllib.request.urlopen(raw_request, timeout=30) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                return HttpResponse(status_code=response.status, json_body=payload)
+        except urllib.error.HTTPError as exc:
+            return HttpResponse(
+                status_code=exc.code,
+                json_body=_http_error_body_to_json(exc.read()),
+            )
 
 
 class ServiceNowSettings(BaseModel):
@@ -92,6 +99,17 @@ class ServiceNowSettings(BaseModel):
     @property
     def base_url(self) -> str:
         return self.instance_url.rstrip("/")
+
+
+def _http_error_body_to_json(body: bytes) -> dict[str, Any]:
+    raw_body = body.decode("utf-8", errors="replace")
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return {"error": {"message": raw_body}}
+    if isinstance(payload, dict):
+        return payload
+    return {"error": {"message": raw_body}}
 
 
 class OAuthClientCredentials:

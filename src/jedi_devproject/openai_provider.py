@@ -68,7 +68,7 @@ class OpenAIResponsesProvider:
         )
         if response.status_code >= 400:
             raise OpenAIProviderError(
-                f"OpenAI Responses API failed with status {response.status_code}"
+                _api_error_message(response.status_code, response.json_body)
             )
         return _parse_response_json(response.json_body)
 
@@ -98,6 +98,34 @@ def _parse_response_json(response: dict[str, Any]) -> dict[str, Any]:
                     )
 
     raise OpenAIProviderError("OpenAI response did not include output JSON")
+
+
+def _api_error_message(status_code: int, response_body: dict[str, Any]) -> str:
+    details = _api_error_details(response_body)
+    if details:
+        return f"OpenAI Responses API failed with status {status_code}: {details}"
+    return f"OpenAI Responses API failed with status {status_code}"
+
+
+def _api_error_details(response_body: dict[str, Any]) -> str:
+    error = response_body.get("error")
+    if not isinstance(error, dict):
+        return ""
+
+    parts: list[str] = []
+    message = error.get("message")
+    if isinstance(message, str) and message:
+        parts.append(message)
+
+    error_type = error.get("type")
+    if isinstance(error_type, str) and error_type:
+        parts.append(f"type={error_type}")
+
+    code = error.get("code")
+    if isinstance(code, str) and code:
+        parts.append(f"code={code}")
+
+    return "; ".join(parts)
 
 
 def _loads_json_object(raw_json: str) -> dict[str, Any]:

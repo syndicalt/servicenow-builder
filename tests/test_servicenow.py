@@ -1,3 +1,5 @@
+import urllib.error
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -43,6 +45,22 @@ class FakeUrlResponse:
 
     def read(self) -> bytes:
         return b'{"result": []}'
+
+
+class FakeHttpError(urllib.error.HTTPError):
+    def __init__(self, *, code: int, body: bytes) -> None:
+        super().__init__(
+            "https://api.openai.com/v1/responses",
+            code,
+            "Too Many Requests",
+            hdrs=EmailMessage(),
+            fp=None,
+        )
+        self._body = body
+
+    def read(self, n: int = -1) -> bytes:
+        _ = n
+        return self._body
 
 
 def test_load_dotenv_values_reads_expected_keys_without_required_dependency(tmp_path: Path) -> None:
@@ -194,6 +212,44 @@ def test_urllib_transport_handles_request_without_params_or_body() -> None:
 
     assert captured["full_url"] == "https://example.service-now.com/api"
     assert captured["data"] is None
+
+
+def test_urllib_transport_returns_json_body_for_http_error_response() -> None:
+    def fake_urlopen(request: Any, timeout: int) -> FakeUrlResponse:
+        raise FakeHttpError(
+            code=429,
+            body=b'{"error":{"message":"quota exceeded","type":"insufficient_quota"}}',
+        )
+
+    with patch("urllib.request.urlopen", fake_urlopen):
+        response = UrllibTransport().send(
+            HttpRequest(method="POST", url="https://api.openai.com/v1/responses")
+        )
+
+    assert response == HttpResponse(
+        status_code=429,
+        json_body={
+            "error": {
+                "message": "quota exceeded",
+                "type": "insufficient_quota",
+            }
+        },
+    )
+
+
+def test_urllib_transport_preserves_non_json_http_error_body() -> None:
+    def fake_urlopen(request: Any, timeout: int) -> FakeUrlResponse:
+        raise FakeHttpError(code=502, body=b"Bad gateway")
+
+    with patch("urllib.request.urlopen", fake_urlopen):
+        response = UrllibTransport().send(
+            HttpRequest(method="POST", url="https://api.openai.com/v1/responses")
+        )
+
+    assert response == HttpResponse(
+        status_code=502,
+        json_body={"error": {"message": "Bad gateway"}},
+    )
 
 
 def test_oauth_client_credentials_requests_token_without_logging_secret() -> None:
