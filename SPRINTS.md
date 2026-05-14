@@ -380,6 +380,8 @@ The current product boundary is the public API and worker runtime. The sidecar c
 
 These are the next organized sprints. They are intentionally hardening-first: the MVP should not expand its mutation surface until authentication, observability, and evidence quality are stronger.
 
+The detailed production-hardening backlog and review checklist lives in `docs/production-hardening-backlog.md`.
+
 | Priority | Proposed Sprint | Goal | Exit Criteria |
 |---:|---|---|---|
 | 1 | Sprint 102: ServiceNow role-backed admin authentication | Replace or wrap local Basic auth with ServiceNow/OIDC-backed operator authentication and explicit admin-role checks. | `/admin` access is tied to customer identity, local Basic auth is development-only, and tests cover unauthenticated, unauthorized, and authorized users. |

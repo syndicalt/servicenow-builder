@@ -459,6 +459,18 @@ def test_sprint_plan_documents_mvp_baseline_and_post_mvp_backlog() -> None:
     assert "Confidence-based context retrieval worker" in sprint_plan
 
 
+def test_production_hardening_backlog_documents_review_targets() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 101 Cut Line" in backlog
+    assert "Production Hardening Backlog" in backlog
+    assert "ServiceNow role-backed admin authentication" in backlog
+    assert "Authenticated inbound lifecycle webhook" in backlog
+    assert "Slop review" in backlog
+    assert "Security review" in backlog
+    assert "No new mutation surface" in backlog
+
+
 def test_sprint_one_change_log_documents_schema_work() -> None:
     change_log = Path("docs/sprints/sprint-1-change-log.md").read_text(encoding="utf-8")
 
