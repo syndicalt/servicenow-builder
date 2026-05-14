@@ -158,8 +158,12 @@ def _normalize_dictionary_field_aliases(fields: dict[str, Any]) -> dict[str, Any
 
 
 def _copy_alias(fields: dict[str, Any], *, source: str, target: str) -> None:
-    if target not in fields and source in fields:
+    if (target not in fields or _is_blank(fields.get(target))) and source in fields:
         fields[target] = fields.pop(source)
+
+
+def _is_blank(value: Any) -> bool:
+    return str(value or "").strip() == ""
 
 
 def _plan_form_layout_change(

@@ -513,6 +513,46 @@ def test_apply_candidate_normalizes_model_field_aliases() -> None:
     }
 
 
+def test_apply_candidate_normalizes_empty_model_field_alias_values() -> None:
+    client = FakeApplyClient()
+    candidate = _candidate(
+        [
+            CandidateChange(
+                table="sys_dictionary",
+                operation="insert",
+                fields={
+                    "name": "rm_story",
+                    "element": "",
+                    "field_name": "u_ai_review_notes",
+                    "column_label": "",
+                    "field_label": "AI Review Notes",
+                    "internal_type": "string",
+                },
+            )
+        ]
+    )
+
+    apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id="update-set-sys-id",
+            integration_user_name="jedi.integration",
+            candidate=candidate,
+        ),
+    )
+
+    assert client.upserts[1] == {
+        "table": "sys_dictionary",
+        "lookup": {"name": "rm_story", "element": "u_ai_review_notes"},
+        "fields": {
+            "name": "rm_story",
+            "element": "u_ai_review_notes",
+            "column_label": "AI Review Notes",
+            "internal_type": "string",
+        },
+    }
+
+
 def test_apply_candidate_normalizes_known_field_defaults_and_form_xml_element() -> None:
     client = FakeApplyClient()
     candidate = _candidate(
