@@ -101,6 +101,7 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
     fields_schema = change_schema["properties"]["fields"]
     assert fields_schema["type"] == "array"
     assert fields_schema["items"]["additionalProperties"] is False
+    assert change_schema["properties"]["sys_id"] == {"type": "null"}
     assert "JSON" in request.body["input"][0]["content"]
     assert "openai-key" not in repr(request.body)
 
@@ -129,9 +130,7 @@ def test_openai_responses_provider_parses_output_item_text() -> None:
         )
     )
 
-    result = OpenAIResponsesProvider(settings=_settings(), transport=transport).generate(
-        _payload()
-    )
+    result = OpenAIResponsesProvider(settings=_settings(), transport=transport).generate(_payload())
 
     assert result == expected
 

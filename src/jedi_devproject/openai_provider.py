@@ -67,9 +67,7 @@ class OpenAIResponsesProvider:
             )
         )
         if response.status_code >= 400:
-            raise OpenAIProviderError(
-                _api_error_message(response.status_code, response.json_body)
-            )
+            raise OpenAIProviderError(_api_error_message(response.status_code, response.json_body))
         return _parse_response_json(response.json_body)
 
 
@@ -155,9 +153,7 @@ def _normalise_candidate_response(candidate: dict[str, Any]) -> dict[str, Any]:
         normalised_fields: dict[str, Any] = {}
         for field in fields:
             if not isinstance(field, dict):
-                raise OpenAIProviderError(
-                    "OpenAI response field entry must be an object"
-                )
+                raise OpenAIProviderError("OpenAI response field entry must be an object")
             name = field.get("name")
             if not isinstance(name, str) or not name:
                 raise OpenAIProviderError(
@@ -212,7 +208,7 @@ def _implementation_candidate_schema() -> dict[str, Any]:
                                 },
                             },
                         },
-                        "sys_id": {"type": ["string", "null"]},
+                        "sys_id": {"type": "null"},
                         "rationale": {"type": ["string", "null"]},
                     },
                 },
