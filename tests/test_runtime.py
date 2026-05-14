@@ -267,6 +267,29 @@ def test_load_runtime_settings_accepts_env_file(tmp_path: Path) -> None:
     assert settings.model_provider is None
 
 
+def test_load_runtime_settings_accepts_build_claim_state_values(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_BUILD_CLAIM_FROM_STATE=1",
+                "JEDI_BUILD_CLAIM_STATE=2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.build_claim_from_state == "1"
+    assert settings.build_claim_state == "2"
+
+
 def test_load_runtime_settings_requires_explicit_model_provider_to_enable_openai(
     tmp_path: Path,
 ) -> None:

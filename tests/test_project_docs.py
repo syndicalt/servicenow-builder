@@ -205,6 +205,8 @@ def test_sprint_seventy_nine_change_log_documents_worker_runtime() -> None:
     assert "JEDI_WORKER_MAX_ITERATIONS" in change_log
     assert "JEDI_WORKER_IDLE_SLEEP_SECONDS" in change_log
     assert "JEDI_WORKER_STOP_ON_FAILURE" in change_log
+    assert "JEDI_BUILD_CLAIM_FROM_STATE" in change_log
+    assert "JEDI_BUILD_CLAIM_STATE" in change_log
     assert "jedi-devproject-worker" in change_log
 
 

@@ -59,6 +59,8 @@ class RuntimeSettings(BaseModel):
     worker_id: str = "jedi-devproject-worker"
     audit_root: Path
     build_claim_apply: bool = False
+    build_claim_from_state: str = "Ready"
+    build_claim_state: str = "Work in Progress"
     model_provider: str | None = None
     openai_api_key: str | None = None
     openai_model: str | None = None
@@ -99,6 +101,8 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         worker_id=str(values.get("JEDI_WORKER_ID") or "jedi-devproject-worker"),
         audit_root=Path(str(values["JEDI_AUDIT_ROOT"])),
         build_claim_apply=_truthy(values.get("JEDI_BUILD_CLAIM_APPLY")),
+        build_claim_from_state=str(values.get("JEDI_BUILD_CLAIM_FROM_STATE") or "Ready"),
+        build_claim_state=str(values.get("JEDI_BUILD_CLAIM_STATE") or "Work in Progress"),
         model_provider=_optional_str(values.get("JEDI_MODEL_PROVIDER")),
         openai_api_key=_optional_str(values.get("OPENAI_API_KEY")),
         openai_model=_optional_str(values.get("OPENAI_MODEL")),
@@ -172,6 +176,8 @@ def process_one_runtime_fulfillment(
                 actor_id=settings.worker_id,
                 audit_root=settings.audit_root,
                 apply=settings.build_claim_apply,
+                from_state=settings.build_claim_from_state,
+                claim_state=settings.build_claim_state,
             ),
         )
         handler = _runtime_handler(
