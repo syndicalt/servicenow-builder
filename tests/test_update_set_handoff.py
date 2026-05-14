@@ -7,6 +7,7 @@ from jedi_devproject.models import (
     CandidateStatus,
     UpdateSetCandidate,
 )
+from jedi_devproject.servicenow import StoryStateChoice
 from jedi_devproject.update_set_handoff import (
     UpdateSetHandoffRequest,
     create_update_set_handoff,
@@ -112,6 +113,13 @@ class FakeUpdateSetClient:
     def update_story_fields(self, story_sys_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         self.story_updates.append({"story_sys_id": story_sys_id, "fields": fields})
         return {"sys_id": story_sys_id}
+
+    def fetch_story_state_choices(self) -> list[StoryStateChoice]:
+        return [
+            StoryStateChoice(label="Ready", value="1", sequence=100),
+            StoryStateChoice(label="Work in Progress", value="2", sequence=200),
+            StoryStateChoice(label="Ready for Testing", value="-7", sequence=300),
+        ]
 
     def import_update_set_xml(
         self,
@@ -263,13 +271,15 @@ def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story(
         {
             "story_sys_id": "story-sys-id",
             "fields": {
+                "state": "-7",
+                "u_ai_status": "Ready for Testing",
                 "work_notes": (
                     "ServiceNow retrieved Update Set handoff created for STRY0010013. "
                     "Retrieved Update Set: JEDI STRY0010013 - AI Candidate "
                     "(https://dev205693.service-now.com/sys_remote_update_set.do?"
                     "sys_id=remote-update-set-sys-id). "
                     "Candidate artifact: db://artifact_blobs/2."
-                )
+                ),
             },
         }
     ]
@@ -306,6 +316,8 @@ def test_create_update_set_handoff_imports_xml_instead_of_table_writing_updates(
     assert client.story_updates[-1]["fields"]["work_notes"].startswith(
         "ServiceNow retrieved Update Set handoff created for STRY0010013."
     )
+    assert client.story_updates[-1]["fields"]["state"] == "-7"
+    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
 
 
 def test_create_update_set_handoff_imports_retrieved_form_layout_updates() -> None:

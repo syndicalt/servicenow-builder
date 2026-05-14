@@ -8,6 +8,8 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.models import CandidateChange, CandidateStatus, UpdateSetCandidate
+from jedi_devproject.servicenow import StoryStateChoice
+from jedi_devproject.writeback import build_state_mapping_from_choices
 
 
 class UpdateSetHandoffClient(Protocol):
@@ -33,6 +35,8 @@ class UpdateSetHandoffClient(Protocol):
         story_sys_id: str,
         fields: dict[str, object],
     ) -> object: ...
+
+    def fetch_story_state_choices(self) -> list[StoryStateChoice]: ...
 
     def import_update_set_xml(
         self,
@@ -99,14 +103,17 @@ def create_update_set_handoff(
         instance_url=request.instance_url,
         update_set_sys_id=update_set_sys_id,
     )
+    ready_for_testing_state = _ready_for_testing_state(client)
     client.update_story_fields(
         request.story_sys_id,
         {
+            "state": ready_for_testing_state,
+            "u_ai_status": "Ready for Testing",
             "work_notes": (
                 f"ServiceNow retrieved Update Set handoff created for {request.story_number}. "
                 f"Retrieved Update Set: {update_set_name} ({update_set_url}). "
                 f"Candidate artifact: {request.candidate_artifact_ref}."
-            )
+            ),
         },
     )
     return UpdateSetHandoffResult(
@@ -114,6 +121,15 @@ def create_update_set_handoff(
         update_set_name=update_set_name,
         update_set_url=update_set_url,
     )
+
+
+def _ready_for_testing_state(client: UpdateSetHandoffClient) -> str:
+    mapping = build_state_mapping_from_choices(
+        [choice.model_dump() for choice in client.fetch_story_state_choices()]
+    )
+    if mapping is None:
+        raise RuntimeError("ServiceNow Ready for Testing state choice was not found")
+    return mapping.ready_for_testing
 
 
 def _update_set_name(story_number: str) -> str:

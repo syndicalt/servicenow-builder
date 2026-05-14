@@ -1246,3 +1246,24 @@ def test_sprint_ninety_change_log_documents_importer_backed_handoff() -> None:
     assert "sys_ui_section_8757b94d7f0000011c1ae8aa30062c20" in change_log
     assert "sys_documentation_rm_story_u_ai_review_notes_en" in change_log
     assert "state reported as `committed`" in change_log
+
+
+def test_operator_guide_documents_ready_for_testing_after_handoff() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "discovers the active `Ready for Testing` state choice" in guide
+    assert "`u_ai_status=Ready for Testing`" in guide
+    assert "does not mean the retrieved Update Set has been approved or committed" in guide
+    assert "active `Ready for Testing` state choice cannot be discovered" in guide
+
+
+def test_sprint_ninety_one_change_log_documents_ready_for_testing_handoff() -> None:
+    change_log = Path("docs/sprints/sprint-91-change-log.md").read_text(encoding="utf-8")
+
+    assert "Ready for Testing" in change_log
+    assert "state=-7" in change_log
+    assert "u_ai_status=Ready for Testing" in change_log
+    assert "sys_choice" in change_log
+    assert (
+        "does not replace the retrieved Update Set preview/commit approval boundary" in change_log
+    )

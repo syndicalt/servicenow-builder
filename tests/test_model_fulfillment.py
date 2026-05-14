@@ -51,7 +51,11 @@ class FakeModelClient:
         ]
 
     def fetch_story_state_choices(self) -> list[StoryStateChoice]:
-        return []
+        return [
+            StoryStateChoice(label="Ready", value="1", sequence=100),
+            StoryStateChoice(label="Work in Progress", value="2", sequence=200),
+            StoryStateChoice(label="Ready for Testing", value="-7", sequence=300),
+        ]
 
     def fetch_story_dictionary_fields(self) -> list[StoryDictionaryField]:
         return []
@@ -265,13 +269,15 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
         {
             "story_sys_id": "story-sys-id",
             "fields": {
+                "state": "-7",
+                "u_ai_status": "Ready for Testing",
                 "work_notes": (
                     "ServiceNow retrieved Update Set handoff created for STRY0010013. "
                     "Retrieved Update Set: JEDI STRY0010013 - AI Candidate "
                     "(https://dev205693.service-now.com/sys_remote_update_set.do?"
                     "sys_id=remote-update-set-sys-id). "
                     "Candidate artifact: db://artifact_blobs/2."
-                )
+                ),
             },
         }
     ]
@@ -316,6 +322,8 @@ def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
     assert all(fetch["table"] != "sys_update_xml" for fetch in client.fetches)
     work_note_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
     assert "retrieved Update Set handoff created" in work_note_fields["work_notes"]
+    assert work_note_fields["state"] == "-7"
+    assert work_note_fields["u_ai_status"] == "Ready for Testing"
 
 
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(

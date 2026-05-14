@@ -698,6 +698,19 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
                     ]
                 },
             ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "label": "Ready for Testing",
+                            "value": "-7",
+                            "sequence": "300",
+                            "inactive": "false",
+                        }
+                    ]
+                },
+            ),
             HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
         ]
     )
@@ -720,6 +733,7 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "POST",
         "GET",
+        "GET",
         "PATCH",
     ]
     assert transport.requests[5].url == "https://api.openai.com/v1/responses"
@@ -736,6 +750,10 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
     )
     assert transport.requests[8].url.endswith("/api/now/table/sys_remote_update_set")
     assert transport.requests[8].params["sysparm_query"].startswith("remote_sys_id=")
+    assert transport.requests[9].url.endswith("/api/now/table/sys_choice")
+    assert transport.requests[9].params["sysparm_query"] == (
+        "name=rm_story^element=state^inactive=false"
+    )
     assert store.artifact_refs == []
     assert [artifact[2] for artifact in store.json_artifacts] == [
         "implementation_packet",
@@ -749,6 +767,8 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "ServiceNow retrieved Update Set handoff created"
         in transport.requests[-1].body["work_notes"]
     )
+    assert transport.requests[-1].body["state"] == "-7"
+    assert transport.requests[-1].body["u_ai_status"] == "Ready for Testing"
     assert "sys_id=remote-update-set-sys-id" in transport.requests[-1].body["work_notes"]
     assert "db://artifact_blobs/2" in transport.requests[-1].body["work_notes"]
 
