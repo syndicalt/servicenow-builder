@@ -288,6 +288,65 @@ def test_apply_candidate_infers_form_target_from_single_custom_dictionary_field(
     }
 
 
+def test_apply_candidate_normalizes_model_field_aliases() -> None:
+    client = FakeApplyClient()
+    candidate = _candidate(
+        [
+            CandidateChange(
+                table="sys_dictionary",
+                operation="insert",
+                fields={
+                    "field_name": "u_ai_review_notes",
+                    "field_label": "AI Review Notes",
+                    "help_text": "Notes from human review.",
+                    "mandatory": False,
+                    "max_length": 8000,
+                    "default_value": "",
+                    "internal_type": "string",
+                },
+            ),
+            CandidateChange(
+                table="sys_ui_form",
+                operation="update",
+                fields={
+                    "view_name": "Default",
+                    "field_name": "u_ai_review_notes",
+                    "form_section_name": "Notes",
+                },
+            ),
+        ]
+    )
+
+    apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id="update-set-sys-id",
+            integration_user_name="jedi.integration",
+            candidate=candidate,
+        ),
+    )
+
+    assert client.upserts[1] == {
+        "table": "sys_dictionary",
+        "lookup": {"name": "rm_story", "element": "u_ai_review_notes"},
+        "fields": {
+            "name": "rm_story",
+            "element": "u_ai_review_notes",
+            "column_label": "AI Review Notes",
+            "help": "Notes from human review.",
+            "mandatory": False,
+            "max_length": "8000",
+            "default_value": "",
+            "internal_type": "string",
+        },
+    }
+    assert client.upserts[-1]["lookup"] == {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+        "sys_ui_section": "main-section-sys-id",
+    }
+
+
 def test_apply_candidate_rejects_unsupported_change_before_mutation() -> None:
     client = FakeApplyClient()
     candidate = _candidate(

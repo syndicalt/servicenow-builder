@@ -126,9 +126,7 @@ def _prepare_supported_change(
 def _normalize_dictionary_change(change: CandidateChange) -> CandidateChange:
     if change.operation not in {"insert", "update"}:
         raise ValueError(f"unsupported update-set apply operation: {change.operation}")
-    fields = dict(change.fields)
-    if "element" not in fields and "column_name" in fields:
-        fields["element"] = fields.pop("column_name")
+    fields = _normalize_dictionary_field_aliases(dict(change.fields))
 
     required_fields = ["name", "element", "column_label", "internal_type"]
     missing = [
@@ -141,6 +139,21 @@ def _normalize_dictionary_change(change: CandidateChange) -> CandidateChange:
     return change.model_copy(update={"fields": _service_now_field_values(fields)})
 
 
+def _normalize_dictionary_field_aliases(fields: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(fields)
+    _copy_alias(normalized, source="column_name", target="element")
+    _copy_alias(normalized, source="field_name", target="element")
+    _copy_alias(normalized, source="field_label", target="column_label")
+    _copy_alias(normalized, source="help_text", target="help")
+    normalized.setdefault("name", "rm_story")
+    return normalized
+
+
+def _copy_alias(fields: dict[str, Any], *, source: str, target: str) -> None:
+    if target not in fields and source in fields:
+        fields[target] = fields.pop(source)
+
+
 def _plan_form_layout_change(
     *,
     client: UpdateSetApplyClient,
@@ -149,12 +162,16 @@ def _plan_form_layout_change(
 ) -> PlannedFormLayoutChange:
     if change.operation != "update":
         raise ValueError(f"unsupported update-set apply operation: {change.operation}")
-    table_name = str(change.fields.get("table") or change.fields.get("name") or "")
+    table_name = str(change.fields.get("table") or change.fields.get("name") or "rm_story")
     element = _form_target_element(
         change=change, custom_dictionary_elements=custom_dictionary_elements
     )
     position = str(change.fields.get("position") or "description")
-    view = str(change.fields.get("view") or "default").strip().lower()
+    view = (
+        str(change.fields.get("view") or change.fields.get("view_name") or "default")
+        .strip()
+        .lower()
+    )
     if table_name != "rm_story":
         raise ValueError("sys_ui_form change must target rm_story")
     if not element.startswith("u_"):
@@ -210,8 +227,8 @@ def _custom_dictionary_elements(changes: list[CandidateChange]) -> list[str]:
     for change in changes:
         if change.table != "sys_dictionary":
             continue
-        fields = dict(change.fields)
-        element = str(fields.get("element") or fields.get("column_name") or "")
+        fields = _normalize_dictionary_field_aliases(dict(change.fields))
+        element = str(fields.get("element") or "")
         if element.startswith("u_"):
             elements.append(element)
     return sorted(set(elements))
@@ -222,7 +239,12 @@ def _form_target_element(
     change: CandidateChange,
     custom_dictionary_elements: list[str],
 ) -> str:
-    element = str(change.fields.get("field") or change.fields.get("element") or "")
+    element = str(
+        change.fields.get("field")
+        or change.fields.get("element")
+        or change.fields.get("field_name")
+        or ""
+    )
     if element:
         return element
     if len(custom_dictionary_elements) == 1:
