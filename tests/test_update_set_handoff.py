@@ -15,8 +15,78 @@ from jedi_devproject.update_set_handoff import (
 
 class FakeUpdateSetClient:
     def __init__(self) -> None:
-        self.upserts: list[dict[str, object]] = []
-        self.story_updates: list[dict[str, object]] = []
+        self.fetches: list[dict[str, object]] = []
+        self.upserts: list[dict[str, Any]] = []
+        self.story_updates: list[dict[str, Any]] = []
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
+        if table == "sys_ui_section" and lookup == {"name": "rm_story"}:
+            return [
+                {
+                    "sys_id": "default-main-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "scrum-main-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "",
+                    "view": {"display_value": "Scrum", "value": "scrum-view-sys-id"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "notes-section-sys-id",
+                    "name": "rm_story",
+                    "caption": "Notes",
+                    "view": {"display_value": "Scrum", "value": "scrum-view-sys-id"},
+                    "sys_user": "",
+                },
+            ]
+        if table == "sys_ui_element" and lookup == {
+            "name": "rm_story",
+            "sys_ui_section": "default-main-section-sys-id",
+        }:
+            return [
+                {"sys_id": "default-number-element-sys-id", "element": "number", "position": "1"},
+                {
+                    "sys_id": "default-description-element-sys-id",
+                    "element": "description",
+                    "position": "4",
+                },
+                {
+                    "sys_id": "default-acceptance-element-sys-id",
+                    "element": "acceptance_criteria",
+                    "position": "5",
+                },
+            ]
+        if table == "sys_ui_element" and lookup == {
+            "name": "rm_story",
+            "sys_ui_section": "scrum-main-section-sys-id",
+        }:
+            return [
+                {"sys_id": "scrum-number-element-sys-id", "element": "number", "position": "0"},
+                {
+                    "sys_id": "scrum-description-element-sys-id",
+                    "element": "description",
+                    "position": "19",
+                },
+                {
+                    "sys_id": "scrum-acceptance-element-sys-id",
+                    "element": "acceptance_criteria",
+                    "position": "20",
+                },
+            ]
+        return []
 
     def upsert_table_record(
         self,
@@ -59,7 +129,27 @@ def _candidate() -> UpdateSetCandidate:
     )
 
 
-def test_create_update_set_handoff_creates_native_update_set_and_links_story() -> None:
+def _dictionary_form_candidate() -> UpdateSetCandidate:
+    return _candidate().model_copy(
+        update={
+            "changes": [
+                *_candidate().changes,
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "table": "rm_story",
+                        "field": "u_ai_review_notes",
+                        "position_hint": "below Description",
+                    },
+                    rationale="Place the requested field on the Story form.",
+                ),
+            ]
+        }
+    )
+
+
+def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
     result = create_update_set_handoff(
@@ -76,48 +166,113 @@ def test_create_update_set_handoff_creates_native_update_set_and_links_story() -
     assert result.update_set_sys_id == "update-set-sys-id"
     assert result.update_set_name == "JEDI STRY0010013 - AI Candidate"
     assert result.update_set_url == (
-        "https://dev205693.service-now.com/sys_update_set.do?sys_id=update-set-sys-id"
+        "https://dev205693.service-now.com/sys_remote_update_set.do?sys_id=update-set-sys-id"
     )
-    assert client.upserts == [
-        {
-            "table": "sys_update_set",
-            "lookup": {"name": "JEDI STRY0010013 - AI Candidate"},
-            "fields": {
-                "name": "JEDI STRY0010013 - AI Candidate",
-                "state": "in progress",
-                "description": (
-                    "Jedi DevProject generated handoff for STRY0010013.\n\n"
-                    "Candidate artifact: db://artifact_blobs/2\n"
-                    "Candidate hash: "
-                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
-                    "Status: Ready for Review\n"
-                    "Confidence: 0.75\n"
-                    "Risk score: 0.1\n\n"
-                    "Proposed changes:\n"
-                    "- insert sys_dictionary: name=rm_story, "
-                    "element=u_ai_review_notes, column_label=AI Review Notes\n\n"
-                    "Reviewer notes:\n"
-                    "- Confirm the field exists.\n\n"
-                    "This Update Set is a review handoff. Do not commit until the "
-                    "ServiceNow-native update contents have been reviewed."
-                ),
-            },
-        }
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_remote_update_set",
+        "sys_update_xml",
+        "sys_update_xml",
     ]
+    assert client.upserts[0] == {
+        "table": "sys_remote_update_set",
+        "lookup": {"name": "JEDI STRY0010013 - AI Candidate"},
+        "fields": {
+            "name": "JEDI STRY0010013 - AI Candidate",
+            "state": "loaded",
+            "description": (
+                "Jedi DevProject generated retrieved update set for STRY0010013.\n\n"
+                "Candidate artifact: db://artifact_blobs/2\n"
+                "Candidate hash: "
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+                "Status: Ready for Review\n"
+                "Confidence: 0.75\n"
+                "Risk score: 0.1\n\n"
+                "Proposed changes:\n"
+                "- insert sys_dictionary: name=rm_story, "
+                "element=u_ai_review_notes, column_label=AI Review Notes\n\n"
+                "Reviewer notes:\n"
+                "- Confirm the field exists.\n\n"
+                "This retrieved Update Set is a review handoff. Preview, scan, "
+                "and commit only after ServiceNow-native review."
+            ),
+            "remote_sys_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "origin_sys_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "application": "global",
+        },
+    }
+    assert client.upserts[1]["lookup"] == {
+        "name": "sys_dictionary_rm_story_u_ai_review_notes",
+        "remote_update_set": "update-set-sys-id",
+    }
+    assert client.upserts[1]["fields"]["type"] == "Dictionary"
+    assert client.upserts[1]["fields"]["target_name"] == "Story.AI Review Notes"
+    assert client.upserts[1]["fields"]["remote_update_set"] == "update-set-sys-id"
+    assert '<sys_dictionary action="INSERT_OR_UPDATE"' in str(
+        client.upserts[1]["fields"]["payload"]
+    )
+    assert client.upserts[2]["lookup"] == {
+        "name": "sys_documentation_rm_story_u_ai_review_notes_en",
+        "remote_update_set": "update-set-sys-id",
+    }
+    assert client.upserts[2]["fields"]["type"] == "Field Label"
+    assert '<sys_documentation action="INSERT_OR_UPDATE"' in str(
+        client.upserts[2]["fields"]["payload"]
+    )
+    assert all(upsert["table"] != "sys_update_set" for upsert in client.upserts)
+    assert all(
+        not (upsert["table"] == "sys_update_xml" and "update_set" in dict(upsert["fields"]))
+        for upsert in client.upserts
+    )
     assert client.story_updates == [
         {
             "story_sys_id": "story-sys-id",
             "fields": {
                 "work_notes": (
-                    "ServiceNow Update Set handoff created for STRY0010013. "
-                    "Update Set: JEDI STRY0010013 - AI Candidate "
-                    "(https://dev205693.service-now.com/sys_update_set.do?"
+                    "ServiceNow retrieved Update Set handoff created for STRY0010013. "
+                    "Retrieved Update Set: JEDI STRY0010013 - AI Candidate "
+                    "(https://dev205693.service-now.com/sys_remote_update_set.do?"
                     "sys_id=update-set-sys-id). "
                     "Candidate artifact: db://artifact_blobs/2."
                 )
             },
         }
     ]
+
+
+def test_create_update_set_handoff_imports_retrieved_form_layout_updates() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=_dictionary_form_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/2",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    form_updates = [
+        upsert for upsert in client.upserts if upsert["fields"].get("type") == "Form Layout"
+    ]
+    assert [update["lookup"] for update in form_updates] == [
+        {
+            "name": "sys_ui_section_default-main-section-sys-id",
+            "remote_update_set": "update-set-sys-id",
+        },
+        {
+            "name": "sys_ui_section_scrum-main-section-sys-id",
+            "remote_update_set": "update-set-sys-id",
+        },
+    ]
+    assert "notes-section-sys-id" not in str(form_updates)
+    assert "<element>u_ai_review_notes</element><position>5</position>" in str(
+        form_updates[0]["fields"]["payload"]
+    )
+    assert "<element>u_ai_review_notes</element><position>20</position>" in str(
+        form_updates[1]["fields"]["payload"]
+    )
 
 
 def test_create_update_set_handoff_rejects_non_reviewable_candidate() -> None:

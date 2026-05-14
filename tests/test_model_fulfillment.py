@@ -87,9 +87,7 @@ class FakeModelClient:
         fields: list[str] | None = None,
         limit: int = 100,
     ) -> list[dict[str, object]]:
-        self.fetches.append(
-            {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
-        )
+        self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
         if table == "sys_update_xml":
             return [{"sys_id": "customer-update-sys-id"}]
         return []
@@ -243,16 +241,21 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
         ]
     )
 
-    assert client.upserts[0]["table"] == "sys_update_set"
+    assert client.upserts[0]["table"] == "sys_remote_update_set"
     assert client.upserts[0]["lookup"] == {"name": "JEDI STRY0010013 - AI Candidate"}
+    assert client.upserts[1]["table"] == "sys_update_xml"
+    assert client.upserts[1]["lookup"] == {
+        "name": "sys_dictionary_rm_story_u_ai_review_notes",
+        "remote_update_set": "update-set-sys-id",
+    }
     assert client.updated_fields == [
         {
             "story_sys_id": "story-sys-id",
             "fields": {
                 "work_notes": (
-                    "ServiceNow Update Set handoff created for STRY0010013. "
-                    "Update Set: JEDI STRY0010013 - AI Candidate "
-                    "(https://dev205693.service-now.com/sys_update_set.do?"
+                    "ServiceNow retrieved Update Set handoff created for STRY0010013. "
+                    "Retrieved Update Set: JEDI STRY0010013 - AI Candidate "
+                    "(https://dev205693.service-now.com/sys_remote_update_set.do?"
                     "sys_id=update-set-sys-id). "
                     "Candidate artifact: db://artifact_blobs/2."
                 )
@@ -261,7 +264,7 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
     ]
 
 
-def test_model_candidate_handler_can_apply_candidate_under_update_set_after_handoff(
+def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
     tmp_path: Path,
 ) -> None:
     client = FakeModelClient()
@@ -294,21 +297,15 @@ def test_model_candidate_handler_can_apply_candidate_under_update_set_after_hand
     )
 
     assert [upsert["table"] for upsert in client.upserts] == [
-        "sys_update_set",
-        "sys_user_preference",
-        "sys_dictionary",
+        "sys_remote_update_set",
+        "sys_update_xml",
+        "sys_update_xml",
     ]
-    assert client.upserts[1]["lookup"] == {
-        "name": "sys_update_set",
-        "user": "user-sys-id",
-    }
-    assert client.upserts[2]["lookup"] == {
-        "name": "rm_story",
-        "element": "u_ai_review_notes",
-    }
-    assert client.fetches[-1]["table"] == "sys_update_xml"
+    assert all(upsert["table"] != "sys_user_preference" for upsert in client.upserts)
+    assert all(upsert["table"] != "sys_dictionary" for upsert in client.upserts)
+    assert all(fetch["table"] != "sys_update_xml" for fetch in client.fetches)
     work_note_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
-    assert "customer updates: 1" in work_note_fields["work_notes"]
+    assert "retrieved Update Set handoff created" in work_note_fields["work_notes"]
 
 
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(

@@ -192,15 +192,14 @@ def test_operator_guide_documents_chatgpt_implementation_adapter() -> None:
     assert "strict JSON schema" in guide
     assert "name/value" in guide
     assert "fail closed" in guide
-    assert "sys_update_set" in guide
+    assert "sys_remote_update_set" in guide
+    assert "remote_update_set" in guide
     assert "JEDI <story number> - AI Candidate" in guide
-    assert "does not fabricate `sys_update_xml`" in guide
+    assert "preview, scan, resolve, and commit" in guide
 
 
 def test_sprint_seventy_eight_change_log_documents_openai_runtime_wiring() -> None:
-    change_log = Path("docs/sprints/sprint-78-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-78-change-log.md").read_text(encoding="utf-8")
 
     assert "JEDI_MODEL_PROVIDER=openai" in change_log
     assert "OPENAI_API_KEY" in change_log
@@ -211,9 +210,7 @@ def test_sprint_seventy_eight_change_log_documents_openai_runtime_wiring() -> No
 
 
 def test_sprint_seventy_nine_change_log_documents_worker_runtime() -> None:
-    change_log = Path("docs/sprints/sprint-79-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-79-change-log.md").read_text(encoding="utf-8")
 
     assert "JEDI_BUILD_CLAIM_APPLY=true" in change_log
     assert "Dockerfile.worker" in change_log
@@ -226,9 +223,7 @@ def test_sprint_seventy_nine_change_log_documents_worker_runtime() -> None:
 
 
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
-    change_log = Path("docs/sprints/sprint-68-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-68-change-log.md").read_text(encoding="utf-8")
 
     assert "operational_store" in change_log
     assert "claim_next_fulfillment_job" in change_log
@@ -238,9 +233,7 @@ def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
 
 
 def test_sprint_sixty_nine_change_log_documents_postgres_retarget() -> None:
-    change_log = Path("docs/sprints/sprint-69-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-69-change-log.md").read_text(encoding="utf-8")
 
     assert "PostgresOperationalStore" in change_log
     assert "psycopg" in change_log
@@ -250,9 +243,7 @@ def test_sprint_sixty_nine_change_log_documents_postgres_retarget() -> None:
 
 
 def test_sprint_seventy_change_log_documents_lifecycle_webhook_api() -> None:
-    change_log = Path("docs/sprints/sprint-70-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-70-change-log.md").read_text(encoding="utf-8")
 
     assert "Lifecycle Webhook API" in change_log
     assert "create_lifecycle_api" in change_log
@@ -262,9 +253,7 @@ def test_sprint_seventy_change_log_documents_lifecycle_webhook_api() -> None:
 
 
 def test_sprint_seventy_one_change_log_documents_fulfillment_worker() -> None:
-    change_log = Path("docs/sprints/sprint-71-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-71-change-log.md").read_text(encoding="utf-8")
 
     assert "fulfillment_worker" in change_log
     assert "process_one_fulfillment_job" in change_log
@@ -274,9 +263,7 @@ def test_sprint_seventy_one_change_log_documents_fulfillment_worker() -> None:
 
 
 def test_sprint_seventy_two_change_log_documents_build_claim_handler() -> None:
-    change_log = Path("docs/sprints/sprint-72-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-72-change-log.md").read_text(encoding="utf-8")
 
     assert "fulfillment_handler" in change_log
     assert "build_claim_fulfillment_handler" in change_log
@@ -286,9 +273,7 @@ def test_sprint_seventy_two_change_log_documents_build_claim_handler() -> None:
 
 
 def test_sprint_seventy_three_change_log_documents_runtime_wiring() -> None:
-    change_log = Path("docs/sprints/sprint-73-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-73-change-log.md").read_text(encoding="utf-8")
 
     assert "runtime" in change_log
     assert "load_runtime_settings" in change_log
@@ -298,9 +283,7 @@ def test_sprint_seventy_three_change_log_documents_runtime_wiring() -> None:
 
 
 def test_sprint_seventy_five_change_log_documents_container_smoke() -> None:
-    change_log = Path("docs/sprints/sprint-75-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-75-change-log.md").read_text(encoding="utf-8")
 
     assert "container_smoke" in change_log
     assert "plan_container_lifecycle_smoke" in change_log
@@ -310,9 +293,7 @@ def test_sprint_seventy_five_change_log_documents_container_smoke() -> None:
 
 
 def test_sprint_seventy_six_change_log_documents_public_lifecycle_bootstrap() -> None:
-    change_log = Path("docs/sprints/sprint-76-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-76-change-log.md").read_text(encoding="utf-8")
 
     assert "rest_endpoint" in change_log
     assert "sys_rest_message_fn.rest_message" in change_log
@@ -320,9 +301,7 @@ def test_sprint_seventy_six_change_log_documents_public_lifecycle_bootstrap() ->
 
 
 def test_sprint_seventy_seven_change_log_documents_worker_failure_notes() -> None:
-    change_log = Path("docs/sprints/sprint-77-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-77-change-log.md").read_text(encoding="utf-8")
 
     assert "failure_notifier" in change_log
     assert "Automated fulfillment failed" in change_log
@@ -333,9 +312,7 @@ def test_sprint_seventy_seven_change_log_documents_worker_failure_notes() -> Non
 
 
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
-    change_log = Path("docs/sprints/sprint-29-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-29-change-log.md").read_text(encoding="utf-8")
 
     assert "build-implementation-packet" in change_log
     assert "reviewable implementation packet artifact" in change_log
@@ -346,9 +323,7 @@ def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
 
 
 def test_sprint_thirty_change_log_documents_model_contract_hardening() -> None:
-    change_log = Path("docs/sprints/sprint-30-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-30-change-log.md").read_text(encoding="utf-8")
 
     assert "implementation output contract" in change_log
     assert "test_plan" in change_log
@@ -357,9 +332,7 @@ def test_sprint_thirty_change_log_documents_model_contract_hardening() -> None:
 
 
 def test_sprint_thirty_one_change_log_documents_candidate_handoff() -> None:
-    change_log = Path("docs/sprints/sprint-31-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-31-change-log.md").read_text(encoding="utf-8")
 
     assert "UpdateSetCandidate" in change_log
     assert "generate_implementation_update_set_candidate" in change_log
@@ -369,9 +342,7 @@ def test_sprint_thirty_one_change_log_documents_candidate_handoff() -> None:
 
 
 def test_sprint_thirty_two_change_log_documents_candidate_cli() -> None:
-    change_log = Path("docs/sprints/sprint-32-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-32-change-log.md").read_text(encoding="utf-8")
 
     assert "build-implementation-candidate" in change_log
     assert "provider response file" in change_log
@@ -381,9 +352,7 @@ def test_sprint_thirty_two_change_log_documents_candidate_cli() -> None:
 
 
 def test_sprint_thirty_three_change_log_documents_candidate_batch_runner() -> None:
-    change_log = Path("docs/sprints/sprint-33-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-33-change-log.md").read_text(encoding="utf-8")
 
     assert "run-implementation-candidates" in change_log
     assert "implementation candidate jobs file" in change_log
@@ -392,9 +361,7 @@ def test_sprint_thirty_three_change_log_documents_candidate_batch_runner() -> No
 
 
 def test_sprint_thirty_four_change_log_documents_candidate_batch_reports() -> None:
-    change_log = Path("docs/sprints/sprint-34-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-34-change-log.md").read_text(encoding="utf-8")
 
     assert "candidate batch report" in change_log
     assert "--batch-report-root" in change_log
@@ -403,9 +370,7 @@ def test_sprint_thirty_four_change_log_documents_candidate_batch_reports() -> No
 
 
 def test_sprint_thirty_five_change_log_documents_failure_isolation() -> None:
-    change_log = Path("docs/sprints/sprint-35-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-35-change-log.md").read_text(encoding="utf-8")
 
     assert "failure isolation" in change_log
     assert "blocked outcome" in change_log
@@ -414,9 +379,7 @@ def test_sprint_thirty_five_change_log_documents_failure_isolation() -> None:
 
 
 def test_sprint_thirty_six_change_log_documents_lifecycle_smoke_runner() -> None:
-    change_log = Path("docs/sprints/sprint-36-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-36-change-log.md").read_text(encoding="utf-8")
 
     assert "run-lifecycle-smoke" in change_log
     assert "dry-run lifecycle" in change_log
@@ -425,9 +388,7 @@ def test_sprint_thirty_six_change_log_documents_lifecycle_smoke_runner() -> None
 
 
 def test_sprint_thirty_seven_change_log_documents_bootstrap_planning() -> None:
-    change_log = Path("docs/sprints/sprint-37-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-37-change-log.md").read_text(encoding="utf-8")
 
     assert "plan-bootstrap-fields" in change_log
     assert "u_ai_status" in change_log
@@ -436,9 +397,7 @@ def test_sprint_thirty_seven_change_log_documents_bootstrap_planning() -> None:
 
 
 def test_sprint_thirty_eight_change_log_documents_bootstrap_apply() -> None:
-    change_log = Path("docs/sprints/sprint-38-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-38-change-log.md").read_text(encoding="utf-8")
 
     assert "apply-bootstrap-fields" in change_log
     assert "confirm-table" in change_log
@@ -649,9 +608,7 @@ def test_spm_sidecar_architecture_decision_is_documented() -> None:
 
 
 def test_sprint_fourteen_change_log_documents_spm_workflow_alignment() -> None:
-    change_log = Path("docs/sprints/sprint-14-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-14-change-log.md").read_text(encoding="utf-8")
 
     assert "SPM/PPM workflow research" in change_log
     assert "ServiceNow work surface" in change_log
@@ -660,9 +617,7 @@ def test_sprint_fourteen_change_log_documents_spm_workflow_alignment() -> None:
 
 
 def test_sprint_fifteen_change_log_documents_writeback_boundary() -> None:
-    change_log = Path("docs/sprints/sprint-15-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-15-change-log.md").read_text(encoding="utf-8")
 
     assert "writeback planner" in change_log
     assert "external build result" in change_log
@@ -672,9 +627,7 @@ def test_sprint_fifteen_change_log_documents_writeback_boundary() -> None:
 
 
 def test_sprint_sixteen_change_log_documents_state_discovery() -> None:
-    change_log = Path("docs/sprints/sprint-16-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-16-change-log.md").read_text(encoding="utf-8")
 
     assert "sys_choice" in change_log
     assert "Ready for Testing" in change_log
@@ -683,9 +636,7 @@ def test_sprint_sixteen_change_log_documents_state_discovery() -> None:
 
 
 def test_sprint_seventeen_change_log_documents_dry_run_writeback_cli() -> None:
-    change_log = Path("docs/sprints/sprint-17-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-17-change-log.md").read_text(encoding="utf-8")
 
     assert "plan-writeback" in change_log
     assert "dry-run" in change_log
@@ -694,9 +645,7 @@ def test_sprint_seventeen_change_log_documents_dry_run_writeback_cli() -> None:
 
 
 def test_sprint_eighteen_change_log_documents_writeback_field_discovery() -> None:
-    change_log = Path("docs/sprints/sprint-18-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-18-change-log.md").read_text(encoding="utf-8")
 
     assert "sys_dictionary" in change_log
     assert "structured writeback fields" in change_log
@@ -705,9 +654,7 @@ def test_sprint_eighteen_change_log_documents_writeback_field_discovery() -> Non
 
 
 def test_sprint_nineteen_change_log_documents_confirmed_apply_gate() -> None:
-    change_log = Path("docs/sprints/sprint-19-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-19-change-log.md").read_text(encoding="utf-8")
 
     assert "confirmed apply" in change_log
     assert "--apply" in change_log
@@ -716,9 +663,7 @@ def test_sprint_nineteen_change_log_documents_confirmed_apply_gate() -> None:
 
 
 def test_sprint_twenty_change_log_documents_writeback_audit_artifact() -> None:
-    change_log = Path("docs/sprints/sprint-20-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-20-change-log.md").read_text(encoding="utf-8")
 
     assert "writeback audit artifact" in change_log
     assert "--actor-id" in change_log
@@ -728,9 +673,7 @@ def test_sprint_twenty_change_log_documents_writeback_audit_artifact() -> None:
 
 
 def test_sprint_twenty_one_change_log_documents_writeback_orchestration_boundary() -> None:
-    change_log = Path("docs/sprints/sprint-21-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-21-change-log.md").read_text(encoding="utf-8")
 
     assert "execute_writeback" in change_log
     assert "service actor" in change_log
@@ -739,9 +682,7 @@ def test_sprint_twenty_one_change_log_documents_writeback_orchestration_boundary
 
 
 def test_sprint_twenty_two_change_log_documents_writeback_idempotency() -> None:
-    change_log = Path("docs/sprints/sprint-22-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-22-change-log.md").read_text(encoding="utf-8")
 
     assert "idempotency" in change_log
     assert "writeback audit artifact" in change_log
@@ -751,9 +692,7 @@ def test_sprint_twenty_two_change_log_documents_writeback_idempotency() -> None:
 
 
 def test_sprint_twenty_three_change_log_documents_writeback_capability_preflight() -> None:
-    change_log = Path("docs/sprints/sprint-23-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-23-change-log.md").read_text(encoding="utf-8")
 
     assert "writeback capability preflight" in change_log
     assert "check-writeback-capability" in change_log
@@ -762,9 +701,7 @@ def test_sprint_twenty_three_change_log_documents_writeback_capability_preflight
 
 
 def test_sprint_twenty_four_change_log_documents_batch_writeback_orchestration() -> None:
-    change_log = Path("docs/sprints/sprint-24-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-24-change-log.md").read_text(encoding="utf-8")
 
     assert "batch writeback orchestration" in change_log
     assert "capability preflight once" in change_log
@@ -773,9 +710,7 @@ def test_sprint_twenty_four_change_log_documents_batch_writeback_orchestration()
 
 
 def test_sprint_twenty_five_change_log_documents_writeback_job_file_ingestion() -> None:
-    change_log = Path("docs/sprints/sprint-25-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-25-change-log.md").read_text(encoding="utf-8")
 
     assert "writeback job file" in change_log
     assert "run-writeback-batch" in change_log
@@ -784,9 +719,7 @@ def test_sprint_twenty_five_change_log_documents_writeback_job_file_ingestion() 
 
 
 def test_sprint_twenty_six_change_log_documents_batch_report_artifact() -> None:
-    change_log = Path("docs/sprints/sprint-26-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-26-change-log.md").read_text(encoding="utf-8")
 
     assert "batch report artifact" in change_log
     assert "no ServiceNow sys_ids" in change_log
@@ -795,9 +728,7 @@ def test_sprint_twenty_six_change_log_documents_batch_report_artifact() -> None:
 
 
 def test_sprint_twenty_seven_change_log_documents_manifest_alignment() -> None:
-    change_log = Path("docs/sprints/sprint-27-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-27-change-log.md").read_text(encoding="utf-8")
 
     assert "manifest alignment" in change_log
     assert "Controlled ServiceNow story writeback" in change_log
@@ -806,9 +737,7 @@ def test_sprint_twenty_seven_change_log_documents_manifest_alignment() -> None:
 
 
 def test_sprint_twenty_eight_change_log_documents_implementation_packet() -> None:
-    change_log = Path("docs/sprints/sprint-28-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-28-change-log.md").read_text(encoding="utf-8")
 
     assert "LLM implementation packet" in change_log
     assert "Now Assist" in change_log
@@ -817,9 +746,7 @@ def test_sprint_twenty_eight_change_log_documents_implementation_packet() -> Non
 
 
 def test_sprint_thirty_nine_change_log_documents_live_writeback_verification() -> None:
-    change_log = Path("docs/sprints/sprint-39-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-39-change-log.md").read_text(encoding="utf-8")
 
     assert "verify-writeback" in change_log
     assert "STRY0010013" in change_log
@@ -828,9 +755,7 @@ def test_sprint_thirty_nine_change_log_documents_live_writeback_verification() -
 
 
 def test_sprint_forty_change_log_documents_lifecycle_manifest() -> None:
-    change_log = Path("docs/sprints/sprint-40-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-40-change-log.md").read_text(encoding="utf-8")
 
     assert "lifecycle manifest" in change_log
     assert "record-lifecycle-manifest" in change_log
@@ -840,9 +765,7 @@ def test_sprint_forty_change_log_documents_lifecycle_manifest() -> None:
 
 
 def test_sprint_forty_one_change_log_documents_apply_manifest() -> None:
-    change_log = Path("docs/sprints/sprint-41-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-41-change-log.md").read_text(encoding="utf-8")
 
     assert "plan-writeback --apply" in change_log
     assert "--manifest-root" in change_log
@@ -851,9 +774,7 @@ def test_sprint_forty_one_change_log_documents_apply_manifest() -> None:
 
 
 def test_sprint_forty_two_change_log_documents_artifact_handoff_contract() -> None:
-    change_log = Path("docs/sprints/sprint-42-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-42-change-log.md").read_text(encoding="utf-8")
 
     assert "artifact handoff" in change_log
     assert "Approved Update Set XML" in change_log
@@ -862,9 +783,7 @@ def test_sprint_forty_two_change_log_documents_artifact_handoff_contract() -> No
 
 
 def test_sprint_forty_three_change_log_documents_handoff_report() -> None:
-    change_log = Path("docs/sprints/sprint-43-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-43-change-log.md").read_text(encoding="utf-8")
 
     assert "plan-artifact-handoff" in change_log
     assert "handoff report" in change_log
@@ -873,9 +792,7 @@ def test_sprint_forty_three_change_log_documents_handoff_report() -> None:
 
 
 def test_sprint_forty_four_change_log_documents_handoff_hashing() -> None:
-    change_log = Path("docs/sprints/sprint-44-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-44-change-log.md").read_text(encoding="utf-8")
 
     assert "SHA-256" in change_log
     assert "missing" in change_log
@@ -884,9 +801,7 @@ def test_sprint_forty_four_change_log_documents_handoff_hashing() -> None:
 
 
 def test_sprint_forty_five_change_log_documents_handoff_summary_writeback() -> None:
-    change_log = Path("docs/sprints/sprint-45-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-45-change-log.md").read_text(encoding="utf-8")
 
     assert "write-artifact-handoff-summary" in change_log
     assert "work_notes" in change_log
@@ -895,9 +810,7 @@ def test_sprint_forty_five_change_log_documents_handoff_summary_writeback() -> N
 
 
 def test_sprint_forty_six_change_log_documents_delivery_attachment_gate() -> None:
-    change_log = Path("docs/sprints/sprint-46-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-46-change-log.md").read_text(encoding="utf-8")
 
     assert "attach-delivery-artifacts" in change_log
     assert "Attachment API" in change_log
@@ -906,9 +819,7 @@ def test_sprint_forty_six_change_log_documents_delivery_attachment_gate() -> Non
 
 
 def test_sprint_forty_seven_change_log_documents_delivery_smoke() -> None:
-    change_log = Path("docs/sprints/sprint-47-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-47-change-log.md").read_text(encoding="utf-8")
 
     assert "run-delivery-artifact-smoke" in change_log
     assert "placeholder" in change_log
@@ -917,9 +828,7 @@ def test_sprint_forty_seven_change_log_documents_delivery_smoke() -> None:
 
 
 def test_sprint_forty_eight_change_log_documents_attachment_audit() -> None:
-    change_log = Path("docs/sprints/sprint-48-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-48-change-log.md").read_text(encoding="utf-8")
 
     assert "attach-delivery-artifacts" in change_log
     assert "attachment audit" in change_log
@@ -929,9 +838,7 @@ def test_sprint_forty_eight_change_log_documents_attachment_audit() -> None:
 
 
 def test_sprint_forty_nine_change_log_documents_delivery_contract_gate() -> None:
-    change_log = Path("docs/sprints/sprint-49-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-49-change-log.md").read_text(encoding="utf-8")
 
     assert "delivery_contract" in change_log
     assert "reviewed_export" in change_log
@@ -941,9 +848,7 @@ def test_sprint_forty_nine_change_log_documents_delivery_contract_gate() -> None
 
 
 def test_sprint_fifty_change_log_documents_reviewed_delivery_job_writer() -> None:
-    change_log = Path("docs/sprints/sprint-50-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-50-change-log.md").read_text(encoding="utf-8")
 
     assert "review-delivery-artifact" in change_log
     assert "reviewer_id" in change_log
@@ -953,9 +858,7 @@ def test_sprint_fifty_change_log_documents_reviewed_delivery_job_writer() -> Non
 
 
 def test_sprint_fifty_one_change_log_documents_reviewed_delivery_smoke() -> None:
-    change_log = Path("docs/sprints/sprint-51-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-51-change-log.md").read_text(encoding="utf-8")
 
     assert "run-reviewed-delivery-smoke" in change_log
     assert "reviewed delivery" in change_log
@@ -965,9 +868,7 @@ def test_sprint_fifty_one_change_log_documents_reviewed_delivery_smoke() -> None
 
 
 def test_sprint_fifty_two_change_log_documents_attachment_hash_gate() -> None:
-    change_log = Path("docs/sprints/sprint-52-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-52-change-log.md").read_text(encoding="utf-8")
 
     assert "artifact_sha256" in change_log
     assert "attach-delivery-artifacts" in change_log
@@ -977,9 +878,7 @@ def test_sprint_fifty_two_change_log_documents_attachment_hash_gate() -> None:
 
 
 def test_sprint_fifty_three_change_log_documents_dry_run_hash_preflight() -> None:
-    change_log = Path("docs/sprints/sprint-53-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-53-change-log.md").read_text(encoding="utf-8")
 
     assert "dry-run" in change_log
     assert "artifact_hash_mismatch" in change_log
@@ -988,9 +887,7 @@ def test_sprint_fifty_three_change_log_documents_dry_run_hash_preflight() -> Non
 
 
 def test_sprint_fifty_four_change_log_documents_missing_artifact_preflight() -> None:
-    change_log = Path("docs/sprints/sprint-54-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-54-change-log.md").read_text(encoding="utf-8")
 
     assert "artifact_missing" in change_log
     assert "dry-run" in change_log
@@ -999,9 +896,7 @@ def test_sprint_fifty_four_change_log_documents_missing_artifact_preflight() -> 
 
 
 def test_sprint_fifty_five_change_log_documents_update_set_xml_marker_gate() -> None:
-    change_log = Path("docs/sprints/sprint-55-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-55-change-log.md").read_text(encoding="utf-8")
 
     assert "sys_update_xml" in change_log
     assert "review-delivery-artifact" in change_log
@@ -1010,9 +905,7 @@ def test_sprint_fifty_five_change_log_documents_update_set_xml_marker_gate() -> 
 
 
 def test_sprint_fifty_six_change_log_documents_reviewed_delivery_lifecycle_manifest() -> None:
-    change_log = Path("docs/sprints/sprint-56-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-56-change-log.md").read_text(encoding="utf-8")
 
     assert "reviewed-delivery-lifecycle-manifests" in change_log
     assert "delivery_attachment_plan" in change_log
@@ -1022,9 +915,7 @@ def test_sprint_fifty_six_change_log_documents_reviewed_delivery_lifecycle_manif
 
 
 def test_sprint_fifty_seven_change_log_documents_roadmap_refresh() -> None:
-    change_log = Path("docs/sprints/sprint-57-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-57-change-log.md").read_text(encoding="utf-8")
 
     assert "SPRINTS.md" in change_log
     assert "Sprint 56" in change_log
@@ -1033,9 +924,7 @@ def test_sprint_fifty_seven_change_log_documents_roadmap_refresh() -> None:
 
 
 def test_sprint_fifty_eight_change_log_documents_external_build_contract() -> None:
-    change_log = Path("docs/sprints/sprint-58-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-58-change-log.md").read_text(encoding="utf-8")
 
     assert "ExternalBuildPipelineResult" in change_log
     assert "writeback_job_from_build_result" in change_log
@@ -1059,9 +948,7 @@ def test_operator_guide_documents_lifecycle_event_contract() -> None:
 
 
 def test_spm_sidecar_adr_documents_event_driven_story_ready_trigger() -> None:
-    adr = Path("docs/adr/0004-spm-sidecar-work-surface.md").read_text(
-        encoding="utf-8"
-    )
+    adr = Path("docs/adr/0004-spm-sidecar-work-surface.md").read_text(encoding="utf-8")
 
     assert "Draft to Ready" in adr
     assert "lifecycle event" in adr
@@ -1070,9 +957,7 @@ def test_spm_sidecar_adr_documents_event_driven_story_ready_trigger() -> None:
 
 
 def test_sprint_fifty_nine_change_log_documents_lifecycle_event_contract() -> None:
-    change_log = Path("docs/sprints/sprint-59-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-59-change-log.md").read_text(encoding="utf-8")
 
     assert "LifecycleStateChangeEvent" in change_log
     assert "Draft to Ready" in change_log
@@ -1093,9 +978,7 @@ def test_operator_guide_documents_lifecycle_event_processor_cli() -> None:
 
 
 def test_sprint_sixty_change_log_documents_lifecycle_event_processor() -> None:
-    change_log = Path("docs/sprints/sprint-60-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-60-change-log.md").read_text(encoding="utf-8")
 
     assert "process-lifecycle-event" in change_log
     assert "lifecycle-event-plans" in change_log
@@ -1117,9 +1000,7 @@ def test_operator_guide_documents_build_claim_writeback_planner() -> None:
 
 
 def test_sprint_sixty_one_change_log_documents_build_claim_planner() -> None:
-    change_log = Path("docs/sprints/sprint-61-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-61-change-log.md").read_text(encoding="utf-8")
 
     assert "plan_story_build_claim_writeback" in change_log
     assert "Ready to Work in Progress" in change_log
@@ -1139,9 +1020,7 @@ def test_operator_guide_documents_build_claim_execution_boundary() -> None:
 
 
 def test_sprint_sixty_two_change_log_documents_build_claim_execution() -> None:
-    change_log = Path("docs/sprints/sprint-62-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-62-change-log.md").read_text(encoding="utf-8")
 
     assert "execute_build_claim" in change_log
     assert "BuildClaimExecutionRequest" in change_log
@@ -1164,9 +1043,7 @@ def test_operator_guide_documents_lifecycle_business_rule_bootstrap() -> None:
 
 
 def test_sprint_sixty_three_change_log_documents_business_rule_bootstrap() -> None:
-    change_log = Path("docs/sprints/sprint-63-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-63-change-log.md").read_text(encoding="utf-8")
 
     assert "Business Rule first" in change_log
     assert "plan-lifecycle-business-rule" in change_log
@@ -1188,9 +1065,7 @@ def test_operator_guide_documents_lifecycle_rest_message_bootstrap() -> None:
 
 
 def test_sprint_sixty_four_change_log_documents_lifecycle_rest_message_bundle() -> None:
-    change_log = Path("docs/sprints/sprint-64-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-64-change-log.md").read_text(encoding="utf-8")
 
     assert "Lifecycle webhook bootstrap bundle" in change_log
     assert "Outbound REST Message" in change_log
@@ -1212,9 +1087,7 @@ def test_operator_guide_documents_lifecycle_servicenow_record_plan() -> None:
 
 
 def test_sprint_sixty_five_change_log_documents_lifecycle_record_plan() -> None:
-    change_log = Path("docs/sprints/sprint-65-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-65-change-log.md").read_text(encoding="utf-8")
 
     assert "servicenow_records" in change_log
     assert "sys_rest_message" in change_log
@@ -1235,9 +1108,7 @@ def test_operator_guide_documents_lifecycle_webhook_apply() -> None:
 
 
 def test_sprint_sixty_six_change_log_documents_lifecycle_apply() -> None:
-    change_log = Path("docs/sprints/sprint-66-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-66-change-log.md").read_text(encoding="utf-8")
 
     assert "apply-lifecycle-webhook" in change_log
     assert "upsert_table_record" in change_log
@@ -1258,9 +1129,7 @@ def test_operator_guide_documents_lifecycle_webhook_verification() -> None:
 
 
 def test_sprint_sixty_seven_change_log_documents_lifecycle_verification() -> None:
-    change_log = Path("docs/sprints/sprint-67-change-log.md").read_text(
-        encoding="utf-8"
-    )
+    change_log = Path("docs/sprints/sprint-67-change-log.md").read_text(encoding="utf-8")
 
     assert "verify_lifecycle_webhook_records" in change_log
     assert "verify-lifecycle-webhook" in change_log
