@@ -188,15 +188,36 @@ The acceptance criterion "All incident users are able to read and write to the A
 Introduce a capability analysis layer before implementation packet generation:
 
 1. Normalize the story into a `StoryCapabilityAssessment`.
-2. Use the assessment to decide automation suitability.
-3. Build an implementation packet from normalized intent, not table-specific hardcoded assumptions.
-4. Generate retrieved Update Set XML through capability builders.
-5. Write outcome-specific feedback to ServiceNow.
+2. Run Instance Discovery Workers against the target instance through the Table API.
+3. Use the assessment plus discovered instance facts to decide automation suitability.
+4. Build an implementation packet from normalized intent and discovered facts, not table-specific hardcoded assumptions.
+5. Generate retrieved Update Set XML through capability builders.
+6. Write outcome-specific feedback to ServiceNow.
+
+## Instance Discovery Workers
+
+The build pipeline must gather current target-instance context before any model call. Table API administrator access is a platform control surface, but the LLM must not guess instance state from story text alone.
+
+Instance Discovery Workers should collect structured facts for the requested capability:
+
+- target table metadata from `sys_db_object` and `sys_dictionary`
+- existing fields on the target table
+- inherited and local dictionary attributes
+- form sections/elements/views for the target table
+- anchor field existence and placement candidates
+- field labels/documentation records
+- ACL presence and whether the story implies access-control changes
+- application/scope metadata needed for Update Set payloads
+
+Discovery output becomes dynamic RAG for the implementation packet. The implementation packet should include the discovered facts and cite their ServiceNow source tables/records so the model and validators operate from current instance state.
+
+No model call should happen before discovery for a buildable story. If discovery cannot resolve required facts, the story should route to `needs_clarification` or `unsupported_capability` with precise feedback. LLM must not guess instance state, table schema, form sections, or anchor fields.
 
 Recommended modules:
 
 - `capabilities.py`: capability taxonomy, assessment models, and suitability decisions.
 - `capability_analysis.py`: deterministic story parsing and metadata-assisted analysis.
+- `instance_discovery.py`: ServiceNow Table API discovery workers and structured discovered context.
 - `generic_dictionary_form.py`: generic builder for dictionary field and form placement customer updates.
 - `model_fulfillment.py`: orchestration only; no table-specific gate logic.
 
@@ -225,10 +246,11 @@ Required coverage:
 
 1. Add capability assessment models and tests.
 2. Add deterministic analyzer tests for `STRY0010001`, `STRY0010013`, and negative cases.
-3. Refactor implementation packet generation to consume capability assessment.
-4. Generalize dictionary/form XML generation beyond `rm_story`.
-5. Update model fulfillment to route by suitability outcome.
-6. Run a live UAT retry for `STRY0010001`.
+3. Add instance discovery models and ServiceNow Table API discovery workers.
+4. Refactor implementation packet generation to consume capability assessment and discovered instance context.
+5. Generalize dictionary/form XML generation beyond `rm_story`.
+6. Update model fulfillment to route by suitability outcome.
+7. Run a live UAT retry for `STRY0010001`.
 
 ## Open Risks
 

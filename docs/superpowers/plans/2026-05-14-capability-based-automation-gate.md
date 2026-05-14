@@ -695,7 +695,541 @@ git add src/jedi_devproject/capability_analysis.py tests/test_capability_analysi
 git commit -m "Add target-agnostic capability analyzer"
 ```
 
-## Task 3: Packet Integration
+## Discovery-First Plan Revision
+
+User review after Task 2 clarified that the pipeline must orchestrate Table API discovery workers before implementation packet generation. The analyzer from Task 2 remains useful as story-intent parsing, but no model call should happen before discovery. Execute the following discovery tasks before the original packet integration work. The original packet integration task is superseded by Task 5 below.
+
+## Task 3: Instance Discovery Models
+
+**Files:**
+- Create: `src/jedi_devproject/instance_discovery.py`
+- Create: `tests/test_instance_discovery.py`
+
+- [ ] **Step 1: Write failing discovery model tests**
+
+Create `tests/test_instance_discovery.py`:
+
+```python
+from jedi_devproject.instance_discovery import (
+    DiscoveredField,
+    DiscoveredFormElement,
+    DiscoveredFormSection,
+    InstanceDiscoveryContext,
+)
+
+
+def test_instance_discovery_context_records_table_fields_and_form_anchor() -> None:
+    context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="description",
+                column_label="Description",
+                internal_type="string",
+                max_length=4000,
+                inherited=False,
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                caption="",
+                view_name="Default view",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="description-element",
+                        element="description",
+                        position=2,
+                    )
+                ],
+            )
+        ],
+        acl_indicators=[],
+        evidence=["sys_db_object:incident", "sys_dictionary:incident.description"],
+    )
+
+    assert context.anchor_exists("description")
+    assert not context.field_exists("u_antics")
+    assert context.primary_section().sys_id == "incident-main-section"
+```
+
+- [ ] **Step 2: Run test and verify failure**
+
+Run:
+
+```bash
+python3 -m pytest tests/test_instance_discovery.py -q
+```
+
+Expected: FAIL with `ModuleNotFoundError: No module named 'jedi_devproject.instance_discovery'`.
+
+- [ ] **Step 3: Implement discovery models**
+
+Create `src/jedi_devproject/instance_discovery.py`:
+
+```python
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class InstanceDiscoveryClient(Protocol):
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]: ...
+
+
+class DiscoveredField(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    element: str
+    column_label: str
+    internal_type: str
+    max_length: int | None = None
+    inherited: bool = False
+
+
+class DiscoveredFormElement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sys_id: str
+    element: str
+    position: int
+
+
+class DiscoveredFormSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sys_id: str
+    name: str
+    caption: str = ""
+    view_name: str = "Default view"
+    elements: list[DiscoveredFormElement] = Field(default_factory=list)
+
+
+class InstanceDiscoveryContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_table: str
+    table_label: str
+    table_exists: bool
+    supports_custom_fields: bool
+    fields: list[DiscoveredField] = Field(default_factory=list)
+    form_sections: list[DiscoveredFormSection] = Field(default_factory=list)
+    acl_indicators: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+
+    def field_exists(self, element: str) -> bool:
+        return any(field.element == element for field in self.fields)
+
+    def anchor_exists(self, element: str) -> bool:
+        return any(
+            form_element.element == element
+            for section in self.form_sections
+            for form_element in section.elements
+        )
+
+    def primary_section(self) -> DiscoveredFormSection:
+        if not self.form_sections:
+            raise ValueError(f"no form sections discovered for {self.target_table}")
+        return self.form_sections[0]
+```
+
+- [ ] **Step 4: Run test and verify pass**
+
+Run:
+
+```bash
+python3 -m pytest tests/test_instance_discovery.py -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/jedi_devproject/instance_discovery.py tests/test_instance_discovery.py
+git commit -m "Add instance discovery models"
+```
+
+## Task 4: ServiceNow Instance Discovery Client
+
+**Files:**
+- Modify: `src/jedi_devproject/instance_discovery.py`
+- Test: `tests/test_instance_discovery.py`
+
+- [ ] **Step 1: Write failing discovery worker test**
+
+Append to `tests/test_instance_discovery.py`:
+
+```python
+from typing import Any
+
+from jedi_devproject.instance_discovery import discover_dictionary_form_context
+
+
+class FakeDiscoveryClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        self.calls.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
+        if table == "sys_db_object" and lookup == {"name": "incident"}:
+            return [{"name": "incident", "label": "Incident", "is_extendable": "true"}]
+        if table == "sys_dictionary" and lookup == {"name": "incident"}:
+            return [
+                {
+                    "element": "description",
+                    "column_label": "Description",
+                    "internal_type": "string",
+                    "max_length": "4000",
+                }
+            ]
+        if table == "sys_ui_section" and lookup == {"name": "incident"}:
+            return [
+                {
+                    "sys_id": "incident-main-section",
+                    "name": "incident",
+                    "caption": "",
+                    "view": {"display_value": "Default view", "value": "default"},
+                }
+            ]
+        if table == "sys_ui_element" and lookup == {
+            "name": "incident",
+            "sys_ui_section": "incident-main-section",
+        }:
+            return [
+                {"sys_id": "description-element", "element": "description", "position": "2"}
+            ]
+        if table == "sys_security_acl" and lookup == {"name": "incident"}:
+            return []
+        return []
+
+
+def test_discover_dictionary_form_context_fetches_target_instance_state() -> None:
+    client = FakeDiscoveryClient()
+
+    context = discover_dictionary_form_context(client=client, target_table="incident")
+
+    assert context.target_table == "incident"
+    assert context.table_label == "Incident"
+    assert context.table_exists
+    assert context.supports_custom_fields
+    assert context.field_exists("description")
+    assert context.anchor_exists("description")
+    assert [call["table"] for call in client.calls] == [
+        "sys_db_object",
+        "sys_dictionary",
+        "sys_ui_section",
+        "sys_ui_element",
+        "sys_security_acl",
+    ]
+```
+
+- [ ] **Step 2: Run test and verify failure**
+
+Run:
+
+```bash
+python3 -m pytest tests/test_instance_discovery.py::test_discover_dictionary_form_context_fetches_target_instance_state -q
+```
+
+Expected: FAIL with import error for `discover_dictionary_form_context`.
+
+- [ ] **Step 3: Implement discovery worker**
+
+Add to `src/jedi_devproject/instance_discovery.py`:
+
+```python
+def discover_dictionary_form_context(
+    *,
+    client: InstanceDiscoveryClient,
+    target_table: str,
+) -> InstanceDiscoveryContext:
+    table_records = client.fetch_table_records(
+        table="sys_db_object",
+        lookup={"name": target_table},
+        fields=["name", "label", "is_extendable"],
+        limit=1,
+    )
+    table_exists = bool(table_records)
+    table_label = str(table_records[0].get("label") or target_table) if table_records else target_table
+
+    dictionary_records = client.fetch_table_records(
+        table="sys_dictionary",
+        lookup={"name": target_table},
+        fields=["element", "column_label", "internal_type", "max_length"],
+        limit=500,
+    )
+    fields = [
+        DiscoveredField(
+            element=str(record.get("element", "")),
+            column_label=str(record.get("column_label") or record.get("element", "")),
+            internal_type=_display_or_value(record.get("internal_type")),
+            max_length=_optional_int(record.get("max_length")),
+            inherited=False,
+        )
+        for record in dictionary_records
+        if str(record.get("element", "")).strip()
+    ]
+
+    section_records = client.fetch_table_records(
+        table="sys_ui_section",
+        lookup={"name": target_table},
+        fields=["sys_id", "name", "caption", "view", "sys_user"],
+        limit=100,
+    )
+    sections: list[DiscoveredFormSection] = []
+    for section in section_records:
+        section_id = str(section["sys_id"])
+        element_records = client.fetch_table_records(
+            table="sys_ui_element",
+            lookup={"name": target_table, "sys_ui_section": section_id},
+            fields=["sys_id", "element", "position"],
+            limit=500,
+        )
+        sections.append(
+            DiscoveredFormSection(
+                sys_id=section_id,
+                name=str(section.get("name") or target_table),
+                caption=str(section.get("caption") or ""),
+                view_name=_display_or_value(section.get("view")) or "Default view",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id=str(element["sys_id"]),
+                        element=str(element.get("element") or ""),
+                        position=int(element.get("position") or 0),
+                    )
+                    for element in element_records
+                    if str(element.get("element") or "").strip()
+                ],
+            )
+        )
+
+    acl_records = client.fetch_table_records(
+        table="sys_security_acl",
+        lookup={"name": target_table},
+        fields=["sys_id", "name", "operation"],
+        limit=100,
+    )
+
+    return InstanceDiscoveryContext(
+        target_table=target_table,
+        table_label=table_label,
+        table_exists=table_exists,
+        supports_custom_fields=table_exists,
+        fields=fields,
+        form_sections=sections,
+        acl_indicators=[str(record.get("operation") or record.get("name") or "") for record in acl_records],
+        evidence=[
+            f"sys_db_object:{target_table}",
+            f"sys_dictionary:{target_table}",
+            f"sys_ui_section:{target_table}",
+            f"sys_security_acl:{target_table}",
+        ],
+    )
+
+
+def _display_or_value(value: object) -> str:
+    if isinstance(value, dict):
+        return str(value.get("display_value") or value.get("value") or "")
+    return str(value or "")
+
+
+def _optional_int(value: object) -> int | None:
+    text = str(value or "").strip()
+    return int(text) if text.isdigit() else None
+```
+
+- [ ] **Step 4: Run test and verify pass**
+
+Run:
+
+```bash
+python3 -m pytest tests/test_instance_discovery.py -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/jedi_devproject/instance_discovery.py tests/test_instance_discovery.py
+git commit -m "Discover dictionary form instance context"
+```
+
+## Task 5: Discovery-Backed Packet Integration
+
+No model call should happen before discovery. The dynamic instance context from `discover_dictionary_form_context()` becomes the RAG-like current-state payload for implementation.
+
+**Files:**
+- Modify: `src/jedi_devproject/implementation_packet.py`
+- Modify: `src/jedi_devproject/model_fulfillment.py`
+- Test: `tests/test_implementation_packet.py`
+- Test: `tests/test_model_fulfillment.py`
+
+- [ ] **Step 1: Write failing packet tests**
+
+Append to `tests/test_implementation_packet.py`:
+
+```python
+from jedi_devproject.instance_discovery import (
+    DiscoveredField,
+    DiscoveredFormElement,
+    DiscoveredFormSection,
+    InstanceDiscoveryContext,
+)
+
+
+def test_build_implementation_packet_includes_discovered_instance_context() -> None:
+    story = _story().model_copy(
+        update={
+            "number": "STRY0010001",
+            "short_description": "Add a New Field to the Incident Form",
+            "description": (
+                "As an incident manager, I would like a new field added to the "
+                "Incident form.\n\n- Field Name: Antics\n- Field Type: String\n"
+                "- Length: 4000"
+            ),
+            "acceptance_criteria": "The field is placed below the Description field.",
+            "affected_tables": [],
+        }
+    )
+    discovery = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="description",
+                column_label="Description",
+                internal_type="string",
+                max_length=4000,
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="description-element",
+                        element="description",
+                        position=2,
+                    )
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:incident.description"],
+    )
+
+    packet = build_implementation_packet(
+        story=story,
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=discovery,
+    )
+
+    assert packet.safety_decision == "automated_build"
+    assert packet.instance_context is not None
+    assert packet.instance_context["target_table"] == "incident"
+    assert packet.instance_context["fields"][0]["element"] == "description"
+    assert packet.output_contract["must_use_discovered_instance_context"] is True
+```
+
+- [ ] **Step 2: Run test and verify failure**
+
+Run:
+
+```bash
+python3 -m pytest tests/test_implementation_packet.py::test_build_implementation_packet_includes_discovered_instance_context -q
+```
+
+Expected: FAIL because `build_implementation_packet()` does not accept `discovery_context`.
+
+- [ ] **Step 3: Add discovery context to packet model**
+
+Modify `ImplementationPacket`:
+
+```python
+    instance_context: dict[str, Any] | None = None
+```
+
+Modify `build_implementation_packet()` signature:
+
+```python
+    discovery_context: InstanceDiscoveryContext | None = None,
+```
+
+Include:
+
+```python
+        instance_context=(
+            discovery_context.model_dump(mode="json") if discovery_context is not None else None
+        ),
+```
+
+Add `instance_context` to `to_model_payload()` and `output_contract`:
+
+```python
+            "instance_context": self.instance_context,
+```
+
+```python
+            "must_use_discovered_instance_context": True,
+```
+
+- [ ] **Step 4: Update model fulfillment to run discovery before packet**
+
+In `model_fulfillment.py`, after capability analysis identifies a field/form intent and before packet creation, call:
+
+```python
+discovery_context = discover_dictionary_form_context(
+    client=client,
+    target_table=assessment.intent.target_table,
+) if assessment.intent is not None else None
+```
+
+Pass `discovery_context` into `build_implementation_packet()`.
+
+- [ ] **Step 5: Run tests**
+
+Run:
+
+```bash
+python3 -m pytest tests/test_implementation_packet.py tests/test_model_fulfillment.py -q
+```
+
+Expected: PASS after updating fakes to return `sys_db_object`, `sys_dictionary`, `sys_ui_section`, and `sys_ui_element` records.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/jedi_devproject/implementation_packet.py src/jedi_devproject/model_fulfillment.py tests/test_implementation_packet.py tests/test_model_fulfillment.py
+git commit -m "Build packets from discovered instance context"
+```
+
+## Superseded Task: Packet Integration
 
 **Files:**
 - Modify: `src/jedi_devproject/implementation_packet.py`

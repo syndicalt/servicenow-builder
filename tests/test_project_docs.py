@@ -1288,3 +1288,27 @@ def test_sprint_ninety_two_change_log_documents_uat_failure_handling() -> None:
     assert "u_ai_status=Human Review Required" in change_log
     assert "u_ai_status=Automation Failed" in change_log
     assert "state=-6" in change_log
+
+
+def test_capability_gate_design_requires_instance_discovery_workers() -> None:
+    design = Path(
+        "docs/superpowers/specs/2026-05-14-capability-based-automation-gate-design.md"
+    ).read_text(encoding="utf-8")
+
+    assert "Instance Discovery Workers" in design
+    assert "target table metadata" in design
+    assert "form sections/elements/views" in design
+    assert "dynamic RAG" in design
+    assert "LLM must not guess instance state" in design
+
+
+def test_capability_gate_plan_sequences_instance_discovery_before_build() -> None:
+    plan = Path("docs/superpowers/plans/2026-05-14-capability-based-automation-gate.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Task 3: Instance Discovery Models" in plan
+    assert "Task 4: ServiceNow Instance Discovery Client" in plan
+    assert "Task 5: Discovery-Backed Packet Integration" in plan
+    assert "dynamic instance context" in plan
+    assert "No model call should happen before discovery" in plan
