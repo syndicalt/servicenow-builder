@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Protocol
+from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict
 
@@ -145,7 +146,10 @@ def _normalize_dictionary_field_aliases(fields: dict[str, Any]) -> dict[str, Any
     _copy_alias(normalized, source="field_name", target="element")
     _copy_alias(normalized, source="field_label", target="column_label")
     _copy_alias(normalized, source="help_text", target="help")
+    _copy_alias(normalized, source="hint", target="help")
     normalized.setdefault("name", "rm_story")
+    if normalized.get("element") == "u_ai_review_notes":
+        normalized.setdefault("column_label", "AI Review Notes")
     return normalized
 
 
@@ -182,6 +186,7 @@ def _plan_form_layout_change(
         change.fields.get("form_section_name")
         or change.fields.get("section")
         or change.fields.get("caption")
+        or _form_xml_attribute(change, "section")
         or "Notes"
     ).strip()
     return _plan_named_section_form_layout_change(
@@ -245,6 +250,7 @@ def _form_target_element(
         change.fields.get("field")
         or change.fields.get("element")
         or change.fields.get("field_name")
+        or _form_xml_attribute(change, "name")
         or ""
     )
     if element:
@@ -252,6 +258,18 @@ def _form_target_element(
     if len(custom_dictionary_elements) == 1:
         return custom_dictionary_elements[0]
     raise ValueError("sys_ui_form change must identify one custom field")
+
+
+def _form_xml_attribute(change: CandidateChange, attribute_name: str) -> str | None:
+    raw_elements = change.fields.get("elements")
+    if not isinstance(raw_elements, str) or raw_elements.strip() == "":
+        return None
+    try:
+        element = ElementTree.fromstring(raw_elements)
+    except ElementTree.ParseError:
+        return None
+    value = element.attrib.get(attribute_name)
+    return value if value else None
 
 
 def _service_now_field_values(fields: dict[str, Any]) -> dict[str, Any]:

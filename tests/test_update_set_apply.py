@@ -408,6 +408,53 @@ def test_apply_candidate_normalizes_model_field_aliases() -> None:
     }
 
 
+def test_apply_candidate_normalizes_known_field_defaults_and_form_xml_element() -> None:
+    client = FakeApplyClient()
+    candidate = _candidate(
+        [
+            CandidateChange(
+                table="sys_dictionary",
+                operation="insert",
+                fields={
+                    "name": "rm_story",
+                    "element": "u_ai_review_notes",
+                    "hint": "Notes from human review.",
+                    "mandatory": False,
+                    "max_length": 8000,
+                    "default_value": "",
+                    "internal_type": "string",
+                },
+            ),
+            CandidateChange(
+                table="sys_ui_form",
+                operation="update",
+                fields={
+                    "name": "rm_story",
+                    "elements": "<field name='u_ai_review_notes' section='Notes'/>",
+                },
+            ),
+        ]
+    )
+
+    apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id="update-set-sys-id",
+            integration_user_name="jedi.integration",
+            candidate=candidate,
+        ),
+    )
+
+    dictionary_fields = cast(dict[str, Any], client.upserts[1]["fields"])
+    assert dictionary_fields["column_label"] == "AI Review Notes"
+    assert dictionary_fields["help"] == "Notes from human review."
+    assert client.upserts[-1]["lookup"] == {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+        "sys_ui_section": "notes-section-sys-id",
+    }
+
+
 def test_apply_candidate_rejects_unsupported_change_before_mutation() -> None:
     client = FakeApplyClient()
     candidate = _candidate(
