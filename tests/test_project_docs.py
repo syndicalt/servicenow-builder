@@ -1241,3 +1241,8 @@ def test_sprint_ninety_change_log_documents_importer_backed_handoff() -> None:
     assert "remote_sys_id" in change_log
     assert "no Table API upserts" in change_log
     assert "Direct Table API writes to `sys_update_xml`" in change_log
+    assert "ca51627e2d96dbc3f5c418bfd34821b2" in change_log
+    assert "sys_dictionary_rm_story_u_ai_review_notes" in change_log
+    assert "sys_ui_section_8757b94d7f0000011c1ae8aa30062c20" in change_log
+    assert "sys_documentation_rm_story_u_ai_review_notes_en" in change_log
+    assert "state reported as `committed`" in change_log
