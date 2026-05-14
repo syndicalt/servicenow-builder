@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -136,6 +137,78 @@ def test_runtime_worker_run_loop_stops_on_failed_job_by_default(
     assert summary.iterations == 1
     assert summary.failed == 1
     assert summary.stopped_reason == "failed_job"
+
+
+def test_runtime_worker_load_worker_settings_reads_loop_environment(
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:jedi@postgres:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                "JEDI_AUDIT_ROOT=/app/artifacts/audit",
+                "JEDI_WORKER_MAX_ITERATIONS=7",
+                "JEDI_WORKER_IDLE_SLEEP_SECONDS=1.25",
+                "JEDI_WORKER_STOP_ON_FAILURE=true",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = runtime_worker.load_worker_settings(env_path)
+
+    assert settings.runtime.database_url == "postgresql://jedi:jedi@postgres:5432/jedi"
+    assert settings.max_iterations == 7
+    assert settings.idle_sleep_seconds == 1.25
+    assert settings.stop_on_failure is True
+
+
+def test_runtime_worker_main_runs_loop_from_environment(
+    tmp_path: Path,
+    capsys: Any,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:jedi@postgres:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_WORKER_MAX_ITERATIONS=2",
+                "JEDI_WORKER_IDLE_SLEEP_SECONDS=0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    seen_settings: list[RuntimeSettings] = []
+
+    def processor(settings: RuntimeSettings) -> FulfillmentWorkerResult:
+        seen_settings.append(settings)
+        return FulfillmentWorkerResult(
+            status="idle",
+            job_id=None,
+            story_number=None,
+            message="No queued fulfillment job available",
+            error_message=None,
+        )
+
+    exit_code = runtime_worker.main(
+        env_path=env_path,
+        processor=processor,
+        sleep=lambda _seconds: None,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert len(seen_settings) == 2
+    assert '"iterations":2' in captured.out
+    assert '"idle":2' in captured.out
 
 
 def _store_factory(database_urls: list[str]) -> Callable[[str], _NoopStore]:

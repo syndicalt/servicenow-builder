@@ -199,6 +199,14 @@ The compose file expects ServiceNow OAuth values in the host environment: `SERVI
 
 `JEDI_BUILD_CLAIM_APPLY` defaults to `false` in compose. Keep it false for local runtime verification until the story, webhook, and writeback behavior have been reviewed for the target PDI.
 
+For hosted runtime, the worker process should run `python -m jedi_devproject.runtime_worker` from `Dockerfile.worker`. The worker loop is controlled by:
+
+- `JEDI_WORKER_MAX_ITERATIONS`: optional bounded loop count for smoke tests.
+- `JEDI_WORKER_IDLE_SLEEP_SECONDS`: idle poll sleep interval. Defaults to `5.0`.
+- `JEDI_WORKER_STOP_ON_FAILURE`: whether the process exits after the first failed job. Defaults to `false` for long-running workers.
+
+Railway development now uses `JEDI_BUILD_CLAIM_APPLY=true` so live fulfillment moves the story to `Work in Progress` before model candidate generation. Keep the worker as a separate service from the public API service.
+
 ## Container Lifecycle Smoke
 
 Use `plan_container_lifecycle_smoke()` in `jedi_devproject.container_smoke` to produce the safe smoke sequence for the local runtime. The smoke plan keeps apply disabled and uses a synthetic `Draft` to `Ready` lifecycle event for the selected story number.

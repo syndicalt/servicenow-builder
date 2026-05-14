@@ -195,6 +195,19 @@ def test_sprint_seventy_eight_change_log_documents_openai_runtime_wiring() -> No
     assert "no ServiceNow mutation" in change_log
 
 
+def test_sprint_seventy_nine_change_log_documents_worker_runtime() -> None:
+    change_log = Path("docs/sprints/sprint-79-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "JEDI_BUILD_CLAIM_APPLY=true" in change_log
+    assert "Dockerfile.worker" in change_log
+    assert "JEDI_WORKER_MAX_ITERATIONS" in change_log
+    assert "JEDI_WORKER_IDLE_SLEEP_SECONDS" in change_log
+    assert "JEDI_WORKER_STOP_ON_FAILURE" in change_log
+    assert "jedi-devproject-worker" in change_log
+
+
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
     change_log = Path("docs/sprints/sprint-68-change-log.md").read_text(
         encoding="utf-8"

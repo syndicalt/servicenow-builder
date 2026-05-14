@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 from time import sleep as sleep_seconds
@@ -12,6 +13,7 @@ from jedi_devproject.runtime import (
     load_runtime_settings,
     process_one_runtime_fulfillment,
 )
+from jedi_devproject.servicenow import load_dotenv_values
 
 DEFAULT_ENV_PATH = Path("/app/.env")
 RuntimeProcessor = Callable[[RuntimeSettings], FulfillmentWorkerResult]
@@ -26,6 +28,30 @@ class RuntimeWorkerLoopSummary(BaseModel):
     idle: int
     failed: int
     stopped_reason: str
+
+
+class RuntimeWorkerSettings(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    runtime: RuntimeSettings
+    max_iterations: int | None = None
+    idle_sleep_seconds: float = 5.0
+    stop_on_failure: bool = False
+
+
+def load_worker_settings(env_path: Path | None = DEFAULT_ENV_PATH) -> RuntimeWorkerSettings:
+    values = dict(os.environ)
+    if env_path is not None and env_path.exists():
+        values.update(load_dotenv_values(env_path))
+    return RuntimeWorkerSettings(
+        runtime=load_runtime_settings(env_path),
+        max_iterations=_optional_int(values.get("JEDI_WORKER_MAX_ITERATIONS")),
+        idle_sleep_seconds=_optional_float(
+            values.get("JEDI_WORKER_IDLE_SLEEP_SECONDS"),
+            default=5.0,
+        ),
+        stop_on_failure=_truthy(values.get("JEDI_WORKER_STOP_ON_FAILURE")),
+    )
 
 
 def process_runtime_settings(settings: RuntimeSettings) -> FulfillmentWorkerResult:
@@ -81,10 +107,39 @@ def run_loop(
     )
 
 
-def main() -> int:
-    result = run_once(settings=load_runtime_settings(DEFAULT_ENV_PATH))
-    print(result.model_dump_json())
-    return 0 if result.status in {"idle", "completed"} else 1
+def main(
+    *,
+    env_path: Path | None = DEFAULT_ENV_PATH,
+    processor: RuntimeProcessor = process_runtime_settings,
+    sleep: Sleeper = sleep_seconds,
+) -> int:
+    settings = load_worker_settings(env_path)
+    summary = run_loop(
+        settings=settings.runtime,
+        processor=processor,
+        max_iterations=settings.max_iterations,
+        idle_sleep_seconds=settings.idle_sleep_seconds,
+        sleep=sleep,
+        stop_on_failure=settings.stop_on_failure,
+    )
+    print(summary.model_dump_json())
+    return 1 if summary.failed and settings.stop_on_failure else 0
+
+
+def _optional_int(value: str | None) -> int | None:
+    if value is None or value.strip() == "":
+        return None
+    return int(value)
+
+
+def _optional_float(value: str | None, *, default: float) -> float:
+    if value is None or value.strip() == "":
+        return default
+    return float(value)
+
+
+def _truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 if __name__ == "__main__":
