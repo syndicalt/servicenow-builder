@@ -68,14 +68,17 @@ def apply_candidate_to_update_set(
     if request.candidate.status is not CandidateStatus.READY_FOR_REVIEW:
         raise ValueError("candidate is not ready for Update Set apply")
     custom_dictionary_elements = _custom_dictionary_elements(request.candidate.changes)
-    prepared_changes = [
-        _prepare_supported_change(
+    prepared_changes: list[CandidateChange | PlannedFormLayoutChange] = []
+    for change in request.candidate.changes:
+        prepared_change = _prepare_supported_change(
             client=client,
             change=change,
             custom_dictionary_elements=custom_dictionary_elements,
         )
-        for change in request.candidate.changes
-    ]
+        if isinstance(prepared_change, list):
+            prepared_changes.extend(prepared_change)
+        else:
+            prepared_changes.append(prepared_change)
 
     user_sys_id = _integration_user_sys_id(
         client=client,
@@ -86,11 +89,11 @@ def apply_candidate_to_update_set(
         user_sys_id=user_sys_id,
         update_set_sys_id=request.update_set_sys_id,
     )
-    for change in prepared_changes:
-        if isinstance(change, PlannedFormLayoutChange):
-            _apply_form_layout_change(client=client, change=change)
+    for applied_change in prepared_changes:
+        if isinstance(applied_change, PlannedFormLayoutChange):
+            _apply_form_layout_change(client=client, change=applied_change)
         else:
-            _apply_dictionary_change(client=client, change=change)
+            _apply_dictionary_change(client=client, change=applied_change)
 
     customer_updates = client.fetch_table_records(
         table="sys_update_xml",
@@ -113,7 +116,7 @@ def _prepare_supported_change(
     client: UpdateSetApplyClient,
     change: CandidateChange,
     custom_dictionary_elements: list[str],
-) -> CandidateChange | PlannedFormLayoutChange:
+) -> CandidateChange | list[PlannedFormLayoutChange]:
     if change.table == "sys_dictionary":
         return _normalize_dictionary_change(change)
     if change.table == "sys_ui_form":
@@ -164,7 +167,7 @@ def _plan_form_layout_change(
     client: UpdateSetApplyClient,
     change: CandidateChange,
     custom_dictionary_elements: list[str],
-) -> PlannedFormLayoutChange:
+) -> list[PlannedFormLayoutChange]:
     if change.operation != "update":
         raise ValueError(f"unsupported update-set apply operation: {change.operation}")
     table_name = str(change.fields.get("table") or change.fields.get("name") or "rm_story")
@@ -185,17 +188,26 @@ def _plan_form_layout_change(
 
     section_name = str(
         change.fields.get("form_section_name")
+        or change.fields.get("section_name")
         or change.fields.get("section")
         or change.fields.get("caption")
         or _form_xml_attribute(change, "section")
         or "Notes"
     ).strip()
-    return _plan_named_section_form_layout_change(
-        client=client,
-        table_name=table_name,
-        element=element,
-        section_name=section_name,
-    )
+    if _uses_description_anchor(change=change, element=element):
+        return _plan_description_anchor_form_layout_changes(
+            client=client,
+            table_name=table_name,
+            element=element,
+        )
+    return [
+        _plan_named_section_form_layout_change(
+            client=client,
+            table_name=table_name,
+            element=element,
+            section_name=section_name,
+        )
+    ]
 
 
 def _plan_named_section_form_layout_change(
@@ -221,13 +233,109 @@ def _plan_named_section_form_layout_change(
         limit=200,
     )
     insert_position = max([_record_position(record) for record in section_elements], default=-1) + 1
-    return PlannedFormLayoutChange(
+    return _plan_section_form_layout_change(
         table_name=table_name,
         element=element,
         section_sys_id=section_sys_id,
         section_caption=section_name,
+        section_elements=section_elements,
+        insert_position=insert_position,
+    )
+
+
+def _uses_description_anchor(*, change: CandidateChange, element: str) -> bool:
+    if element == "u_ai_review_notes":
+        return True
+    placement_text = " ".join(
+        str(value or "")
+        for value in [
+            change.fields.get("position"),
+            change.fields.get("position_hint"),
+            change.fields.get("placement"),
+            change.fields.get("location"),
+            change.rationale,
+        ]
+    ).lower()
+    return "description" in placement_text
+
+
+def _plan_description_anchor_form_layout_changes(
+    *,
+    client: UpdateSetApplyClient,
+    table_name: str,
+    element: str,
+) -> list[PlannedFormLayoutChange]:
+    anchors = client.fetch_table_records(
+        table="sys_ui_element",
+        lookup={"name": table_name, "element": "description"},
+        fields=["sys_id", "element", "position", "sys_ui_section", "sys_user"],
+        limit=50,
+    )
+    section_ids = sorted(
+        {
+            section_sys_id
+            for anchor in anchors
+            if _reference_value(anchor.get("sys_user")).strip() == ""
+            for section_sys_id in [_reference_value(anchor.get("sys_ui_section"))]
+            if section_sys_id.strip() != ""
+        }
+    )
+    if not section_ids:
+        raise RuntimeError("description form element lookup found no global rm_story sections")
+    changes: list[PlannedFormLayoutChange] = []
+    for section_sys_id in section_ids:
+        section_elements = client.fetch_table_records(
+            table="sys_ui_element",
+            lookup={"name": table_name, "sys_ui_section": section_sys_id},
+            fields=["sys_id", "element", "position"],
+            limit=200,
+        )
+        description_positions = [
+            _record_position(record)
+            for record in section_elements
+            if str(record.get("element") or "") == "description"
+        ]
+        if len(description_positions) != 1:
+            raise RuntimeError("description form element lookup was ambiguous")
+        changes.append(
+            _plan_section_form_layout_change(
+                table_name=table_name,
+                element=element,
+                section_sys_id=section_sys_id,
+                section_caption="",
+                section_elements=section_elements,
+                insert_position=description_positions[0] + 1,
+            )
+        )
+    return changes
+
+
+def _plan_section_form_layout_change(
+    *,
+    table_name: str,
+    element: str,
+    section_sys_id: str,
+    section_caption: str,
+    section_elements: list[dict[str, Any]],
+    insert_position: int,
+) -> PlannedFormLayoutChange:
+    shifted_elements = [
+        {
+            "sys_id": _reference_value(record.get("sys_id")),
+            "position": str(_record_position(record) + 1),
+        }
+        for record in section_elements
+        if str(record.get("element") or "") != element
+        and _record_position(record) >= insert_position
+        and _reference_value(record.get("sys_id")).strip() != ""
+    ]
+    return PlannedFormLayoutChange(
+        table_name=table_name,
+        element=element,
+        section_sys_id=section_sys_id,
+        section_caption=section_caption,
         position=insert_position,
-        shifted_elements=[],
+        shifted_elements=shifted_elements,
     )
 
 

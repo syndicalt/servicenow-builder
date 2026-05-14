@@ -87,7 +87,16 @@ class FakeApplyClient:
                     "element": "description",
                     "sys_ui_section": {"value": "main-section-sys-id"},
                     "position": "3",
-                }
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "scrum-description-element-sys-id",
+                    "name": "rm_story",
+                    "element": "description",
+                    "sys_ui_section": {"value": "scrum-main-section-sys-id"},
+                    "position": "19",
+                    "sys_user": "",
+                },
             ]
         if table == "sys_ui_element" and lookup == {
             "name": "rm_story",
@@ -108,6 +117,22 @@ class FakeApplyClient:
                     "sys_id": "acceptance-element-sys-id",
                     "element": "acceptance_criteria",
                     "position": "4",
+                },
+            ]
+        if table == "sys_ui_element" and lookup == {
+            "name": "rm_story",
+            "sys_ui_section": "scrum-main-section-sys-id",
+        }:
+            return [
+                {
+                    "sys_id": "scrum-description-element-sys-id",
+                    "element": "description",
+                    "position": "19",
+                },
+                {
+                    "sys_id": "scrum-acceptance-element-sys-id",
+                    "element": "acceptance_criteria",
+                    "position": "20",
                 },
             ]
         return []
@@ -202,7 +227,7 @@ def test_apply_candidate_sets_current_update_set_then_applies_dictionary_change(
     }
 
 
-def test_apply_candidate_places_form_field_in_notes_section_by_default() -> None:
+def test_apply_candidate_places_known_story_field_below_description_by_default() -> None:
     client = FakeApplyClient()
     candidate = _candidate(
         [
@@ -238,32 +263,115 @@ def test_apply_candidate_places_form_field_in_notes_section_by_default() -> None
         ),
     )
 
-    assert result.applied_change_count == 2
+    assert result.applied_change_count == 3
     assert [upsert["table"] for upsert in client.upserts] == [
         "sys_user_preference",
         "sys_dictionary",
         "sys_ui_element",
+        "sys_ui_element",
+        "sys_ui_section",
+        "sys_ui_element",
+        "sys_ui_element",
         "sys_ui_section",
     ]
-    assert client.upserts[2] == {
-        "table": "sys_ui_element",
-        "lookup": {
-            "name": "rm_story",
-            "element": "u_ai_review_notes",
-            "sys_ui_section": "notes-section-sys-id",
-        },
-        "fields": {
-            "name": "rm_story",
-            "element": "u_ai_review_notes",
-            "sys_ui_section": "notes-section-sys-id",
-            "position": "2",
-        },
+    assert client.upserts[3]["lookup"] == {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+        "sys_ui_section": "main-section-sys-id",
     }
-    assert client.upserts[3] == {
-        "table": "sys_ui_section",
-        "lookup": {"sys_id": "notes-section-sys-id"},
-        "fields": {"caption": "Notes"},
+    assert client.upserts[6]["lookup"] == {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+        "sys_ui_section": "scrum-main-section-sys-id",
     }
+
+
+def test_apply_candidate_places_description_anchored_field_on_all_main_story_views() -> None:
+    client = FakeApplyClient()
+    candidate = _candidate(
+        [
+            CandidateChange(
+                table="sys_dictionary",
+                operation="insert",
+                fields={
+                    "name": "rm_story",
+                    "element": "u_ai_review_notes",
+                    "column_label": "AI Review Notes",
+                    "internal_type": "string",
+                },
+            ),
+            CandidateChange(
+                table="sys_ui_form",
+                operation="update",
+                fields={
+                    "table": "rm_story",
+                    "field": "u_ai_review_notes",
+                    "position_hint": "Notes section below Description",
+                },
+            ),
+        ]
+    )
+
+    result = apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id="update-set-sys-id",
+            integration_user_name="jedi.integration",
+            candidate=candidate,
+        ),
+    )
+
+    assert result.applied_change_count == 3
+    assert client.upserts[2:] == [
+        {
+            "table": "sys_ui_element",
+            "lookup": {"sys_id": "acceptance-element-sys-id"},
+            "fields": {"position": "5"},
+        },
+        {
+            "table": "sys_ui_element",
+            "lookup": {
+                "name": "rm_story",
+                "element": "u_ai_review_notes",
+                "sys_ui_section": "main-section-sys-id",
+            },
+            "fields": {
+                "name": "rm_story",
+                "element": "u_ai_review_notes",
+                "sys_ui_section": "main-section-sys-id",
+                "position": "4",
+            },
+        },
+        {
+            "table": "sys_ui_section",
+            "lookup": {"sys_id": "main-section-sys-id"},
+            "fields": {"caption": ""},
+        },
+        {
+            "table": "sys_ui_element",
+            "lookup": {"sys_id": "scrum-acceptance-element-sys-id"},
+            "fields": {"position": "21"},
+        },
+        {
+            "table": "sys_ui_element",
+            "lookup": {
+                "name": "rm_story",
+                "element": "u_ai_review_notes",
+                "sys_ui_section": "scrum-main-section-sys-id",
+            },
+            "fields": {
+                "name": "rm_story",
+                "element": "u_ai_review_notes",
+                "sys_ui_section": "scrum-main-section-sys-id",
+                "position": "20",
+            },
+        },
+        {
+            "table": "sys_ui_section",
+            "lookup": {"sys_id": "scrum-main-section-sys-id"},
+            "fields": {"caption": ""},
+        },
+    ]
 
 
 def test_apply_candidate_infers_form_target_from_single_custom_dictionary_field() -> None:
@@ -298,19 +406,10 @@ def test_apply_candidate_infers_form_target_from_single_custom_dictionary_field(
         ),
     )
 
-    assert client.upserts[-2] == {
-        "table": "sys_ui_element",
-        "lookup": {
-            "name": "rm_story",
-            "element": "u_ai_review_notes",
-            "sys_ui_section": "notes-section-sys-id",
-        },
-        "fields": {
-            "name": "rm_story",
-            "element": "u_ai_review_notes",
-            "sys_ui_section": "notes-section-sys-id",
-            "position": "2",
-        },
+    assert client.upserts[-2]["lookup"] == {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+        "sys_ui_section": "scrum-main-section-sys-id",
     }
 
 
@@ -323,8 +422,8 @@ def test_apply_candidate_uses_named_form_section_when_provided() -> None:
                 operation="insert",
                 fields={
                     "name": "rm_story",
-                    "element": "u_ai_review_notes",
-                    "column_label": "AI Review Notes",
+                    "element": "u_release_summary",
+                    "column_label": "Release Summary",
                     "internal_type": "string",
                 },
             ),
@@ -332,7 +431,7 @@ def test_apply_candidate_uses_named_form_section_when_provided() -> None:
                 table="sys_ui_form",
                 operation="update",
                 fields={
-                    "field_name": "u_ai_review_notes",
+                    "field_name": "u_release_summary",
                     "form_section_name": "Notes",
                 },
             ),
@@ -350,7 +449,7 @@ def test_apply_candidate_uses_named_form_section_when_provided() -> None:
 
     assert client.upserts[-2]["lookup"] == {
         "name": "rm_story",
-        "element": "u_ai_review_notes",
+        "element": "u_release_summary",
         "sys_ui_section": "notes-section-sys-id",
     }
 
@@ -410,7 +509,7 @@ def test_apply_candidate_normalizes_model_field_aliases() -> None:
     assert client.upserts[-2]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
-        "sys_ui_section": "notes-section-sys-id",
+        "sys_ui_section": "scrum-main-section-sys-id",
     }
 
 
@@ -457,7 +556,7 @@ def test_apply_candidate_normalizes_known_field_defaults_and_form_xml_element() 
     assert client.upserts[-2]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
-        "sys_ui_section": "notes-section-sys-id",
+        "sys_ui_section": "scrum-main-section-sys-id",
     }
 
 
