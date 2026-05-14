@@ -775,9 +775,7 @@ def test_servicenow_client_upserts_table_record_with_lookup_query() -> None:
     assert result == {"sys_id": "rest-message-sys-id"}
     assert lookup_request.method == "GET"
     assert lookup_request.url.endswith("/api/now/table/sys_rest_message")
-    assert lookup_request.params["sysparm_query"] == (
-        "name=Jedi DevProject Lifecycle Event API"
-    )
+    assert lookup_request.params["sysparm_query"] == ("name=Jedi DevProject Lifecycle Event API")
     assert lookup_request.params["sysparm_limit"] == "1"
     assert create_request.method == "POST"
     assert create_request.url.endswith("/api/now/table/sys_rest_message")
@@ -825,6 +823,47 @@ def test_servicenow_client_upsert_updates_existing_table_record() -> None:
     assert update_request.body == {"active": True, "when": "after"}
 
 
+def test_servicenow_client_upsert_failure_includes_operation_context() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(status_code=200, json_body={"result": []}),
+            HttpResponse(
+                status_code=403,
+                json_body={
+                    "error": {
+                        "message": "Operation Failed",
+                        "detail": "ACL Exception Insert Failed due to security constraints",
+                    },
+                    "status": "failure",
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    with pytest.raises(ServiceNowApiError) as exc:
+        client.upsert_table_record(
+            table="sys_remote_update_set",
+            lookup={"name": "JEDI STRY0010013 - AI Candidate"},
+            fields={"name": "JEDI STRY0010013 - AI Candidate"},
+        )
+
+    message = str(exc.value)
+    assert "ServiceNow API POST sys_remote_update_set failed with status 403" in message
+    assert "ACL Exception Insert Failed due to security constraints" in message
+    assert "client-secret" not in message
+
+
 def test_servicenow_client_fetches_table_record_by_lookup() -> None:
     transport = RecordingTransport(
         [
@@ -865,9 +904,7 @@ def test_servicenow_client_fetches_table_record_by_lookup() -> None:
     }
     assert request.method == "GET"
     assert request.url.endswith("/api/now/table/sys_rest_message")
-    assert request.params["sysparm_query"] == (
-        "name=Jedi DevProject Lifecycle Event API"
-    )
+    assert request.params["sysparm_query"] == ("name=Jedi DevProject Lifecycle Event API")
     assert request.params["sysparm_limit"] == "1"
 
 

@@ -145,9 +145,7 @@ class OAuthClientCredentials:
             )
         )
         if response.status_code >= 400:
-            raise ServiceNowApiError(
-                f"ServiceNow OAuth failed with status {response.status_code}"
-            )
+            raise ServiceNowApiError(f"ServiceNow OAuth failed with status {response.status_code}")
         token = response.json_body.get("access_token")
         if not isinstance(token, str) or token.strip() == "":
             raise ServiceNowApiError("ServiceNow OAuth response did not include access_token")
@@ -241,8 +239,7 @@ class ServiceNowClient:
                 f"{redact_secrets(response.json_body)}"
             )
         choices = [
-            _state_choice_from_record(record)
-            for record in response.json_body.get("result", [])
+            _state_choice_from_record(record) for record in response.json_body.get("result", [])
         ]
         return sorted(
             [choice for choice in choices if not choice.inactive],
@@ -344,6 +341,7 @@ class ServiceNowClient:
         existing_record = self.fetch_table_record(table=table, lookup=lookup)
         if existing_record is not None:
             sys_id = str(existing_record.get("sys_id", ""))
+            operation = f"PATCH {table}"
             response = self._transport.send(
                 HttpRequest(
                     method="PATCH",
@@ -357,6 +355,7 @@ class ServiceNowClient:
                 )
             )
         else:
+            operation = f"POST {table}"
             response = self._transport.send(
                 HttpRequest(
                     method="POST",
@@ -371,7 +370,7 @@ class ServiceNowClient:
             )
         if response.status_code >= 400:
             raise ServiceNowApiError(
-                f"ServiceNow API failed with status {response.status_code}: "
+                f"ServiceNow API {operation} failed with status {response.status_code}: "
                 f"{redact_secrets(response.json_body)}"
             )
         result = response.json_body.get("result", {})
@@ -500,9 +499,7 @@ def oauth_auth_from_env(
     client_secret = values.get("SERVICENOW_CLIENT_SECRET")
 
     if not client_id or not client_secret:
-        raise ServiceNowApiError(
-            "Missing SERVICENOW_CLIENT_ID or SERVICENOW_CLIENT_SECRET in .env"
-        )
+        raise ServiceNowApiError("Missing SERVICENOW_CLIENT_ID or SERVICENOW_CLIENT_SECRET in .env")
 
     return OAuthClientCredentials(
         instance_url=instance_url,

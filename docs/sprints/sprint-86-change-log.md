@@ -13,6 +13,7 @@ Move generated implementation handoff from local Update Sets to retrieved Update
 - Added deterministic XML payload generation for custom `sys_dictionary` changes and their `sys_documentation` field labels.
 - Added retrieved Form Layout payload generation for `sys_ui_form` changes by resolving global `rm_story` main Default/Scrum sections and inserting the field below Description in the payload, without mutating the live form.
 - Normalized model dictionary aliases such as `column_name` and `field_label` before generating retrieved update rows.
+- Added ServiceNow upsert failure context so story writeback names the failed table operation, for example `POST sys_remote_update_set`, instead of only returning generic ACL text.
 
 ## Tests
 
@@ -22,6 +23,7 @@ Move generated implementation handoff from local Update Sets to retrieved Update
 - Updated runtime OpenAI coverage for the new retrieved Update Set request sequence.
 - Added coverage for retrieved Form Layout updates so form placement is not silently dropped.
 - Added coverage for the live model alias shape observed during the first retrieved Update Set smoke run.
+- Added ServiceNow client coverage proving upsert failures include operation context without leaking credentials.
 
 ## Decision
 
