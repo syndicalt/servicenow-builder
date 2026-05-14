@@ -671,6 +671,49 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
             ),
             HttpResponse(
                 status_code=200,
+                json_body={"result": [{"name": "rm_story", "label": "Story"}]},
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "element": "description",
+                            "column_label": "Description",
+                            "internal_type": "string",
+                            "max_length": "4000",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "rm-story-main-section",
+                            "name": "rm_story",
+                            "caption": "",
+                            "view": {"display_value": "Default view", "value": "default"},
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "description-element",
+                            "element": "description",
+                            "position": "2",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(status_code=200, json_body={"result": []}),
+            HttpResponse(
+                status_code=200,
                 json_body={
                     "output_text": (
                         '{"changes":[{"table":"sys_dictionary","operation":"insert",'
@@ -729,6 +772,11 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "PATCH",
         "GET",
+        "GET",
+        "GET",
+        "GET",
+        "GET",
+        "GET",
         "POST",
         "GET",
         "POST",
@@ -736,22 +784,34 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "PATCH",
     ]
-    assert transport.requests[5].url == "https://api.openai.com/v1/responses"
-    assert transport.requests[5].headers["Authorization"] == "Bearer openai-key"
-    assert "openai-key" not in repr(transport.requests[5].body)
-    assert transport.requests[6].url.endswith("/api/now/table/sys_ws_operation")
-    assert transport.requests[6].params["sysparm_query"] == (
+    assert transport.requests[5].url.endswith("/api/now/table/sys_db_object")
+    assert transport.requests[5].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[6].url.endswith("/api/now/table/sys_dictionary")
+    assert transport.requests[6].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[7].url.endswith("/api/now/table/sys_ui_section")
+    assert transport.requests[7].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[8].url.endswith("/api/now/table/sys_ui_element")
+    assert transport.requests[8].params["sysparm_query"] == (
+        "name=rm_story^sys_ui_section=rm-story-main-section"
+    )
+    assert transport.requests[9].url.endswith("/api/now/table/sys_security_acl")
+    assert transport.requests[9].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[10].url == "https://api.openai.com/v1/responses"
+    assert transport.requests[10].headers["Authorization"] == "Bearer openai-key"
+    assert "openai-key" not in repr(transport.requests[10].body)
+    assert transport.requests[11].url.endswith("/api/now/table/sys_ws_operation")
+    assert transport.requests[11].params["sysparm_query"] == (
         "web_service_definition.service_id=jedi_update_set_import"
         "^name=import_update_set_xml^active=true"
     )
-    assert transport.requests[7].url.endswith("/api/1860704/jedi_update_set_import")
+    assert transport.requests[12].url.endswith("/api/1860704/jedi_update_set_import")
     assert (
-        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[7].body["update_set_xml"]
+        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[12].body["update_set_xml"]
     )
-    assert transport.requests[8].url.endswith("/api/now/table/sys_remote_update_set")
-    assert transport.requests[8].params["sysparm_query"].startswith("remote_sys_id=")
-    assert transport.requests[9].url.endswith("/api/now/table/sys_choice")
-    assert transport.requests[9].params["sysparm_query"] == (
+    assert transport.requests[13].url.endswith("/api/now/table/sys_remote_update_set")
+    assert transport.requests[13].params["sysparm_query"].startswith("remote_sys_id=")
+    assert transport.requests[14].url.endswith("/api/now/table/sys_choice")
+    assert transport.requests[14].params["sysparm_query"] == (
         "name=rm_story^element=state^inactive=false"
     )
     assert store.artifact_refs == []
@@ -762,6 +822,7 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
     assert store.json_artifacts[0][3] == "implementation-packet-v1"
     assert store.json_artifacts[1][3] == "implementation-candidate-v1"
     assert store.json_artifacts[0][4]["story"]["number"] == "STRY0010013"
+    assert store.json_artifacts[0][4]["instance_context"]["target_table"] == "rm_story"
     assert store.json_artifacts[1][4]["changes"][0]["fields"]["element"] == ("u_ai_review_notes")
     assert (
         "ServiceNow retrieved Update Set handoff created"

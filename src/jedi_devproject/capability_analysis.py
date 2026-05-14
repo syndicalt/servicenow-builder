@@ -241,6 +241,8 @@ def _field_type(text: str) -> str | None:
     for candidate in ["string", "integer", "boolean", "date", "datetime", "journal"]:
         if candidate in text:
             return _normalize_field_type(candidate)
+    if "characters" in text:
+        return "string"
     if "custom field" in text:
         return "string"
     return None

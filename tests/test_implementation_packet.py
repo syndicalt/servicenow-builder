@@ -4,6 +4,12 @@ from jedi_devproject.implementation_packet import (
     generate_implementation_candidate,
     generate_implementation_update_set_candidate,
 )
+from jedi_devproject.instance_discovery import (
+    DiscoveredField,
+    DiscoveredFormElement,
+    DiscoveredFormSection,
+    InstanceDiscoveryContext,
+)
 from jedi_devproject.models import (
     CandidateStatus,
     DataClassification,
@@ -50,8 +56,7 @@ def _story() -> Story:
         number="STRY0010013",
         short_description="Add AI Review Notes field to Story form",
         description=(
-            "Add u_ai_review_notes to rm_story and place it on the Story form "
-            "for reviewer notes."
+            "Add u_ai_review_notes to rm_story and place it on the Story form for reviewer notes."
         ),
         acceptance_criteria=(
             "The AI Review Notes field is visible on the Story form and stores "
@@ -89,7 +94,10 @@ def _rags() -> SpecializedRags:
             Document(
                 domain=RagDomain.COMPLIANCE,
                 source="compliance/model-boundary",
-                content="No public AI endpoint may receive story context.",
+                content=(
+                    "No public AI endpoint may receive story context. Incident field "
+                    "stories stay inside the approved implementation boundary."
+                ),
                 version="test",
             ),
         ]
@@ -132,10 +140,68 @@ def test_build_implementation_packet_contains_grounded_context_and_controls() ->
     assert packet.allowed_tables == ["sys_dictionary", "sys_ui_form"]
     assert packet.allowed_operations == ["insert", "update"]
     assert packet.risk_score < 0.2
-    assert packet.safety_decision == "eligible"
+    assert packet.safety_decision == "automated_build"
     assert len(packet.retrieval_citations) >= 4
     assert "No public AI endpoint" in packet.context_sections["compliance"]
     assert "story-sys-id" not in packet.model_dump_json()
+
+
+def test_build_implementation_packet_includes_discovered_instance_context() -> None:
+    story = _story().model_copy(
+        update={
+            "number": "STRY0010001",
+            "short_description": "Add a New Field to the Incident Form",
+            "description": (
+                "As an incident manager, I would like a new field added to the "
+                "Incident form.\n\n- Field Name: Antics\n- Field Type: String\n"
+                "- Length: 4000"
+            ),
+            "acceptance_criteria": "The field is placed below the Description field.",
+            "affected_tables": [],
+        }
+    )
+    discovery = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="description",
+                column_label="Description",
+                internal_type="string",
+                max_length=4000,
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="description-element",
+                        element="description",
+                        position=2,
+                    )
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:incident.description"],
+    )
+
+    packet = build_implementation_packet(
+        story=story,
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=discovery,
+    )
+
+    assert packet.safety_decision == "automated_build"
+    assert packet.instance_context is not None
+    assert packet.instance_context["target_table"] == "incident"
+    assert packet.instance_context["fields"][0]["element"] == "description"
+    assert packet.output_contract["must_use_discovered_instance_context"] is True
 
 
 def test_implementation_packet_payload_is_model_ready_and_minimized() -> None:

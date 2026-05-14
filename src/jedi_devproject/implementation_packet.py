@@ -4,6 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from jedi_devproject.capabilities import SuitabilityOutcome
+from jedi_devproject.capability_analysis import analyze_story_capabilities
+from jedi_devproject.instance_discovery import InstanceDiscoveryContext
 from jedi_devproject.models import (
     CandidateChange,
     CandidateStatus,
@@ -20,8 +23,7 @@ from jedi_devproject.providers import (
     _validate_response,
 )
 from jedi_devproject.rag import SpecializedRags
-from jedi_devproject.risk import RiskInput, calculate_risk_score
-from jedi_devproject.safety import AllowlistPolicy, evaluate_story
+from jedi_devproject.safety import AllowlistPolicy
 
 IMPLEMENTATION_PACKET_TASK = "generate_implementation_candidate"
 
@@ -46,6 +48,9 @@ class ImplementationPacket(BaseModel):
     risk_score: float
     allowed_tables: list[str]
     allowed_operations: list[str]
+    capability_assessment: dict[str, Any] = Field(default_factory=dict)
+    normalized_intent: dict[str, Any] | None = None
+    instance_context: dict[str, Any] | None = None
     context_sections: dict[str, str]
     retrieval_citations: list[RetrievalCitation]
     output_contract: dict[str, Any]
@@ -61,11 +66,13 @@ class ImplementationPacket(BaseModel):
                 "risk_score": self.risk_score,
                 "allowed_tables": self.allowed_tables,
                 "allowed_operations": self.allowed_operations,
+                "capability_assessment": self.capability_assessment,
+                "normalized_intent": self.normalized_intent,
             },
+            "instance_context": self.instance_context,
             "context": self.context_sections,
             "citations": [
-                citation.model_dump(mode="json")
-                for citation in self.retrieval_citations
+                citation.model_dump(mode="json") for citation in self.retrieval_citations
             ],
             "output_contract": self.output_contract,
         }
@@ -77,8 +84,20 @@ def build_implementation_packet(
     policy: AllowlistPolicy,
     provider_policy: ProviderPolicy,
     rags: SpecializedRags,
+    discovery_context: InstanceDiscoveryContext | None = None,
 ) -> ImplementationPacket:
-    safety = evaluate_story(story, policy)
+    assessment = analyze_story_capabilities(story)
+    safety_reasons = [
+        *assessment.reasons,
+        *[f"missing detail: {detail}" for detail in assessment.missing_details],
+        *[
+            f"unsupported capability: {capability.value}"
+            for capability in sorted(
+                assessment.unsupported_capabilities,
+                key=lambda item: item.value,
+            )
+        ],
+    ]
     query = " ".join(
         text
         for text in [
@@ -94,11 +113,7 @@ def build_implementation_packet(
         domain.value: "\n".join(result.content for result in results)
         for domain, results in retrieved.items()
     }
-    citations = [
-        result.citation
-        for results in retrieved.values()
-        for result in results
-    ]
+    citations = [result.citation for results in retrieved.values() for result in results]
 
     return ImplementationPacket(
         task=IMPLEMENTATION_PACKET_TASK,
@@ -113,20 +128,18 @@ def build_implementation_packet(
             state=story.state,
             affected_tables=story.affected_tables,
         ),
-        safety_decision=safety.decision,
-        safety_reasons=safety.reasons,
-        risk_score=calculate_risk_score(
-            RiskInput(
-                story_type=safety.story_type.value if safety.story_type else "unknown",
-                affected_tables=story.affected_tables,
-                target_table=str(story.additional_context.get("target_table", "rm_story")),
-                field_name=str(
-                    story.additional_context.get("field_name", "u_ai_review_notes")
-                ),
-            )
-        ),
+        safety_decision=assessment.outcome.value,
+        safety_reasons=safety_reasons,
+        risk_score=assessment.risk_score,
         allowed_tables=sorted(policy.tables),
         allowed_operations=sorted(policy.operations),
+        capability_assessment=assessment.model_dump(mode="json"),
+        normalized_intent=(
+            assessment.intent.model_dump(mode="json") if assessment.intent is not None else None
+        ),
+        instance_context=(
+            discovery_context.model_dump(mode="json") if discovery_context is not None else None
+        ),
         context_sections=context_sections,
         retrieval_citations=citations,
         output_contract={
@@ -135,6 +148,9 @@ def build_implementation_packet(
             "must_not_invent_tables_fields_sys_ids": True,
             "must_include_test_plan": True,
             "must_include_rollback_notes": True,
+            "capabilities": sorted(capability.value for capability in assessment.capabilities),
+            "must_follow_normalized_intent": True,
+            "must_use_discovered_instance_context": True,
         },
     )
 
@@ -191,7 +207,7 @@ def generate_implementation_update_set_candidate_from_packet(
     policy: AllowlistPolicy,
     provider: ModelProvider,
 ) -> UpdateSetCandidate:
-    if packet.safety_decision != "eligible":
+    if packet.safety_decision != SuitabilityOutcome.AUTOMATED_BUILD.value:
         return _manual_review_candidate(packet=packet)
     response = _normalize_placeholder_sys_ids(provider.generate(packet.to_model_payload()))
     _validate_response(
@@ -209,10 +225,7 @@ def generate_implementation_update_set_candidate_from_packet(
         confidence=0.75,
         risk_score=packet.risk_score,
         status=CandidateStatus.READY_FOR_REVIEW,
-        changes=[
-            CandidateChange.model_validate(change)
-            for change in response.get("changes", [])
-        ],
+        changes=[CandidateChange.model_validate(change) for change in response.get("changes", [])],
         retrieval_citations=packet.retrieval_citations,
         assumptions=["Generated from a validated implementation packet."],
         reviewer_notes=[
@@ -297,9 +310,14 @@ def _build_allowed_packet(
 
 
 def _candidate_decision(value: str) -> Literal["eligible", "manual_review", "rejected"]:
-    if value == "eligible":
+    if value in {"eligible", SuitabilityOutcome.AUTOMATED_BUILD.value}:
         return "eligible"
-    if value == "manual_review":
+    if value in {
+        "manual_review",
+        SuitabilityOutcome.NEEDS_CLARIFICATION.value,
+        SuitabilityOutcome.UNSUPPORTED_CAPABILITY.value,
+        SuitabilityOutcome.MANUAL_DEVELOPER_BUILD.value,
+    }:
         return "manual_review"
     if value == "rejected":
         return "rejected"

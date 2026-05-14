@@ -102,6 +102,32 @@ class FakeModelClient:
         limit: int = 100,
     ) -> list[dict[str, object]]:
         self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
+        if table == "sys_db_object":
+            target_table = lookup["name"]
+            return [{"name": target_table, "label": target_table.replace("_", " ").title()}]
+        if table == "sys_dictionary":
+            return [
+                {
+                    "element": "description",
+                    "column_label": "Description",
+                    "internal_type": "string",
+                    "max_length": "4000",
+                }
+            ]
+        if table == "sys_ui_section":
+            target_table = lookup["name"]
+            return [
+                {
+                    "sys_id": f"{target_table}-main-section",
+                    "name": target_table,
+                    "caption": "",
+                    "view": {"display_value": "Default view", "value": "default"},
+                }
+            ]
+        if table == "sys_ui_element":
+            return [{"sys_id": "description-element", "element": "description", "position": "2"}]
+        if table == "sys_security_acl":
+            return []
         if table == "sys_remote_update_set":
             return [
                 {
@@ -338,7 +364,7 @@ def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
     assert work_note_fields["u_ai_status"] == "Ready for Testing"
 
 
-def test_model_candidate_handler_routes_manual_build_candidate_without_handoff_failure(
+def test_model_candidate_handler_builds_incident_candidate_after_instance_discovery(
     tmp_path: Path,
 ) -> None:
     client = FakeModelClient(
@@ -362,7 +388,35 @@ def test_model_candidate_handler_routes_manual_build_candidate_without_handoff_f
             data_classification=DataClassification.PUBLIC,
         )
     )
-    provider = RecordingModelProvider()
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_dictionary",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "incident",
+                        "element": "u_antics",
+                        "column_label": "Antics",
+                        "internal_type": "string",
+                        "max_length": "4000",
+                    },
+                },
+                {
+                    "table": "sys_ui_form",
+                    "operation": "update",
+                    "fields": {
+                        "name": "incident",
+                        "field_order": "u_antics",
+                        "placement_anchor": "description",
+                        "placement_position": "below",
+                    },
+                },
+            ],
+            "test_plan": ["Confirm Antics is visible below Description on the Incident form."],
+            "rollback_notes": ["Remove incident.u_antics and its form placement."],
+        }
+    )
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
@@ -377,37 +431,20 @@ def test_model_candidate_handler_routes_manual_build_candidate_without_handoff_f
     result = handler(_job().model_copy(update={"story_number": "STRY0010001"}))
 
     assert result.artifacts[1].payload_json is not None
-    assert result.artifacts[1].payload_json["status"] == CandidateStatus.MANUAL_BUILD.value
-    assert provider.payloads == []
+    candidate = result.artifacts[1].payload_json
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["fields"]["name"] == "incident"
+    assert candidate["changes"][0]["fields"]["element"] == "u_antics"
+    assert provider.payloads
+    assert provider.payloads[0]["instance_context"]["target_table"] == "incident"
+    assert {fetch["table"] for fetch in client.fetches} >= {
+        "sys_db_object",
+        "sys_dictionary",
+        "sys_ui_section",
+        "sys_ui_element",
+        "sys_security_acl",
+    }
     assert result.after_artifacts_persisted is not None
-
-    result.after_artifacts_persisted(
-        [
-            FulfillmentPersistedArtifact(
-                artifact_kind="implementation_candidate",
-                path="db://artifact_blobs/36",
-                sha256="b" * 64,
-                artifact_id=36,
-            ),
-        ]
-    )
-
-    assert client.imports == []
-    assert client.upserts == []
-    assert client.updated_fields == [
-        {
-            "story_sys_id": "story-sys-id",
-            "fields": {
-                "u_ai_status": "Human Review Required",
-                "work_notes": (
-                    "Automated implementation candidate for STRY0010001 requires "
-                    "manual review. No retrieved Update Set was created. Candidate "
-                    "artifact: db://artifact_blobs/36. Reasons: missing affected "
-                    "tables; story type not allowed: unknown; operation allowed: update."
-                ),
-            },
-        }
-    ]
 
 
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(

@@ -4,6 +4,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.enrichment import enrich_story
 from jedi_devproject.fulfillment_worker import (
     FulfillmentArtifactRef,
@@ -13,6 +14,10 @@ from jedi_devproject.fulfillment_worker import (
 from jedi_devproject.implementation_packet import (
     build_implementation_packet,
     generate_implementation_update_set_candidate_from_packet,
+)
+from jedi_devproject.instance_discovery import (
+    InstanceDiscoveryContext,
+    discover_dictionary_form_context,
 )
 from jedi_devproject.models import CandidateStatus, ProviderPolicy, UpdateSetCandidate
 from jedi_devproject.operational_store import FulfillmentJobRecord
@@ -81,11 +86,13 @@ def model_candidate_fulfillment_handler(
             raise RuntimeError(f"story not found: {job.story_number}")
 
         story = enrich_story(stories[0]).enriched_story
+        discovery_context = _discovery_context_for_story(client=client, story=story)
         packet = build_implementation_packet(
             story=story,
             policy=config.policy,
             provider_policy=config.provider_policy,
             rags=config.rags,
+            discovery_context=discovery_context,
         )
         candidate = generate_implementation_update_set_candidate_from_packet(
             packet=packet,
@@ -120,6 +127,20 @@ def model_candidate_fulfillment_handler(
         )
 
     return handle
+
+
+def _discovery_context_for_story(
+    *,
+    client: ModelFulfillmentClient,
+    story: Any,
+) -> InstanceDiscoveryContext | None:
+    assessment = analyze_story_capabilities(story)
+    if assessment.intent is None:
+        return None
+    return discover_dictionary_form_context(
+        client=client,
+        target_table=assessment.intent.target_table,
+    )
 
 
 def _create_handoff_after_persist(
