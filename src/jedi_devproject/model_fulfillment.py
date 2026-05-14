@@ -50,6 +50,13 @@ class ModelFulfillmentClient(WritebackClient, Protocol):
         fields: dict[str, Any],
     ) -> dict[str, Any]: ...
 
+    def import_update_set_xml(
+        self,
+        *,
+        service_id: str,
+        update_set_xml: str,
+    ) -> dict[str, Any]: ...
+
 
 class ModelCandidateFulfillmentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")

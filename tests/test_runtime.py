@@ -682,20 +682,21 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
                     )
                 },
             ),
-            HttpResponse(status_code=200, json_body={"result": []}),
             HttpResponse(
-                status_code=201,
-                json_body={"result": {"sys_id": "update-set-sys-id"}},
+                status_code=200,
+                json_body={"result": [{"operation_uri": "/api/1860704/jedi_update_set_import"}]},
             ),
-            HttpResponse(status_code=200, json_body={"result": []}),
+            HttpResponse(status_code=201, json_body={"result": {"status": "imported"}}),
             HttpResponse(
-                status_code=201,
-                json_body={"result": {"sys_id": "dictionary-update-sys-id"}},
-            ),
-            HttpResponse(status_code=200, json_body={"result": []}),
-            HttpResponse(
-                status_code=201,
-                json_body={"result": {"sys_id": "documentation-update-sys-id"}},
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "remote-update-set-sys-id",
+                            "name": "JEDI STRY0010013 - AI Candidate",
+                        }
+                    ]
+                },
             ),
             HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
         ]
@@ -719,29 +720,22 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "POST",
         "GET",
-        "POST",
-        "GET",
-        "POST",
         "PATCH",
     ]
     assert transport.requests[5].url == "https://api.openai.com/v1/responses"
     assert transport.requests[5].headers["Authorization"] == "Bearer openai-key"
     assert "openai-key" not in repr(transport.requests[5].body)
-    assert transport.requests[6].url.endswith("/api/now/table/sys_remote_update_set")
-    assert transport.requests[7].url.endswith("/api/now/table/sys_remote_update_set")
-    assert transport.requests[7].body["name"] == "JEDI STRY0010013 - AI Candidate"
-    assert transport.requests[8].url.endswith("/api/now/table/sys_update_xml")
-    assert transport.requests[8].params["sysparm_query"] == (
-        "name=sys_dictionary_rm_story_u_ai_review_notes^remote_update_set=update-set-sys-id"
+    assert transport.requests[6].url.endswith("/api/now/table/sys_ws_operation")
+    assert transport.requests[6].params["sysparm_query"] == (
+        "web_service_definition.service_id=jedi_update_set_import"
+        "^name=import_update_set_xml^active=true"
     )
-    assert transport.requests[9].url.endswith("/api/now/table/sys_update_xml")
-    assert transport.requests[9].body["remote_update_set"] == "update-set-sys-id"
-    assert transport.requests[10].url.endswith("/api/now/table/sys_update_xml")
-    assert transport.requests[10].params["sysparm_query"] == (
-        "name=sys_documentation_rm_story_u_ai_review_notes_en^remote_update_set=update-set-sys-id"
+    assert transport.requests[7].url.endswith("/api/1860704/jedi_update_set_import")
+    assert (
+        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[7].body["update_set_xml"]
     )
-    assert transport.requests[11].url.endswith("/api/now/table/sys_update_xml")
-    assert transport.requests[11].body["remote_update_set"] == "update-set-sys-id"
+    assert transport.requests[8].url.endswith("/api/now/table/sys_remote_update_set")
+    assert transport.requests[8].params["sysparm_query"].startswith("remote_sys_id=")
     assert store.artifact_refs == []
     assert [artifact[2] for artifact in store.json_artifacts] == [
         "implementation_packet",
@@ -755,6 +749,7 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "ServiceNow retrieved Update Set handoff created"
         in transport.requests[-1].body["work_notes"]
     )
+    assert "sys_id=remote-update-set-sys-id" in transport.requests[-1].body["work_notes"]
     assert "db://artifact_blobs/2" in transport.requests[-1].body["work_notes"]
 
 

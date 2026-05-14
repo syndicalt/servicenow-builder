@@ -21,6 +21,7 @@ class FakeModelClient:
         self.updated_fields: list[dict[str, object]] = []
         self.upserts: list[dict[str, object]] = []
         self.fetches: list[dict[str, object]] = []
+        self.imports: list[dict[str, str]] = []
 
     def fetch_stories(
         self,
@@ -88,9 +89,25 @@ class FakeModelClient:
         limit: int = 100,
     ) -> list[dict[str, object]]:
         self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
+        if table == "sys_remote_update_set":
+            return [
+                {
+                    "sys_id": "remote-update-set-sys-id",
+                    "name": "JEDI STRY0010013 - AI Candidate",
+                }
+            ]
         if table == "sys_update_xml":
             return [{"sys_id": "customer-update-sys-id"}]
         return []
+
+    def import_update_set_xml(
+        self,
+        *,
+        service_id: str,
+        update_set_xml: str,
+    ) -> dict[str, object]:
+        self.imports.append({"service_id": service_id, "update_set_xml": update_set_xml})
+        return {"status_code": 201, "result": {"status": "imported"}}
 
 
 class RecordingModelProvider:
@@ -241,13 +258,9 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
         ]
     )
 
-    assert client.upserts[0]["table"] == "sys_remote_update_set"
-    assert client.upserts[0]["lookup"] == {"name": "JEDI STRY0010013 - AI Candidate"}
-    assert client.upserts[1]["table"] == "sys_update_xml"
-    assert client.upserts[1]["lookup"] == {
-        "name": "sys_dictionary_rm_story_u_ai_review_notes",
-        "remote_update_set": "update-set-sys-id",
-    }
+    assert client.upserts == []
+    assert client.imports[0]["service_id"] == "jedi_update_set_import"
+    assert "sys_dictionary_rm_story_u_ai_review_notes" in client.imports[0]["update_set_xml"]
     assert client.updated_fields == [
         {
             "story_sys_id": "story-sys-id",
@@ -256,7 +269,7 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
                     "ServiceNow retrieved Update Set handoff created for STRY0010013. "
                     "Retrieved Update Set: JEDI STRY0010013 - AI Candidate "
                     "(https://dev205693.service-now.com/sys_remote_update_set.do?"
-                    "sys_id=update-set-sys-id). "
+                    "sys_id=remote-update-set-sys-id). "
                     "Candidate artifact: db://artifact_blobs/2."
                 )
             },
@@ -296,11 +309,8 @@ def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
         ]
     )
 
-    assert [upsert["table"] for upsert in client.upserts] == [
-        "sys_remote_update_set",
-        "sys_update_xml",
-        "sys_update_xml",
-    ]
+    assert client.upserts == []
+    assert len(client.imports) == 1
     assert all(upsert["table"] != "sys_user_preference" for upsert in client.upserts)
     assert all(upsert["table"] != "sys_dictionary" for upsert in client.upserts)
     assert all(fetch["table"] != "sys_update_xml" for fetch in client.fetches)

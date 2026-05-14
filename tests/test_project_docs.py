@@ -1222,3 +1222,22 @@ def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
     assert "22221e3514c94fa3bde48148b0053e6f" in change_log
     assert "sys_documentation_rm_story_u_jedi_import_smoke_notes_en" in change_log
     assert "zero preview problems" in change_log
+
+
+def test_operator_guide_documents_importer_backed_model_handoff() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "posts it to the ServiceNow-side importer `jedi_update_set_import`" in guide
+    assert "looks up the retrieved update set by `remote_sys_id`" in guide
+    assert "direct `sys_remote_update_set.do?sys_id=...` link" in guide
+    assert "the importer endpoint is missing" in guide
+
+
+def test_sprint_ninety_change_log_documents_importer_backed_handoff() -> None:
+    change_log = Path("docs/sprints/sprint-90-change-log.md").read_text(encoding="utf-8")
+
+    assert "import_update_set_xml" in change_log
+    assert "jedi_update_set_import" in change_log
+    assert "remote_sys_id" in change_log
+    assert "no Table API upserts" in change_log
+    assert "Direct Table API writes to `sys_update_xml`" in change_log

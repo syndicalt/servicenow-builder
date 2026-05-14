@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from html import escape
 from typing import Any, Protocol
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
@@ -32,6 +34,13 @@ class UpdateSetHandoffClient(Protocol):
         fields: dict[str, object],
     ) -> object: ...
 
+    def import_update_set_xml(
+        self,
+        *,
+        service_id: str,
+        update_set_xml: str,
+    ) -> dict[str, Any]: ...
+
 
 class UpdateSetHandoffRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
@@ -61,39 +70,35 @@ def create_update_set_handoff(
 
     update_set_name = _update_set_name(request.story_number)
     remote_sys_id = _remote_sys_id(request.candidate)
-    result = client.upsert_table_record(
-        table="sys_remote_update_set",
-        lookup={"name": update_set_name},
-        fields={
-            "name": update_set_name,
-            "state": "loaded",
-            "description": _update_set_description(request),
-            "remote_sys_id": remote_sys_id,
-            "origin_sys_id": remote_sys_id,
-            "application": "global",
-        },
+    customer_updates = _customer_updates_for_candidate(
+        client=client,
+        candidate=request.candidate,
+        remote_update_set_sys_id=remote_sys_id,
     )
-    update_set_sys_id = str(result.get("sys_id", ""))
+    update_set_xml = _update_set_unload_xml(
+        update_set_name=update_set_name,
+        remote_sys_id=remote_sys_id,
+        description=_update_set_description(request),
+        customer_updates=customer_updates,
+    )
+    client.import_update_set_xml(
+        service_id="jedi_update_set_import",
+        update_set_xml=update_set_xml,
+    )
+    imported_update_sets = client.fetch_table_records(
+        table="sys_remote_update_set",
+        lookup={"remote_sys_id": remote_sys_id},
+        fields=["sys_id", "name", "state", "remote_sys_id"],
+        limit=1,
+    )
+    update_set_sys_id = str(imported_update_sets[0].get("sys_id") if imported_update_sets else "")
     if update_set_sys_id.strip() == "":
-        raise RuntimeError("ServiceNow Update Set response did not include sys_id")
+        raise RuntimeError("ServiceNow imported Update Set lookup did not include sys_id")
 
     update_set_url = _update_set_url(
         instance_url=request.instance_url,
         update_set_sys_id=update_set_sys_id,
     )
-    for customer_update in _customer_updates_for_candidate(
-        client=client,
-        candidate=request.candidate,
-        remote_update_set_sys_id=update_set_sys_id,
-    ):
-        client.upsert_table_record(
-            table="sys_update_xml",
-            lookup={
-                "name": customer_update["name"],
-                "remote_update_set": update_set_sys_id,
-            },
-            fields=customer_update,
-        )
     client.update_story_fields(
         request.story_sys_id,
         {
@@ -117,6 +122,64 @@ def _update_set_name(story_number: str) -> str:
 
 def _update_set_url(*, instance_url: str, update_set_sys_id: str) -> str:
     return f"{instance_url.rstrip('/')}/sys_remote_update_set.do?sys_id={update_set_sys_id}"
+
+
+def _update_set_unload_xml(
+    *,
+    update_set_name: str,
+    remote_sys_id: str,
+    description: str,
+    customer_updates: list[dict[str, Any]],
+) -> str:
+    unload_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    customer_update_xml = "\n".join(
+        _customer_update_xml(
+            update=update,
+            update_set_name=update_set_name,
+            remote_sys_id=remote_sys_id,
+        )
+        for update in customer_updates
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<unload unload_date="{escape(unload_date)}">\n'
+        '<sys_remote_update_set action="INSERT_OR_UPDATE">\n'
+        '<application display_value="Global">global</application>\n'
+        f"<description>{escape(description)}</description>\n"
+        f"<name>{escape(update_set_name)}</name>\n"
+        f"<origin_sys_id>{escape(remote_sys_id)}</origin_sys_id>\n"
+        f"<remote_sys_id>{escape(remote_sys_id)}</remote_sys_id>\n"
+        "<state>loaded</state>\n"
+        "<sys_class_name>sys_remote_update_set</sys_class_name>\n"
+        f"<sys_id>{escape(remote_sys_id)}</sys_id>\n"
+        "</sys_remote_update_set>\n"
+        f"{customer_update_xml}\n"
+        "</unload>"
+    )
+
+
+def _customer_update_xml(
+    *,
+    update: dict[str, Any],
+    update_set_name: str,
+    remote_sys_id: str,
+) -> str:
+    payload = str(update["payload"])
+    payload = payload.replace("]]>", "]]]]><![CDATA[>")
+    return (
+        '<sys_update_xml action="INSERT_OR_UPDATE">\n'
+        f"<action>{escape(str(update['action']))}</action>\n"
+        '<application display_value="Global">global</application>\n'
+        f"<name>{escape(str(update['name']))}</name>\n"
+        f"<payload><![CDATA[{payload}]]></payload>\n"
+        f'<remote_update_set display_value="{escape(update_set_name)}">'
+        f"{escape(remote_sys_id)}</remote_update_set>\n"
+        "<sys_class_name>sys_update_xml</sys_class_name>\n"
+        f"<sys_id>{uuid4().hex}</sys_id>\n"
+        f"<target_name>{escape(str(update['target_name']))}</target_name>\n"
+        f"<type>{escape(str(update['type']))}</type>\n"
+        "</sys_update_xml>"
+    )
 
 
 def _update_set_description(request: UpdateSetHandoffRequest) -> str:
