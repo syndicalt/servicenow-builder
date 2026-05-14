@@ -203,6 +203,10 @@ Runtime OpenAI use is disabled unless `JEDI_MODEL_PROVIDER=openai` is set. `OPEN
 
 When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-claim path, then `model_candidate_fulfillment_handler` builds an `implementation_packet`, calls `OpenAIResponsesProvider`, validates the model response, and returns DB-ready JSON artifacts for the implementation packet and implementation candidate. The worker stores both artifacts in `artifact_blobs`, records DB-backed `artifact_refs`, and writes a ServiceNow work note keyed to the fulfillment job id. The model stage does not apply model-generated platform changes.
 
+After the implementation candidate artifact is durably stored, the worker creates or updates a ServiceNow `sys_update_set` handoff record named `JEDI <story number> - AI Candidate`. The Update Set description includes the candidate artifact ref, candidate hash, risk/confidence values, proposed change summary, and reviewer notes. The story receives a work note with a direct `sys_update_set.do?sys_id=...` link.
+
+This handoff record is the ServiceNow-native review surface. It is not a committed deployment and does not fabricate `sys_update_xml` entries. Candidate changes must still be applied through a controlled, allowlisted ServiceNow update path before the Update Set contains commit-ready platform changes.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:

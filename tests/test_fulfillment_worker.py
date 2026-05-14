@@ -8,6 +8,7 @@ import pytest
 from jedi_devproject.fulfillment_worker import (
     FulfillmentArtifactRef,
     FulfillmentExecutionResult,
+    FulfillmentPersistedArtifact,
     process_one_fulfillment_job,
 )
 from jedi_devproject.operational_store import FulfillmentJobRecord
@@ -21,6 +22,7 @@ class FakeWorkerStore:
         self.failed_jobs: list[tuple[str, str]] = []
         self.artifact_refs: list[tuple[str, str, str, str]] = []
         self.json_artifacts: list[tuple[str, str, str, str, dict[str, Any]]] = []
+        self.next_artifact_id = 1
 
     def claim_next_fulfillment_job(
         self,
@@ -75,7 +77,18 @@ class FakeWorkerStore:
         self.json_artifacts.append(
             (job_id, story_number, artifact_kind, schema_version, payload)
         )
-        return object()
+        artifact = SimpleArtifactRecord(
+            id=self.next_artifact_id,
+            sha256="b" * 64,
+        )
+        self.next_artifact_id += 1
+        return artifact
+
+
+class SimpleArtifactRecord:
+    def __init__(self, *, id: int, sha256: str) -> None:
+        self.id = id
+        self.sha256 = sha256
 
 
 def _job() -> FulfillmentJobRecord:
@@ -197,6 +210,74 @@ def test_worker_records_json_artifacts_before_completing_job() -> None:
         )
     ]
     assert store.completed_jobs == [("job-evt-001", "processed STRY0010013")]
+
+
+def test_worker_runs_post_artifact_callback_after_json_artifact_persistence() -> None:
+    store = FakeWorkerStore(claimed_job=_job())
+    callback_artifacts: list[FulfillmentPersistedArtifact] = []
+
+    def handler(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
+        return FulfillmentExecutionResult(
+            message=f"processed {job.story_number}",
+            artifacts=[
+                FulfillmentArtifactRef(
+                    artifact_kind="implementation_candidate",
+                    schema_version="implementation-candidate-v1",
+                    payload_json={"story_number": job.story_number},
+                )
+            ],
+            after_artifacts_persisted=callback_artifacts.extend,
+        )
+
+    result = process_one_fulfillment_job(
+        store=store,
+        worker_id="worker-1",
+        handler=handler,
+    )
+
+    assert result.status == "completed"
+    assert callback_artifacts == [
+        FulfillmentPersistedArtifact(
+            artifact_kind="implementation_candidate",
+            path="db://artifact_blobs/1",
+            sha256="b" * 64,
+            artifact_id=1,
+        )
+    ]
+    assert store.completed_jobs == [("job-evt-001", "processed STRY0010013")]
+
+
+def test_worker_fails_job_when_post_artifact_callback_raises() -> None:
+    store = FakeWorkerStore(claimed_job=_job())
+
+    def handler(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
+        def fail_after_persist(
+            _artifacts: list[FulfillmentPersistedArtifact],
+        ) -> None:
+            raise RuntimeError("Update Set handoff failed")
+
+        return FulfillmentExecutionResult(
+            message=f"processed {job.story_number}",
+            artifacts=[
+                FulfillmentArtifactRef(
+                    artifact_kind="implementation_candidate",
+                    schema_version="implementation-candidate-v1",
+                    payload_json={"story_number": job.story_number},
+                )
+            ],
+            after_artifacts_persisted=fail_after_persist,
+        )
+
+    result = process_one_fulfillment_job(
+        store=store,
+        worker_id="worker-1",
+        handler=handler,
+    )
+
+    assert result.status == "failed"
+    assert result.error_message == "Update Set handoff failed"
+    assert store.completed_jobs == []
+    assert store.failed_jobs == [("job-evt-001", "Update Set handoff failed")]
 
 
 def test_worker_fails_claimed_job_when_handler_raises() -> None:

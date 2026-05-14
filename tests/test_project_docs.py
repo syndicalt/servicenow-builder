@@ -192,6 +192,9 @@ def test_operator_guide_documents_chatgpt_implementation_adapter() -> None:
     assert "strict JSON schema" in guide
     assert "name/value" in guide
     assert "fail closed" in guide
+    assert "sys_update_set" in guide
+    assert "JEDI <story number> - AI Candidate" in guide
+    assert "does not fabricate `sys_update_xml`" in guide
 
 
 def test_sprint_seventy_eight_change_log_documents_openai_runtime_wiring() -> None:

@@ -35,6 +35,7 @@ class FakeRuntimeStore:
         self.json_artifacts: list[tuple[str, str, str, str, dict[str, Any]]] = []
         self.artifact_blob_records: dict[int, ArtifactBlobRecord] = {}
         self.artifact_ref_records: dict[str, list[ArtifactRefRecord]] = {}
+        self.next_artifact_id = 1
         self.closed = False
 
     def __enter__(self) -> FakeRuntimeStore:
@@ -121,7 +122,19 @@ class FakeRuntimeStore:
         self.json_artifacts.append(
             (job_id, story_number, artifact_kind, schema_version, payload)
         )
-        return object()
+        artifact = ArtifactBlobRecord(
+            id=self.next_artifact_id,
+            job_id=job_id,
+            story_number=story_number,
+            artifact_kind=artifact_kind,
+            schema_version=schema_version,
+            payload_json=payload,
+            sha256="a" * 64,
+            created_at=datetime(2026, 5, 13, 15, self.next_artifact_id, tzinfo=UTC),
+        )
+        self.artifact_blob_records[self.next_artifact_id] = artifact
+        self.next_artifact_id += 1
+        return artifact
 
     def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord:
         if artifact_id not in self.artifact_blob_records:
@@ -646,6 +659,11 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
                     )
                 },
             ),
+            HttpResponse(status_code=200, json_body={"result": []}),
+            HttpResponse(
+                status_code=201,
+                json_body={"result": {"sys_id": "update-set-sys-id"}},
+            ),
             HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
         ]
     )
@@ -665,11 +683,16 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "PATCH",
         "GET",
         "POST",
+        "GET",
+        "POST",
         "PATCH",
     ]
     assert transport.requests[5].url == "https://api.openai.com/v1/responses"
     assert transport.requests[5].headers["Authorization"] == "Bearer openai-key"
     assert "openai-key" not in repr(transport.requests[5].body)
+    assert transport.requests[6].url.endswith("/api/now/table/sys_update_set")
+    assert transport.requests[7].url.endswith("/api/now/table/sys_update_set")
+    assert transport.requests[7].body["name"] == "JEDI STRY0010013 - AI Candidate"
     assert store.artifact_refs == []
     assert [artifact[2] for artifact in store.json_artifacts] == [
         "implementation_packet",
@@ -681,7 +704,8 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
     assert store.json_artifacts[1][4]["changes"][0]["fields"]["element"] == (
         "u_ai_review_notes"
     )
-    assert "Implementation candidate generated" in transport.requests[-1].body["work_notes"]
+    assert "ServiceNow Update Set handoff created" in transport.requests[-1].body["work_notes"]
+    assert "db://artifact_blobs/2" in transport.requests[-1].body["work_notes"]
 
 
 def test_process_one_runtime_fulfillment_rejects_openai_provider_without_api_key(

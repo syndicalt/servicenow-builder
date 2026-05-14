@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from jedi_devproject.fulfillment_worker import FulfillmentPersistedArtifact
 from jedi_devproject.model_fulfillment import (
     ModelCandidateFulfillmentConfig,
     model_candidate_fulfillment_handler,
@@ -18,6 +19,7 @@ from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
 class FakeModelClient:
     def __init__(self) -> None:
         self.updated_fields: list[dict[str, object]] = []
+        self.upserts: list[dict[str, object]] = []
 
     def fetch_stories(
         self,
@@ -54,6 +56,16 @@ class FakeModelClient:
 
     def update_story_fields(self, story_sys_id: str, fields: dict[str, object]) -> None:
         self.updated_fields.append({"story_sys_id": story_sys_id, "fields": fields})
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, object],
+    ) -> dict[str, object]:
+        self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+        return {"sys_id": "update-set-sys-id", "name": fields["name"]}
 
 
 class RecordingModelProvider:
@@ -161,6 +173,7 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
             provider_policy=_provider_policy(),
             rags=_rags(),
             provider=provider,
+            instance_url="https://dev205693.service-now.com",
         ),
     )
 
@@ -183,13 +196,38 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
     assert candidate["status"] == "Ready for Review"
     assert candidate["changes"][0]["fields"]["element"] == "u_ai_review_notes"
     assert provider.payloads[0]["task"] == "generate_implementation_candidate"
+    assert client.updated_fields == []
+    assert result.after_artifacts_persisted is not None
+
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_packet",
+                path="db://artifact_blobs/1",
+                sha256="a" * 64,
+                artifact_id=1,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/2",
+                sha256="b" * 64,
+                artifact_id=2,
+            ),
+        ]
+    )
+
+    assert client.upserts[0]["table"] == "sys_update_set"
+    assert client.upserts[0]["lookup"] == {"name": "JEDI STRY0010013 - AI Candidate"}
     assert client.updated_fields == [
         {
             "story_sys_id": "story-sys-id",
             "fields": {
                 "work_notes": (
-                    "Implementation candidate generated for STRY0010013. "
-                    "Artifacts are recorded under job job-evt-001."
+                    "ServiceNow Update Set handoff created for STRY0010013. "
+                    "Update Set: JEDI STRY0010013 - AI Candidate "
+                    "(https://dev205693.service-now.com/sys_update_set.do?"
+                    "sys_id=update-set-sys-id). "
+                    "Candidate artifact: db://artifact_blobs/2."
                 )
             },
         }
@@ -220,6 +258,7 @@ def test_model_candidate_handler_fails_closed_for_invalid_model_response(
             provider_policy=_provider_policy(),
             rags=_rags(),
             provider=provider,
+            instance_url="https://dev205693.service-now.com",
         ),
     )
 

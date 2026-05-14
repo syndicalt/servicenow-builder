@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,7 +18,21 @@ from jedi_devproject.models import ProviderPolicy
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.rag import SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy
+from jedi_devproject.update_set_handoff import (
+    UpdateSetHandoffRequest,
+    create_update_set_handoff,
+)
 from jedi_devproject.writeback_orchestration import WritebackClient
+
+
+class ModelFulfillmentClient(WritebackClient, Protocol):
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, Any],
+    ) -> dict[str, Any]: ...
 
 
 class ModelCandidateFulfillmentConfig(BaseModel):
@@ -28,11 +42,12 @@ class ModelCandidateFulfillmentConfig(BaseModel):
     provider_policy: ProviderPolicy
     rags: SpecializedRags
     provider: Any
+    instance_url: str
 
 
 def model_candidate_fulfillment_handler(
     *,
-    client: WritebackClient,
+    client: ModelFulfillmentClient,
     config: ModelCandidateFulfillmentConfig,
 ) -> FulfillmentHandler:
     def handle(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
@@ -53,16 +68,6 @@ def model_candidate_fulfillment_handler(
             provider=config.provider,
         )
 
-        client.update_story_fields(
-            stories[0].sys_id,
-            {
-                "work_notes": (
-                    f"Implementation candidate generated for {job.story_number}. "
-                    f"Artifacts are recorded under job {job.job_id}."
-                )
-            },
-        )
-
         return FulfillmentExecutionResult(
             message=f"Implementation candidate generated for {job.story_number}",
             artifacts=[
@@ -77,6 +82,42 @@ def model_candidate_fulfillment_handler(
                     payload_json=candidate.model_dump(mode="json"),
                 ),
             ],
+            after_artifacts_persisted=lambda artifacts: _create_handoff_after_persist(
+                client=client,
+                story_sys_id=stories[0].sys_id,
+                story_number=job.story_number,
+                candidate=candidate,
+                candidate_artifact_ref=_candidate_artifact_ref(artifacts),
+                instance_url=config.instance_url,
+            ),
         )
 
     return handle
+
+
+def _create_handoff_after_persist(
+    *,
+    client: ModelFulfillmentClient,
+    story_sys_id: str,
+    story_number: str,
+    candidate: Any,
+    candidate_artifact_ref: str,
+    instance_url: str,
+) -> None:
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id=story_sys_id,
+            story_number=story_number,
+            candidate=candidate,
+            candidate_artifact_ref=candidate_artifact_ref,
+            instance_url=instance_url,
+        ),
+    )
+
+
+def _candidate_artifact_ref(artifacts: list[Any]) -> str:
+    for artifact in artifacts:
+        if artifact.artifact_kind == "implementation_candidate":
+            return str(artifact.path)
+    raise RuntimeError("implementation candidate artifact was not persisted")

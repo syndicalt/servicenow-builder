@@ -59,11 +59,23 @@ class FulfillmentArtifactRef(BaseModel):
     payload_json: dict[str, Any] | None = None
 
 
-class FulfillmentExecutionResult(BaseModel):
+class FulfillmentPersistedArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str
+    path: str
+    sha256: str
+    artifact_id: int | None = None
+
+
+class FulfillmentExecutionResult(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     message: str
     artifacts: list[FulfillmentArtifactRef] = Field(default_factory=list)
+    after_artifacts_persisted: (
+        Callable[[list[FulfillmentPersistedArtifact]], None] | None
+    ) = Field(default=None, exclude=True)
 
 
 class FulfillmentWorkerResult(BaseModel):
@@ -102,40 +114,48 @@ def process_one_fulfillment_job(
 
     try:
         execution_result = handler(job)
-    except Exception as exc:
-        error_message = str(exc)
-        if failure_notifier is not None:
-            try:
-                failure_notifier(job, error_message)
-            except Exception as notifier_exc:
-                error_message = (
-                    f"{error_message}; failure notifier failed: {notifier_exc}"
+        persisted_artifacts: list[FulfillmentPersistedArtifact] = []
+        for artifact in execution_result.artifacts:
+            if artifact.payload_json is None:
+                store.record_artifact_ref(
+                    job_id=job.job_id,
+                    artifact_kind=artifact.artifact_kind,
+                    path=artifact.path,
+                    sha256=artifact.sha256,
                 )
-        store.fail_fulfillment_job(job_id=job.job_id, error_message=error_message)
-        return FulfillmentWorkerResult(
-            status="failed",
-            job_id=job.job_id,
-            story_number=job.story_number,
-            message=None,
-            error_message=error_message,
+                persisted_artifacts.append(
+                    FulfillmentPersistedArtifact(
+                        artifact_kind=artifact.artifact_kind,
+                        path=artifact.path,
+                        sha256=artifact.sha256,
+                    )
+                )
+            else:
+                persisted = store.record_json_artifact(
+                    job_id=job.job_id,
+                    story_number=job.story_number,
+                    artifact_kind=artifact.artifact_kind,
+                    schema_version=artifact.schema_version or artifact.artifact_kind,
+                    payload=artifact.payload_json,
+                )
+                artifact_id = _persisted_artifact_id(persisted)
+                persisted_artifacts.append(
+                    FulfillmentPersistedArtifact(
+                        artifact_kind=artifact.artifact_kind,
+                        path=f"db://artifact_blobs/{artifact_id}",
+                        sha256=_persisted_artifact_sha256(persisted),
+                        artifact_id=artifact_id,
+                    )
+                )
+        if execution_result.after_artifacts_persisted is not None:
+            execution_result.after_artifacts_persisted(persisted_artifacts)
+    except Exception as exc:
+        return _fail_job(
+            store=store,
+            job=job,
+            error_message=str(exc),
+            failure_notifier=failure_notifier,
         )
-
-    for artifact in execution_result.artifacts:
-        if artifact.payload_json is None:
-            store.record_artifact_ref(
-                job_id=job.job_id,
-                artifact_kind=artifact.artifact_kind,
-                path=artifact.path,
-                sha256=artifact.sha256,
-            )
-        else:
-            store.record_json_artifact(
-                job_id=job.job_id,
-                story_number=job.story_number,
-                artifact_kind=artifact.artifact_kind,
-                schema_version=artifact.schema_version or artifact.artifact_kind,
-                payload=artifact.payload_json,
-            )
 
     store.complete_fulfillment_job(
         job_id=job.job_id,
@@ -148,3 +168,39 @@ def process_one_fulfillment_job(
         message=execution_result.message,
         error_message=None,
     )
+
+
+def _fail_job(
+    *,
+    store: FulfillmentWorkerStore,
+    job: FulfillmentJobRecord,
+    error_message: str,
+    failure_notifier: FulfillmentFailureNotifier | None,
+) -> FulfillmentWorkerResult:
+    if failure_notifier is not None:
+        try:
+            failure_notifier(job, error_message)
+        except Exception as notifier_exc:
+            error_message = f"{error_message}; failure notifier failed: {notifier_exc}"
+    store.fail_fulfillment_job(job_id=job.job_id, error_message=error_message)
+    return FulfillmentWorkerResult(
+        status="failed",
+        job_id=job.job_id,
+        story_number=job.story_number,
+        message=None,
+        error_message=error_message,
+    )
+
+
+def _persisted_artifact_id(record: object) -> int:
+    value = getattr(record, "id", None)
+    if not isinstance(value, int):
+        raise RuntimeError("persisted JSON artifact did not include integer id")
+    return value
+
+
+def _persisted_artifact_sha256(record: object) -> str:
+    value = getattr(record, "sha256", None)
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("persisted JSON artifact did not include sha256")
+    return value

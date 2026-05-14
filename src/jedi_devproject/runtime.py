@@ -240,6 +240,7 @@ def _runtime_handler(
                 ),
                 transport=transport,
             ),
+            instance_url=settings.servicenow_instance_url,
         ),
     )
 
