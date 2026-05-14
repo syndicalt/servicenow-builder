@@ -135,6 +135,16 @@ def test_operator_guide_documents_postgres_operational_store() -> None:
     assert "filesystem artifacts" in guide
 
 
+def test_operator_guide_documents_lifecycle_webhook_api() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Lifecycle Webhook API" in guide
+    assert "POST /lifecycle/events" in guide
+    assert "202 Accepted" in guide
+    assert "does not execute fulfillment inline" in guide
+    assert "DATABASE_URL" in guide
+
+
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
     change_log = Path("docs/sprints/sprint-68-change-log.md").read_text(
         encoding="utf-8"
@@ -157,6 +167,18 @@ def test_sprint_sixty_nine_change_log_documents_postgres_retarget() -> None:
     assert "0001_operational_store.sql" in change_log
     assert "JSONB" in change_log
     assert "SELECT ... FOR UPDATE SKIP LOCKED" in change_log
+
+
+def test_sprint_seventy_change_log_documents_lifecycle_webhook_api() -> None:
+    change_log = Path("docs/sprints/sprint-70-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Lifecycle Webhook API" in change_log
+    assert "create_lifecycle_api" in change_log
+    assert "POST /lifecycle/events" in change_log
+    assert "202 Accepted" in change_log
+    assert "non-blocking" in change_log
 
 
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:

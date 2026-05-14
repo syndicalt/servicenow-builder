@@ -8,8 +8,10 @@ version = "0.2.0"
 description = "FedRAMP-aligned AI-assisted ServiceNow Update Set candidate generator."
 requires-python = ">=3.11"
 dependencies = [
+  "fastapi>=0.124",
   "pydantic>=2.12",
   "psycopg>=3.2",
+  "uvicorn>=0.38",
 ]
 
 [project.optional-dependencies]

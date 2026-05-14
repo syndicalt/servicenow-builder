@@ -131,6 +131,20 @@ The operational schema is defined in `db/migrations/0001_operational_store.sql` 
 
 The current claim primitive is `claim_next_fulfillment_job(worker_id=...)`. It uses `SELECT ... FOR UPDATE SKIP LOCKED` inside a PostgreSQL transaction to select the oldest queued job, mark it `running`, increment the attempt count, and set `locked_by` and `locked_at`. API and worker processes should use this store instead of treating JSON files as a queue.
 
+## Lifecycle Webhook API
+
+The local runtime exposes a FastAPI application from `create_lifecycle_api()` in `jedi_devproject.lifecycle_api`. Production wiring must provide `DATABASE_URL` for `connect_operational_store(database_url=...)`, then inject that store into the API factory.
+
+The lifecycle receiver is:
+
+```text
+POST /lifecycle/events
+```
+
+A valid `Draft` to `Ready` `LifecycleStateChangeEvent` returns `202 Accepted`, records the event in `lifecycle_events`, enqueues one `fulfillment_jobs` row, and returns the queued `job_id`. Unsupported lifecycle transitions are still accepted and recorded, but they are not enqueued for fulfillment.
+
+The webhook request path does not execute fulfillment inline. Build evaluation, ServiceNow claim writeback, implementation packet generation, external build handoff, and Ready for Testing writeback must run in worker processing after a queued job is claimed.
+
 ## Lifecycle Event Contract
 
 ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.
