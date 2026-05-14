@@ -76,6 +76,37 @@ def test_story_field_story_remains_automated_dictionary_form() -> None:
     assert assessment.intent.field_name == "u_ai_review_notes"
 
 
+def test_problem_vendor_reference_story_extracts_reference_metadata() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010002",
+            short_description="Add Vendor Reference field to Problem form",
+            description=(
+                "Add a new custom reference field named u_vendor_reference to the "
+                "Problem table. The field should reference the core_company table "
+                "and only allow companies where vendor=true. Place the field on "
+                "the default Problem form below the Description field."
+            ),
+            acceptance_criteria=(
+                "- The field type is Reference.\n"
+                "- The field references core_company.\n"
+                "- The field uses a reference qualifier of vendor=true."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.intent is not None
+    assert assessment.intent.target_table == "problem"
+    assert assessment.intent.field_label == "Vendor Reference"
+    assert assessment.intent.field_name == "u_vendor_reference"
+    assert assessment.intent.field_type == "reference"
+    assert assessment.intent.reference_table == "core_company"
+    assert assessment.intent.reference_qualifier == "vendor=true"
+    assert assessment.intent.placement_anchor == "description"
+
+
 def test_missing_target_table_needs_clarification() -> None:
     assessment = analyze_story_capabilities(
         _story(

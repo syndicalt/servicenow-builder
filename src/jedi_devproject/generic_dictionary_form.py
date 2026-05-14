@@ -3,7 +3,7 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class DictionaryFormMetadataClient(Protocol):
@@ -24,11 +24,19 @@ class DictionaryFormIntent(BaseModel):
     field_label: str
     field_name: str
     field_type: str
+    reference_table: str | None = None
+    reference_qualifier: str | None = None
     max_length: int | None = None
     mandatory: bool = False
     default_value: str = ""
     placement_anchor: str | None = None
     placement_position: str = "below"
+
+    @model_validator(mode="after")
+    def require_reference_table_for_reference_fields(self) -> DictionaryFormIntent:
+        if self.field_type == "reference" and not (self.reference_table or "").strip():
+            raise ValueError("reference_table is required for reference fields")
+        return self
 
 
 def dictionary_form_customer_updates(
@@ -219,12 +227,27 @@ def _dictionary_payload(*, intent: DictionaryFormIntent) -> str:
         f"<mandatory>{_bool_text(intent.mandatory)}</mandatory>"
         f"<max_length>{escape(str(intent.max_length or 8000))}</max_length>"
         f"<name>{escape(intent.target_table)}</name>"
+        f"{_reference_payload(intent)}"
         "<read_only>false</read_only>"
         "<sys_class_name>sys_dictionary</sys_class_name>"
         '<sys_scope display_value="Global">global</sys_scope>'
         f"<sys_update_name>{escape(update_name)}</sys_update_name>"
         "</sys_dictionary>"
         "</record_update>"
+    )
+
+
+def _reference_payload(intent: DictionaryFormIntent) -> str:
+    if intent.field_type != "reference":
+        return ""
+    reference_table = intent.reference_table or ""
+    reference_qualifier = intent.reference_qualifier or ""
+    use_reference_qualifier = "simple" if reference_qualifier else ""
+    return (
+        f"<reference>{escape(reference_table)}</reference>"
+        f"<reference_qual>{escape(reference_qualifier)}</reference_qual>"
+        f"<reference_qual_condition>{escape(reference_qualifier)}</reference_qual_condition>"
+        f"<use_reference_qualifier>{escape(use_reference_qualifier)}</use_reference_qualifier>"
     )
 
 

@@ -64,6 +64,16 @@ class FakeUpdateSetClient:
                     "sys_user": "",
                 },
             ]
+        if table == "sys_ui_section" and lookup == {"name": "problem"}:
+            return [
+                {
+                    "sys_id": "problem-main-section-sys-id",
+                    "name": "problem",
+                    "caption": "",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+            ]
         if table == "sys_ui_element" and lookup == {
             "name": "rm_story",
             "sys_ui_section": "default-main-section-sys-id",
@@ -96,6 +106,17 @@ class FakeUpdateSetClient:
                     "sys_id": "scrum-acceptance-element-sys-id",
                     "element": "acceptance_criteria",
                     "position": "20",
+                },
+            ]
+        if table == "sys_ui_element" and lookup == {
+            "name": "problem",
+            "sys_ui_section": "problem-main-section-sys-id",
+        }:
+            return [
+                {
+                    "sys_id": "problem-description-element-sys-id",
+                    "element": "description",
+                    "position": "8",
                 },
             ]
         return []
@@ -441,6 +462,59 @@ def test_create_update_set_handoff_accepts_table_aliases_and_position_hints() ->
     assert "sys_dictionary_rm_story_u_alias_field" in imported_xml
     assert "<mandatory>true</mandatory>" in imported_xml
     assert "<element>u_alias_field</element><position>4</position>" in imported_xml
+
+
+def test_create_update_set_handoff_preserves_reference_field_metadata() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "problem",
+                        "element": "u_vendor_reference",
+                        "column_label": "Vendor Reference",
+                        "internal_type": "reference",
+                        "reference": "core_company",
+                        "reference_qual": "vendor=true",
+                        "reference_qual_condition": "vendor=true",
+                        "use_reference_qualifier": "simple",
+                    },
+                    rationale="Create the vendor reference field.",
+                ),
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "name": "problem",
+                        "field": "u_vendor_reference",
+                        "position_hint": "below Description",
+                    },
+                    rationale="Place the field below Description.",
+                ),
+            ]
+        }
+    )
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010002",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/44",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_dictionary_problem_u_vendor_reference" in imported_xml
+    assert "<reference>core_company</reference>" in imported_xml
+    assert "<use_reference_qualifier>simple</use_reference_qualifier>" in imported_xml
+    assert "<reference_qual>vendor=true</reference_qual>" in imported_xml
+    assert "<reference_qual_condition>vendor=true</reference_qual_condition>" in imported_xml
 
 
 def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> None:

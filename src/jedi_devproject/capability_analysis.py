@@ -194,6 +194,8 @@ def _field_form_intent(story: Story, text: str) -> FieldFormIntent | None:
         field_label=normalized_label,
         field_name=field_name,
         field_type=field_type,
+        reference_table=_reference_table(text),
+        reference_qualifier=_reference_qualifier(text),
         max_length=_max_length(text),
         placement_anchor=_placement_anchor(text),
         placement_position=_placement_position(text),
@@ -205,6 +207,8 @@ def _field_form_intent(story: Story, text: str) -> FieldFormIntent | None:
 def _target_table(text: str) -> str | None:
     if "incident" in text:
         return "incident"
+    if "problem" in text:
+        return "problem"
     if "rm_story" in text or "story form" in text or "story table" in text:
         return "rm_story"
     match = re.search(r"table named ([a-zA-Z0-9_]+)", text)
@@ -238,7 +242,7 @@ def _field_type(text: str) -> str | None:
     match = re.search(r"field type: ([a-zA-Z0-9 _-]+)", text)
     if match:
         return _normalize_field_type(match.group(1))
-    for candidate in ["string", "integer", "boolean", "date", "datetime", "journal"]:
+    for candidate in ["reference", "string", "integer", "boolean", "date", "datetime", "journal"]:
         if candidate in text:
             return _normalize_field_type(candidate)
     if "characters" in text:
@@ -264,6 +268,29 @@ def _max_length(text: str) -> int | None:
     return None
 
 
+def _reference_table(text: str) -> str | None:
+    patterns = [
+        r"reference the ([a-zA-Z0-9_]+) table",
+        r"references ([a-zA-Z0-9_]+)(?: table|\.|\n| |$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            candidate = match.group(1).lower()
+            if candidate != "field":
+                return candidate
+    return None
+
+
+def _reference_qualifier(text: str) -> str | None:
+    match = re.search(
+        r"(?:reference qualifier of|where|only allow .* where) ([a-zA-Z0-9_]+=[^\\.\\n ]+)", text
+    )
+    if match:
+        return match.group(1)
+    return None
+
+
 def _placement_anchor(text: str) -> str | None:
     if "below description" in text or "below the description" in text:
         return "description"
@@ -282,4 +309,8 @@ def _placement_position(text: str) -> str:
 
 
 def _title_label(value: str) -> str:
-    return " ".join(word.capitalize() for word in value.strip(" .:-").split())
+    cleaned = value.strip(" .:-")
+    if cleaned.lower().startswith("u_"):
+        cleaned = cleaned[2:]
+    cleaned = cleaned.replace("_", " ")
+    return " ".join(word.capitalize() for word in cleaned.split())

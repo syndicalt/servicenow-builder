@@ -308,6 +308,8 @@ def _dictionary_form_intent(changes: list[CandidateChange]) -> DictionaryFormInt
         field_label=field_label,
         field_name=field_name,
         field_type=field_type,
+        reference_table=_reference_table(dictionary_fields),
+        reference_qualifier=_reference_qualifier(dictionary_fields),
         max_length=_optional_int(dictionary_fields.get("max_length")),
         mandatory=_bool_value(dictionary_fields.get("mandatory")),
         default_value=str(dictionary_fields.get("default_value") or ""),
@@ -328,6 +330,26 @@ def _form_table_name(fields: dict[str, Any], *, default: str) -> str:
         if not text.startswith("u_"):
             return text
     return default
+
+
+def _reference_table(fields: dict[str, Any]) -> str | None:
+    raw_reference = fields.get("reference") or fields.get("reference_table")
+    if raw_reference is None:
+        return None
+    if isinstance(raw_reference, dict):
+        return str(raw_reference.get("value") or raw_reference.get("display_value") or "")
+    return str(raw_reference)
+
+
+def _reference_qualifier(fields: dict[str, Any]) -> str | None:
+    raw_qualifier = (
+        fields.get("reference_qualifier")
+        or fields.get("reference_qual")
+        or fields.get("reference_qual_condition")
+    )
+    if raw_qualifier is None:
+        return None
+    return str(raw_qualifier)
 
 
 def _placement_anchor(fields: dict[str, Any]) -> str | None:

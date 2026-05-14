@@ -81,6 +81,87 @@ def test_generic_dictionary_form_updates_incident_field_and_form() -> None:
     assert "<element>u_antics</element><position>3</position>" in updates[2]["payload"]
 
 
+def test_generic_dictionary_form_updates_reference_field_metadata() -> None:
+    class ProblemMetadataClient(FakeMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_ui_section" and lookup == {"name": "problem"}:
+                return [
+                    {
+                        "sys_id": "problem-main-section",
+                        "name": "problem",
+                        "caption": "",
+                        "view": {"display_value": "Default view", "value": "default"},
+                        "sys_user": "",
+                    }
+                ]
+            if table == "sys_ui_element" and lookup == {
+                "name": "problem",
+                "sys_ui_section": "problem-main-section",
+            }:
+                return [
+                    {
+                        "sys_id": "description-element",
+                        "element": "description",
+                        "position": "8",
+                    }
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    updates = dictionary_form_customer_updates(
+        client=ProblemMetadataClient(),
+        intent=DictionaryFormIntent(
+            target_table="problem",
+            field_label="Vendor Reference",
+            field_name="u_vendor_reference",
+            field_type="reference",
+            reference_table="core_company",
+            reference_qualifier="vendor=true",
+            placement_anchor="description",
+            placement_position="below",
+        ),
+        remote_update_set_sys_id="remote-sys-id",
+    )
+
+    assert "<element>u_vendor_reference</element>" in updates[0]["payload"]
+    assert (
+        '<internal_type display_value="Reference">reference</internal_type>'
+        in updates[0]["payload"]
+    )
+    assert "<reference>core_company</reference>" in updates[0]["payload"]
+    assert "<use_reference_qualifier>simple</use_reference_qualifier>" in updates[0]["payload"]
+    assert "<reference_qual>vendor=true</reference_qual>" in updates[0]["payload"]
+    assert (
+        "<reference_qual_condition>vendor=true</reference_qual_condition>" in updates[0]["payload"]
+    )
+    assert "<element>u_vendor_reference</element><position>9</position>" in updates[2]["payload"]
+
+
+def test_generic_dictionary_form_rejects_reference_field_without_reference_table() -> None:
+    try:
+        DictionaryFormIntent(
+            target_table="problem",
+            field_label="Vendor Reference",
+            field_name="u_vendor_reference",
+            field_type="reference",
+        )
+    except ValueError as exc:
+        assert "reference_table is required for reference fields" in str(exc)
+    else:
+        raise AssertionError("reference field without reference_table was accepted")
+
+
 def test_generic_dictionary_form_ignores_non_default_reference_views_without_display() -> None:
     class ViewMetadataClient(FakeMetadataClient):
         def fetch_table_records(

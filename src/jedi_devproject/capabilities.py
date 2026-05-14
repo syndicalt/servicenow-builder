@@ -34,6 +34,8 @@ class FieldFormIntent(BaseModel):
     field_label: str
     field_type: str
     field_name: str | None = None
+    reference_table: str | None = None
+    reference_qualifier: str | None = None
     max_length: int | None = None
     mandatory: bool = False
     default_value: str = ""
