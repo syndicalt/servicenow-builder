@@ -457,6 +457,52 @@ def test_model_candidate_handler_builds_incident_candidate_after_instance_discov
     assert result.after_artifacts_persisted is not None
 
 
+def test_model_fulfillment_writes_needs_clarification_feedback() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0090001",
+            short_description="Add a new field",
+            description="Add a string field named Comments below Description.",
+            acceptance_criteria="The field is visible on the form.",
+            story_points=2,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0090001"}))
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/90",
+                sha256="c" * 64,
+                artifact_id=90,
+            )
+        ]
+    )
+
+    assert provider.payloads == []
+    assert client.imports == []
+    feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert feedback_fields["u_ai_status"] == "Needs Clarification"
+    assert "target table" in feedback_fields["work_notes"]
+
+
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(
     tmp_path: Path,
 ) -> None:

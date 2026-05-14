@@ -187,16 +187,34 @@ def _write_manual_review_required(
 ) -> None:
     client.update_story_fields(
         story_sys_id,
-        {
-            "u_ai_status": "Human Review Required",
-            "work_notes": (
-                f"Automated implementation candidate for {story_number} requires manual review. "
-                "No retrieved Update Set was created. "
-                f"Candidate artifact: {candidate_artifact_ref}. "
-                f"Reasons: {_candidate_reasons(candidate)}."
-            ),
-        },
+        _manual_feedback_fields(
+            story_number=story_number,
+            candidate=candidate,
+            candidate_artifact_ref=candidate_artifact_ref,
+        ),
     )
+
+
+def _manual_feedback_fields(
+    *,
+    story_number: str,
+    candidate: UpdateSetCandidate,
+    candidate_artifact_ref: str,
+) -> dict[str, object]:
+    reasons = _candidate_reasons(candidate)
+    if any(reason.startswith("missing detail:") for reason in candidate.eligibility_reasons):
+        status = "Needs Clarification"
+    else:
+        status = "Human Review Required"
+    return {
+        "u_ai_status": status,
+        "work_notes": (
+            f"Automated implementation candidate for {story_number} did not create a "
+            "retrieved Update Set. "
+            f"Candidate artifact: {candidate_artifact_ref}. "
+            f"Reasons: {reasons}."
+        ),
+    }
 
 
 def _candidate_reasons(candidate: UpdateSetCandidate) -> str:
