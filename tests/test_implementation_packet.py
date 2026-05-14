@@ -255,6 +255,36 @@ def test_generate_implementation_update_set_candidate_maps_validated_model_respo
     assert "story-sys-id" not in candidate.model_dump_json()
 
 
+def test_generate_implementation_update_set_candidate_treats_placeholder_sys_id_as_absent() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sys_ui_form",
+                    "operation": "update",
+                    "fields": {
+                        "view_name": "Default",
+                        "field_name": "u_ai_review_notes",
+                    },
+                    "sys_id": "[FORM_SYS_ID_HERE]",
+                }
+            ],
+            "test_plan": ["Confirm field appears on Story form."],
+            "rollback_notes": ["Remove field from form."],
+        }
+    )
+
+    candidate = generate_implementation_update_set_candidate(
+        story=_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        provider=provider,
+    )
+
+    assert candidate.changes[0].sys_id is None
+
+
 def test_generate_implementation_update_set_candidate_skips_provider_for_manual_review() -> None:
     manual_review_story = _story().model_copy(update={"story_points": 8})
 

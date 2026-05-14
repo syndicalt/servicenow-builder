@@ -153,7 +153,7 @@ def generate_implementation_candidate(
         provider_policy=provider_policy,
         rags=rags,
     )
-    response = provider.generate(packet.to_model_payload())
+    response = _normalize_placeholder_sys_ids(provider.generate(packet.to_model_payload()))
     _validate_response(
         response,
         allowed_tables=policy.tables,
@@ -193,7 +193,7 @@ def generate_implementation_update_set_candidate_from_packet(
 ) -> UpdateSetCandidate:
     if packet.safety_decision != "eligible":
         return _manual_review_candidate(packet=packet)
-    response = provider.generate(packet.to_model_payload())
+    response = _normalize_placeholder_sys_ids(provider.generate(packet.to_model_payload()))
     _validate_response(
         response,
         allowed_tables=policy.tables,
@@ -222,6 +222,32 @@ def generate_implementation_update_set_candidate_from_packet(
     )
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
+
+
+def _normalize_placeholder_sys_ids(response: dict[str, Any]) -> dict[str, Any]:
+    changes = response.get("changes")
+    if not isinstance(changes, list):
+        return response
+    normalized_changes: list[Any] = []
+    changed = False
+    for change in changes:
+        if not isinstance(change, dict):
+            normalized_changes.append(change)
+            continue
+        normalized_change = dict(change)
+        sys_id = normalized_change.get("sys_id")
+        if _is_placeholder_sys_id(sys_id):
+            normalized_change["sys_id"] = None
+            changed = True
+        normalized_changes.append(normalized_change)
+    if not changed:
+        return response
+    return {**response, "changes": normalized_changes}
+
+
+def _is_placeholder_sys_id(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return text.startswith("[") and text.endswith("]") and "sys_id" in text
 
 
 def _manual_review_candidate(
