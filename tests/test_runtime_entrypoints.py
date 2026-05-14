@@ -191,3 +191,13 @@ class _NoopStore:
         error_message: str,
     ) -> FulfillmentJobRecord:
         raise AssertionError("not called")
+
+    def record_artifact_ref(
+        self,
+        *,
+        job_id: str,
+        artifact_kind: str,
+        path: str,
+        sha256: str,
+    ) -> object:
+        raise AssertionError("not called")

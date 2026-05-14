@@ -177,6 +177,10 @@ Runtime fulfillment failures write back to the originating ServiceNow story work
 
 The model-facing schema requires ServiceNow field mutations as explicit `name/value` pairs. The adapter normalizes those pairs into the internal `fields` dictionary after parsing. Arbitrary field objects fail closed at the provider boundary so model output cannot bypass the implementation packet and writeback validators.
 
+Runtime OpenAI use is disabled unless `JEDI_MODEL_PROVIDER=openai` is set. `OPENAI_API_KEY` and `OPENAI_MODEL` must also be present when that provider is enabled. Having `OPENAI_API_KEY` in the host environment does not by itself activate model calls.
+
+When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-claim path, then `model_candidate_fulfillment_handler` builds an `implementation_packet`, calls `OpenAIResponsesProvider`, validates the model response, writes an `implementation_candidate` artifact, records both artifacts in `artifact_refs`, and writes a ServiceNow work note. The model stage does not apply model-generated platform changes.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:

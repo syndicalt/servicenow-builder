@@ -173,10 +173,26 @@ def test_operator_guide_documents_chatgpt_implementation_adapter() -> None:
 
     assert "ChatGPT Implementation Adapter" in guide
     assert "OpenAIResponsesProvider" in guide
+    assert "JEDI_MODEL_PROVIDER=openai" in guide
+    assert "OPENAI_API_KEY" in guide
+    assert "OPENAI_MODEL" in guide
     assert "Responses API" in guide
     assert "strict JSON schema" in guide
     assert "name/value" in guide
     assert "fail closed" in guide
+
+
+def test_sprint_seventy_eight_change_log_documents_openai_runtime_wiring() -> None:
+    change_log = Path("docs/sprints/sprint-78-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "JEDI_MODEL_PROVIDER=openai" in change_log
+    assert "OPENAI_API_KEY" in change_log
+    assert "model_candidate_fulfillment_handler" in change_log
+    assert "implementation_packet" in change_log
+    assert "implementation_candidate" in change_log
+    assert "no ServiceNow mutation" in change_log
 
 
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:

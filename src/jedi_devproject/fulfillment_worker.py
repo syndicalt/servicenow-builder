@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.operational_store import FulfillmentJobRecord
 
@@ -29,11 +29,29 @@ class FulfillmentWorkerStore(Protocol):
         error_message: str,
     ) -> FulfillmentJobRecord: ...
 
+    def record_artifact_ref(
+        self,
+        *,
+        job_id: str,
+        artifact_kind: str,
+        path: str,
+        sha256: str,
+    ) -> object: ...
+
+
+class FulfillmentArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str
+    path: str
+    sha256: str
+
 
 class FulfillmentExecutionResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str
+    artifacts: list[FulfillmentArtifactRef] = Field(default_factory=list)
 
 
 class FulfillmentWorkerResult(BaseModel):
@@ -88,6 +106,14 @@ def process_one_fulfillment_job(
             story_number=job.story_number,
             message=None,
             error_message=error_message,
+        )
+
+    for artifact in execution_result.artifacts:
+        store.record_artifact_ref(
+            job_id=job.job_id,
+            artifact_kind=artifact.artifact_kind,
+            path=artifact.path,
+            sha256=artifact.sha256,
         )
 
     store.complete_fulfillment_job(

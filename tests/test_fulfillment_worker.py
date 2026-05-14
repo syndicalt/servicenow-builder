@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from jedi_devproject.fulfillment_worker import (
+    FulfillmentArtifactRef,
     FulfillmentExecutionResult,
     process_one_fulfillment_job,
 )
@@ -17,6 +18,7 @@ class FakeWorkerStore:
         self.claim_calls: list[str] = []
         self.completed_jobs: list[tuple[str, str]] = []
         self.failed_jobs: list[tuple[str, str]] = []
+        self.artifact_refs: list[tuple[str, str, str, str]] = []
 
     def claim_next_fulfillment_job(
         self,
@@ -47,6 +49,17 @@ class FakeWorkerStore:
         return self.claimed_job.model_copy(
             update={"status": "failed", "last_error": error_message}
         )
+
+    def record_artifact_ref(
+        self,
+        *,
+        job_id: str,
+        artifact_kind: str,
+        path: str,
+        sha256: str,
+    ) -> object:
+        self.artifact_refs.append((job_id, artifact_kind, path, sha256))
+        return object()
 
 
 def _job() -> FulfillmentJobRecord:
@@ -99,6 +112,40 @@ def test_worker_completes_claimed_job_after_handler_success() -> None:
     assert handled_jobs == ["job-evt-001"]
     assert store.completed_jobs == [("job-evt-001", "implementation packet built")]
     assert store.failed_jobs == []
+    assert store.artifact_refs == []
+
+
+def test_worker_records_artifact_refs_before_completing_job() -> None:
+    store = FakeWorkerStore(claimed_job=_job())
+
+    def handler(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
+        return FulfillmentExecutionResult(
+            message=f"processed {job.story_number}",
+            artifacts=[
+                FulfillmentArtifactRef(
+                    artifact_kind="implementation_candidate",
+                    path="artifacts/job-evt-001/STRY0010013.json",
+                    sha256="a" * 64,
+                )
+            ],
+        )
+
+    result = process_one_fulfillment_job(
+        store=store,
+        worker_id="worker-1",
+        handler=handler,
+    )
+
+    assert result.status == "completed"
+    assert store.artifact_refs == [
+        (
+            "job-evt-001",
+            "implementation_candidate",
+            "artifacts/job-evt-001/STRY0010013.json",
+            "a" * 64,
+        )
+    ]
+    assert store.completed_jobs == [("job-evt-001", "processed STRY0010013")]
 
 
 def test_worker_fails_claimed_job_when_handler_raises() -> None:

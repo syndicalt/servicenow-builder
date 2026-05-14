@@ -21,11 +21,20 @@ from jedi_devproject.fulfillment_worker import (
     FulfillmentWorkerStore,
     process_one_fulfillment_job,
 )
+from jedi_devproject.implementation_packet import IMPLEMENTATION_PACKET_TASK
 from jedi_devproject.lifecycle_api import LifecycleEventStore, create_lifecycle_api
+from jedi_devproject.model_fulfillment import (
+    ModelCandidateFulfillmentConfig,
+    model_candidate_fulfillment_handler,
+)
+from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus
+from jedi_devproject.openai_provider import OpenAIProviderSettings, OpenAIResponsesProvider
 from jedi_devproject.operational_store import (
     FulfillmentJobRecord,
     connect_operational_store,
 )
+from jedi_devproject.rag import Document, RagDomain, SpecializedRags
+from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import (
     HttpTransport,
     OAuthClientCredentials,
@@ -50,6 +59,9 @@ class RuntimeSettings(BaseModel):
     worker_id: str = "jedi-devproject-worker"
     audit_root: Path
     build_claim_apply: bool = False
+    model_provider: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str | None = None
 
 
 class RuntimeStore(LifecycleEventStore, FulfillmentWorkerStore, Protocol):
@@ -87,6 +99,9 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         worker_id=str(values.get("JEDI_WORKER_ID") or "jedi-devproject-worker"),
         audit_root=Path(str(values["JEDI_AUDIT_ROOT"])),
         build_claim_apply=_truthy(values.get("JEDI_BUILD_CLAIM_APPLY")),
+        model_provider=_optional_str(values.get("JEDI_MODEL_PROVIDER")),
+        openai_api_key=_optional_str(values.get("OPENAI_API_KEY")),
+        openai_model=_optional_str(values.get("OPENAI_MODEL")),
     )
 
 
@@ -99,24 +114,71 @@ def create_runtime_api(
     return create_lifecycle_api(store=store)
 
 
+def _runtime_handler(
+    *,
+    settings: RuntimeSettings,
+    client: ServiceNowClient,
+    claim_handler: FulfillmentHandler,
+    transport: HttpTransport,
+) -> FulfillmentHandler:
+    if settings.model_provider is None:
+        return claim_handler
+    if settings.model_provider != "openai":
+        raise RuntimeConfigError(f"Unsupported model provider: {settings.model_provider}")
+    if not settings.openai_api_key:
+        raise RuntimeConfigError("OPENAI_API_KEY is required when JEDI_MODEL_PROVIDER=openai")
+    if not settings.openai_model:
+        raise RuntimeConfigError("OPENAI_MODEL is required when JEDI_MODEL_PROVIDER=openai")
+
+    model_handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            artifact_root=settings.audit_root,
+            policy=_default_model_allowlist_policy(),
+            provider_policy=_default_openai_provider_policy(),
+            rags=_default_runtime_rags(),
+            provider=OpenAIResponsesProvider(
+                settings=OpenAIProviderSettings(
+                    api_key=settings.openai_api_key,
+                    model=settings.openai_model,
+                ),
+                transport=transport,
+            ),
+        ),
+    )
+
+    def handle(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
+        claim_handler(job)
+        return model_handler(job)
+
+    return handle
+
+
 def process_one_runtime_fulfillment(
     *,
     settings: RuntimeSettings,
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
     transport: HttpTransport | None = None,
 ) -> FulfillmentWorkerResult:
+    request_transport = transport or UrllibTransport()
     servicenow_client = _servicenow_client_from_settings(
         settings=settings,
-        transport=transport or UrllibTransport(),
+        transport=request_transport,
     )
     with store_factory(settings.database_url) as store:
-        handler = build_claim_fulfillment_handler(
+        claim_handler = build_claim_fulfillment_handler(
             client=servicenow_client,
             config=BuildClaimFulfillmentConfig(
                 actor_id=settings.worker_id,
                 audit_root=settings.audit_root,
                 apply=settings.build_claim_apply,
             ),
+        )
+        handler = _runtime_handler(
+            settings=settings,
+            client=servicenow_client,
+            claim_handler=claim_handler,
+            transport=request_transport,
         )
         return process_one_fulfillment_job(
             store=store,
@@ -177,6 +239,71 @@ def _servicenow_failure_notifier(
     return notify
 
 
+def _default_model_allowlist_policy() -> AllowlistPolicy:
+    return AllowlistPolicy(
+        story_types={StoryType.DICTIONARY_FORM},
+        tables={"sys_dictionary", "sys_ui_form"},
+        operations={"insert", "update"},
+        max_points=3,
+    )
+
+
+def _default_openai_provider_policy() -> ProviderPolicy:
+    return ProviderPolicy(
+        provider_id="openai-chatgpt",
+        deployment_boundary="railway-dev-pdi",
+        authorization_level="explicit-dev-evaluation",
+        allowed_data_classes={DataClassification.PUBLIC},
+        allowed_tasks={IMPLEMENTATION_PACKET_TASK},
+        max_context_policy="implementation-packet-v1",
+        retention_policy="dev-evaluation-no-training",
+        status=ProviderStatus.APPROVED,
+    )
+
+
+def _default_runtime_rags() -> SpecializedRags:
+    return SpecializedRags.from_documents(
+        [
+            Document(
+                domain=RagDomain.SERVICENOW_PLATFORM,
+                source="runtime/default-servicenow-dictionary-form",
+                content=(
+                    "rm_story dictionary field work uses sys_dictionary. "
+                    "Story form placement uses sys_ui_form."
+                ),
+                version="runtime-v1",
+            ),
+            Document(
+                domain=RagDomain.INSTANCE_METADATA,
+                source="runtime/default-rm-story-metadata",
+                content=(
+                    "rm_story supports customer-owned custom fields prefixed with u_. "
+                    "u_ai_review_notes is the AI Review Notes field."
+                ),
+                version="runtime-v1",
+            ),
+            Document(
+                domain=RagDomain.PROJECT_CONTEXT,
+                source="runtime/default-project-context",
+                content=(
+                    "AI Review Notes supports implementation review and automated "
+                    "fulfillment auditability."
+                ),
+                version="runtime-v1",
+            ),
+            Document(
+                domain=RagDomain.COMPLIANCE,
+                source="runtime/default-compliance-boundary",
+                content=(
+                    "Only public PDI story context may be sent to the configured "
+                    "OpenAI provider during dev evaluation."
+                ),
+                version="runtime-v1",
+            ),
+        ]
+    )
+
+
 def _redacting_handler(
     *,
     handler: FulfillmentHandler,
@@ -217,3 +344,9 @@ def _redact_text(text: str, secret_values: Iterable[str]) -> str:
 
 def _truthy(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _optional_str(value: str | None) -> str | None:
+    if value is None or value.strip() == "":
+        return None
+    return value.strip()

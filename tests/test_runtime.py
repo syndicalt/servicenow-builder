@@ -25,6 +25,7 @@ class FakeRuntimeStore:
         self.enqueued_jobs: list[tuple[str, str]] = []
         self.completed_jobs: list[tuple[str, str]] = []
         self.failed_jobs: list[tuple[str, str]] = []
+        self.artifact_refs: list[tuple[str, str, str, str]] = []
         self.closed = False
 
     def __enter__(self) -> FakeRuntimeStore:
@@ -88,6 +89,17 @@ class FakeRuntimeStore:
         assert self.claimed_job is not None
         return self.claimed_job.model_copy(update={"status": "failed"})
 
+    def record_artifact_ref(
+        self,
+        *,
+        job_id: str,
+        artifact_kind: str,
+        path: str,
+        sha256: str,
+    ) -> object:
+        self.artifact_refs.append((job_id, artifact_kind, path, sha256))
+        return object()
+
 
 class RecordingTransport:
     def __init__(self, responses: list[HttpResponse]) -> None:
@@ -108,6 +120,16 @@ def _settings(tmp_path: Path, *, apply: bool = False) -> RuntimeSettings:
         worker_id="worker-1",
         audit_root=tmp_path,
         build_claim_apply=apply,
+    )
+
+
+def _settings_with_openai(tmp_path: Path, *, apply: bool = False) -> RuntimeSettings:
+    return _settings(tmp_path, apply=apply).model_copy(
+        update={
+            "model_provider": "openai",
+            "openai_api_key": "openai-key",
+            "openai_model": "gpt-4o-2024-08-06",
+        }
     )
 
 
@@ -189,6 +211,22 @@ def _transport_for_successful_claim() -> RecordingTransport:
     )
 
 
+def _story_record(*, state: str = "Ready") -> dict[str, str]:
+    return {
+        "sys_id": "story-sys-id",
+        "number": "STRY0010013",
+        "short_description": "Add AI Review Notes field to Story form",
+        "description": (
+            "Add a new custom field to the rm_story table named u_ai_review_notes "
+            "and place it on the Story form below Description."
+        ),
+        "acceptance_criteria": "The AI Review Notes field stores review notes.",
+        "story_points": "3",
+        "priority": "4",
+        "state": state,
+    }
+
+
 def test_load_runtime_settings_requires_runtime_values(tmp_path: Path) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text("SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com\n")
@@ -226,6 +264,59 @@ def test_load_runtime_settings_accepts_env_file(tmp_path: Path) -> None:
     assert settings.worker_id == "worker-1"
     assert settings.audit_root == tmp_path
     assert settings.build_claim_apply is True
+    assert settings.model_provider is None
+
+
+def test_load_runtime_settings_requires_explicit_model_provider_to_enable_openai(
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "OPENAI_API_KEY=openai-key",
+                "OPENAI_MODEL=gpt-4o-2024-08-06",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.model_provider is None
+    assert settings.openai_api_key == "openai-key"
+
+
+def test_load_runtime_settings_enables_openai_when_provider_is_explicit(
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_MODEL_PROVIDER=openai",
+                "OPENAI_API_KEY=openai-key",
+                "OPENAI_MODEL=gpt-4o-2024-08-06",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.model_provider == "openai"
+    assert settings.openai_api_key == "openai-key"
+    assert settings.openai_model == "gpt-4o-2024-08-06"
 
 
 def test_create_runtime_api_wires_store_factory(tmp_path: Path) -> None:
@@ -266,6 +357,97 @@ def test_process_one_runtime_fulfillment_wires_store_servicenow_and_handler(
     assert store.failed_jobs == []
     assert store.closed is True
     assert [request.method for request in transport.requests] == ["POST", "GET", "GET", "PATCH"]
+
+
+def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore(claimed_job=_job())
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(status_code=200, json_body={"result": [_story_record()]}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "element": "state",
+                            "column_label": "State",
+                            "internal_type": "choice",
+                            "active": "true",
+                        },
+                        {
+                            "element": "u_ai_status",
+                            "column_label": "AI Status",
+                            "internal_type": "string",
+                            "active": "true",
+                        },
+                    ]
+                },
+            ),
+            HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": [_story_record(state="Work in Progress")]},
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "output_text": (
+                        '{"changes":[{"table":"sys_dictionary","operation":"insert",'
+                        '"fields":[{"name":"name","value":"rm_story"},'
+                        '{"name":"element","value":"u_ai_review_notes"}]}],'
+                        '"test_plan":["Confirm the field exists."],'
+                        '"rollback_notes":["Remove the field."]}'
+                    )
+                },
+            ),
+            HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+        ]
+    )
+
+    result = process_one_runtime_fulfillment(
+        settings=_settings_with_openai(tmp_path, apply=True),
+        store_factory=lambda _database_url: store,
+        transport=transport,
+    )
+
+    assert result.status == "completed"
+    assert result.message == "Implementation candidate generated for STRY0010013"
+    assert [request.method for request in transport.requests] == [
+        "POST",
+        "GET",
+        "GET",
+        "PATCH",
+        "GET",
+        "POST",
+        "PATCH",
+    ]
+    assert transport.requests[5].url == "https://api.openai.com/v1/responses"
+    assert transport.requests[5].headers["Authorization"] == "Bearer openai-key"
+    assert "openai-key" not in repr(transport.requests[5].body)
+    assert len(store.artifact_refs) == 2
+    assert store.artifact_refs[0][1] == "implementation_packet"
+    assert store.artifact_refs[1][1] == "implementation_candidate"
+    assert Path(store.artifact_refs[0][2]).exists()
+    assert Path(store.artifact_refs[1][2]).exists()
+    assert "Implementation candidate generated" in transport.requests[-1].body["work_notes"]
+
+
+def test_process_one_runtime_fulfillment_rejects_openai_provider_without_api_key(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={"model_provider": "openai", "openai_api_key": None}
+    )
+
+    with pytest.raises(RuntimeConfigError, match="OPENAI_API_KEY"):
+        process_one_runtime_fulfillment(
+            settings=settings,
+            store_factory=lambda _database_url: FakeRuntimeStore(claimed_job=None),
+            transport=RecordingTransport([]),
+        )
 
 
 def test_process_one_runtime_fulfillment_returns_idle_without_servicenow_calls(

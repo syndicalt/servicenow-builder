@@ -178,8 +178,21 @@ def generate_implementation_update_set_candidate(
         provider_policy=provider_policy,
         rags=rags,
     )
+    return generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=policy,
+        provider=provider,
+    )
+
+
+def generate_implementation_update_set_candidate_from_packet(
+    *,
+    packet: ImplementationPacket,
+    policy: AllowlistPolicy,
+    provider: ModelProvider,
+) -> UpdateSetCandidate:
     if packet.safety_decision != "eligible":
-        return _manual_review_candidate(story=story, packet=packet)
+        return _manual_review_candidate(packet=packet)
     response = provider.generate(packet.to_model_payload())
     _validate_response(
         response,
@@ -189,8 +202,8 @@ def generate_implementation_update_set_candidate(
     )
     _validate_implementation_contract(response)
     candidate = UpdateSetCandidate(
-        story_number=story.number,
-        name=f"UPD_{story.number}_LLM_Implementation",
+        story_number=packet.story.number,
+        name=f"UPD_{packet.story.number}_LLM_Implementation",
         eligibility_decision=_candidate_decision(packet.safety_decision),
         eligibility_reasons=packet.safety_reasons,
         confidence=0.75,
@@ -213,12 +226,11 @@ def generate_implementation_update_set_candidate(
 
 def _manual_review_candidate(
     *,
-    story: Story,
     packet: ImplementationPacket,
 ) -> UpdateSetCandidate:
     candidate = UpdateSetCandidate(
-        story_number=story.number,
-        name=f"UPD_{story.number}_Manual_Build",
+        story_number=packet.story.number,
+        name=f"UPD_{packet.story.number}_Manual_Build",
         eligibility_decision=_candidate_decision(packet.safety_decision),
         eligibility_reasons=packet.safety_reasons,
         confidence=0.0,
