@@ -180,11 +180,15 @@ GET /admin
 Configure local Basic auth credentials in the API service environment:
 
 ```text
+JEDI_ENVIRONMENT=development
+JEDI_ADMIN_AUTH_MODE=dev_basic
 JEDI_ADMIN_CONSOLE_USERNAME=<operator username>
 JEDI_ADMIN_CONSOLE_PASSWORD=<strong password>
 ```
 
 The console shows recent fulfillment jobs, recent lifecycle events, and Basic-auth artifact detail pages under `/admin/artifacts/{artifact_id}`. It does not expose raw lifecycle event payload JSON or ServiceNow sys_ids in the dashboard. It also does not provide retry, reject, rebuild, preview, commit, or other mutation actions; ServiceNow remains the work surface and update set preview/commit remains the human review point.
+
+`dev_basic` is development-only. The default `JEDI_ADMIN_AUTH_MODE=disabled` fails closed, and the runtime rejects `dev_basic` unless `JEDI_ENVIRONMENT=development`. Reserved production modes are `oidc` and `servicenow_oauth`; both fail closed until implemented. See `docs/admin-auth-config.md` for the required OIDC and ServiceNow OAuth configuration details.
 
 ## Fulfillment Worker
 
@@ -206,7 +210,7 @@ Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject
 - `SERVICENOW_CLIENT_SECRET`
 - `JEDI_AUDIT_ROOT`
 
-Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, `JEDI_BUILD_CLAIM_STATE`, `JEDI_ADMIN_API_TOKEN`, `JEDI_ADMIN_CONSOLE_USERNAME`, and `JEDI_ADMIN_CONSOLE_PASSWORD`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
+Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, `JEDI_BUILD_CLAIM_STATE`, `JEDI_ADMIN_API_TOKEN`, `JEDI_ENVIRONMENT`, `JEDI_ADMIN_AUTH_MODE`, `JEDI_ADMIN_CONSOLE_USERNAME`, and `JEDI_ADMIN_CONSOLE_PASSWORD`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
 
 For ServiceNow Table API integrations, prefer state values over labels. In the current PDI, `Ready` is `1` and `Work in progress` is `2`, so the Railway worker uses `JEDI_BUILD_CLAIM_FROM_STATE=1` and `JEDI_BUILD_CLAIM_STATE=2`.
 

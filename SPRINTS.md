@@ -384,7 +384,7 @@ The detailed production-hardening backlog and review checklist lives in `docs/pr
 
 | Priority | Proposed Sprint | Goal | Exit Criteria |
 |---:|---|---|---|
-| 1 | Sprint 102: ServiceNow role-backed admin authentication | Replace or wrap local Basic auth with ServiceNow/OIDC-backed operator authentication and explicit admin-role checks. | `/admin` access is tied to customer identity, local Basic auth is development-only, and tests cover unauthenticated, unauthorized, and authorized users. |
+| 1 | Sprint 102: Admin auth strategy boundary | Back off ServiceNow browser-session assumptions, make Basic auth development-only, and reserve explicit production modes for customer IdP OIDC or ServiceNow OAuth authorization code. | `/admin` fails closed by default, `dev_basic` works only in development, and future `oidc`/`servicenow_oauth` modes are documented but not enabled until implemented. |
 | 2 | Sprint 103: Authenticated inbound webhook protection | Protect `/lifecycle/events` before any non-PDI use. | ServiceNow lifecycle calls use a signed secret or OAuth-authenticated integration path; unauthenticated lifecycle events are rejected. |
 | 3 | Sprint 104: Confidence-based context retrieval worker | Turn deterministic context escalation into an actual retrieval step before model generation. | Missing live instance context triggers a retrieval worker; insufficient context routes to human review; the model is not asked to guess. |
 | 4 | Sprint 105: Admin console drill-down and evidence views | Make the console useful for operations without adding mutation controls. | Job detail, lifecycle event detail, artifact links, and retrieved Update Set links are visible from the console. |

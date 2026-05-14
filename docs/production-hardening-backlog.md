@@ -19,7 +19,7 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 
 | Priority | Sprint | Backlog Item | Why It Matters | Exit Criteria |
 |---:|---|---|---|---|
-| 1 | Sprint 102 | ServiceNow role-backed admin authentication | Local Basic auth is acceptable for the MVP but not the production operator identity model. | `/admin` access is tied to a customer-approved identity source and admin role check. Basic auth is disabled or explicitly marked development-only. Tests cover unauthenticated, authenticated-non-admin, and authenticated-admin flows. |
+| 1 | Sprint 102 | Admin auth strategy boundary | Local Basic auth is acceptable for the MVP but not the production operator identity model, and ServiceNow browser-session role checks are not safe to assume under SSO. | `/admin` fails closed by default, Basic auth is explicitly development-only, and future `oidc` and `servicenow_oauth` modes are documented but not enabled until implemented. |
 | 2 | Sprint 103 | Authenticated inbound lifecycle webhook | The current PDI bootstrap history includes `no_authentication`; production cannot accept public lifecycle events without request authentication. | `/lifecycle/events` rejects unauthenticated calls. ServiceNow emits lifecycle events with a signed secret, OAuth-authenticated REST message, or another approved mechanism. Replay and malformed-signature tests are present. |
 | 3 | Sprint 104 | Confidence-based context retrieval worker | Deterministic context escalation exists, but the runtime still needs the actual retrieval step before model generation. | Missing live instance context claims a retrieval task before model execution. Insufficient retrieved context routes to human review. The model is never asked to infer unavailable ServiceNow shape. |
 | 4 | Sprint 105 | Admin console drill-down and evidence views | Operators need diagnostics without database access, but the console should remain read-only. | Job detail, lifecycle event detail, artifact detail, retrieved Update Set links, and failure summaries are visible. No retry/rebuild/commit controls exist. |
@@ -63,7 +63,7 @@ Review for:
 
 ## Immediate Execution Order
 
-1. Sprint 102: ServiceNow role-backed admin authentication.
+1. Sprint 102: Admin auth strategy boundary.
 2. Sprint 103: Authenticated inbound lifecycle webhook.
 3. Sprint 104: Confidence-based context retrieval worker.
 4. Sprint 105: Admin console drill-down and evidence views.

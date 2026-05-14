@@ -9,7 +9,7 @@ import secrets
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, status
@@ -62,6 +62,7 @@ class RuntimeConfigError(ValueError):
 class RuntimeSettings(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
+    runtime_environment: str = "development"
     database_url: str
     servicenow_instance_url: str
     servicenow_client_id: str
@@ -75,6 +76,7 @@ class RuntimeSettings(BaseModel):
     openai_api_key: str | None = None
     openai_model: str | None = None
     admin_api_token: str | None = None
+    admin_auth_mode: Literal["disabled", "dev_basic", "oidc", "servicenow_oauth"] = "disabled"
     admin_console_username: str | None = None
     admin_console_password: str | None = None
     update_set_apply: bool = False
@@ -115,6 +117,7 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         raise RuntimeConfigError(f"Missing required runtime settings: {', '.join(missing)}")
 
     return RuntimeSettings(
+        runtime_environment=str(values.get("JEDI_ENVIRONMENT") or "development"),
         database_url=str(values["DATABASE_URL"]),
         servicenow_instance_url=str(values["SERVICENOW_INSTANCE_URL"]),
         servicenow_client_id=str(values["SERVICENOW_CLIENT_ID"]),
@@ -128,6 +131,10 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         openai_api_key=_optional_str(values.get("OPENAI_API_KEY")),
         openai_model=_optional_str(values.get("OPENAI_MODEL")),
         admin_api_token=_optional_str(values.get("JEDI_ADMIN_API_TOKEN")),
+        admin_auth_mode=cast(
+            Literal["disabled", "dev_basic", "oidc", "servicenow_oauth"],
+            str(values.get("JEDI_ADMIN_AUTH_MODE") or "disabled"),
+        ),
         admin_console_username=_optional_str(values.get("JEDI_ADMIN_CONSOLE_USERNAME")),
         admin_console_password=_optional_str(values.get("JEDI_ADMIN_CONSOLE_PASSWORD")),
         update_set_apply=_truthy(values.get("JEDI_UPDATE_SET_APPLY")),
@@ -259,6 +266,26 @@ def _require_admin_console_credentials(
     settings: RuntimeSettings,
     authorization: str | None,
 ) -> None:
+    if settings.admin_auth_mode == "disabled":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="admin console authentication is disabled",
+        )
+    if settings.admin_auth_mode in {"oidc", "servicenow_oauth"}:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=f"admin auth mode is not implemented: {settings.admin_auth_mode}",
+        )
+    if settings.admin_auth_mode != "dev_basic":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"admin auth mode is not supported: {settings.admin_auth_mode}",
+        )
+    if settings.runtime_environment.strip().lower() != "development":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="dev_basic admin auth is development-only",
+        )
     if not settings.admin_console_username or not settings.admin_console_password:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

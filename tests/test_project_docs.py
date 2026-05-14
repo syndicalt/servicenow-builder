@@ -455,7 +455,7 @@ def test_sprint_plan_documents_mvp_baseline_and_post_mvp_backlog() -> None:
     assert "Sprint 101" in sprint_plan
     assert "Read-only admin console" in sprint_plan
     assert "Post-MVP Sprint Backlog" in sprint_plan
-    assert "ServiceNow role-backed admin authentication" in sprint_plan
+    assert "Admin auth strategy boundary" in sprint_plan
     assert "Confidence-based context retrieval worker" in sprint_plan
 
 
@@ -464,11 +464,35 @@ def test_production_hardening_backlog_documents_review_targets() -> None:
 
     assert "Sprint 101 Cut Line" in backlog
     assert "Production Hardening Backlog" in backlog
-    assert "ServiceNow role-backed admin authentication" in backlog
+    assert "Admin auth strategy boundary" in backlog
     assert "Authenticated inbound lifecycle webhook" in backlog
     assert "Slop review" in backlog
     assert "Security review" in backlog
     assert "No new mutation surface" in backlog
+
+
+def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
+    config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
+
+    assert "JEDI_ADMIN_AUTH_MODE" in config
+    assert "dev_basic" in config
+    assert "oidc" in config
+    assert "servicenow_oauth" in config
+    assert "OIDC Configuration" in config
+    assert "ServiceNow OAuth Configuration" in config
+    assert "authorization code grant" in config
+    assert "SSO" in config
+    assert "Do not rely on a ServiceNow browser session cookie" in config
+
+
+def test_admin_auth_strategy_adr_documents_sso_decision() -> None:
+    adr = Path("docs/adr/0005-admin-auth-strategy.md").read_text(encoding="utf-8")
+
+    assert "ServiceNow role-backed browser authentication" in adr
+    assert "SSO" in adr
+    assert "customer IdP OIDC" in adr
+    assert "ServiceNow OAuth authorization code" in adr
+    assert "dev_basic" in adr
 
 
 def test_sprint_one_change_log_documents_schema_work() -> None:

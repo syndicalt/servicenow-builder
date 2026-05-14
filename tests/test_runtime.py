@@ -217,6 +217,7 @@ def _settings_with_admin_token(tmp_path: Path) -> RuntimeSettings:
 def _settings_with_admin_console(tmp_path: Path) -> RuntimeSettings:
     return _settings(tmp_path).model_copy(
         update={
+            "admin_auth_mode": "dev_basic",
             "admin_console_username": "console-admin",
             "admin_console_password": "console-password",
         }
@@ -421,6 +422,8 @@ def test_load_runtime_settings_reads_admin_console_credentials(tmp_path: Path) -
                 "SERVICENOW_CLIENT_ID=client-id",
                 "SERVICENOW_CLIENT_SECRET=client-secret",
                 f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_ENVIRONMENT=development",
+                "JEDI_ADMIN_AUTH_MODE=dev_basic",
                 "JEDI_ADMIN_CONSOLE_USERNAME=console-admin",
                 "JEDI_ADMIN_CONSOLE_PASSWORD=console-password",
             ]
@@ -432,6 +435,29 @@ def test_load_runtime_settings_reads_admin_console_credentials(tmp_path: Path) -
 
     assert settings.admin_console_username == "console-admin"
     assert settings.admin_console_password == "console-password"
+    assert settings.runtime_environment == "development"
+    assert settings.admin_auth_mode == "dev_basic"
+
+
+def test_load_runtime_settings_defaults_admin_console_auth_disabled(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.runtime_environment == "development"
+    assert settings.admin_auth_mode == "disabled"
 
 
 def test_load_runtime_settings_requires_explicit_model_provider_to_enable_openai(
@@ -786,6 +812,81 @@ def test_admin_console_requires_configured_credentials(tmp_path: Path) -> None:
     response = client.get("/admin", auth=("console-admin", "console-password"))
 
     assert response.status_code == 503
+
+
+def test_admin_console_is_disabled_without_explicit_auth_mode(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "admin_console_username": "console-admin",
+            "admin_console_password": "console-password",
+        }
+    )
+    client = TestClient(
+        create_runtime_api(
+            settings=settings,
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin", auth=("console-admin", "console-password"))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "admin console authentication is disabled"
+
+
+def test_admin_console_rejects_dev_basic_in_production_environment(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    settings = _settings_with_admin_console(tmp_path).model_copy(
+        update={"runtime_environment": "production"}
+    )
+    client = TestClient(
+        create_runtime_api(
+            settings=settings,
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin", auth=("console-admin", "console-password"))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "dev_basic admin auth is development-only"
+
+
+def test_admin_console_future_oidc_mode_fails_closed_until_implemented(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore()
+    settings = _settings(tmp_path).model_copy(update={"admin_auth_mode": "oidc"})
+    client = TestClient(
+        create_runtime_api(
+            settings=settings,
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin")
+
+    assert response.status_code == 501
+    assert response.json()["detail"] == "admin auth mode is not implemented: oidc"
+
+
+def test_admin_console_future_servicenow_oauth_mode_fails_closed_until_implemented(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore()
+    settings = _settings(tmp_path).model_copy(update={"admin_auth_mode": "servicenow_oauth"})
+    client = TestClient(
+        create_runtime_api(
+            settings=settings,
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get("/admin")
+
+    assert response.status_code == 501
+    assert response.json()["detail"] == ("admin auth mode is not implemented: servicenow_oauth")
 
 
 def test_admin_console_requires_basic_auth(tmp_path: Path) -> None:
