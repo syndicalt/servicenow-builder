@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jedi_devproject.fulfillment_worker import FulfillmentPersistedArtifact
 from jedi_devproject.model_fulfillment import (
@@ -20,6 +20,7 @@ class FakeModelClient:
     def __init__(self) -> None:
         self.updated_fields: list[dict[str, object]] = []
         self.upserts: list[dict[str, object]] = []
+        self.fetches: list[dict[str, object]] = []
 
     def fetch_stories(
         self,
@@ -66,6 +67,32 @@ class FakeModelClient:
     ) -> dict[str, object]:
         self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
         return {"sys_id": "update-set-sys-id", "name": fields["name"]}
+
+    def fetch_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+    ) -> dict[str, object] | None:
+        self.fetches.append({"table": table, "lookup": lookup})
+        if table == "sys_user":
+            return {"sys_id": "user-sys-id"}
+        return None
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, object]]:
+        self.fetches.append(
+            {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
+        )
+        if table == "sys_update_xml":
+            return [{"sys_id": "customer-update-sys-id"}]
+        return []
 
 
 class RecordingModelProvider:
@@ -232,6 +259,56 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
             },
         }
     ]
+
+
+def test_model_candidate_handler_can_apply_candidate_under_update_set_after_handoff(
+    tmp_path: Path,
+) -> None:
+    client = FakeModelClient()
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+            apply_update_set_changes=True,
+            update_set_user_name="jedi.integration",
+        ),
+    )
+
+    result = handler(_job())
+    assert result.after_artifacts_persisted is not None
+
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/2",
+                sha256="b" * 64,
+                artifact_id=2,
+            ),
+        ]
+    )
+
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_update_set",
+        "sys_user_preference",
+        "sys_dictionary",
+    ]
+    assert client.upserts[1]["lookup"] == {
+        "name": "sys_update_set",
+        "user": "user-sys-id",
+    }
+    assert client.upserts[2]["lookup"] == {
+        "name": "rm_story",
+        "element": "u_ai_review_notes",
+    }
+    assert client.fetches[-1]["table"] == "sys_update_xml"
+    work_note_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert "customer updates: 1" in work_note_fields["work_notes"]
 
 
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(

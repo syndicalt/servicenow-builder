@@ -69,6 +69,8 @@ class RuntimeSettings(BaseModel):
     openai_api_key: str | None = None
     openai_model: str | None = None
     admin_api_token: str | None = None
+    update_set_apply: bool = False
+    update_set_user_name: str | None = None
 
 
 class RuntimeStore(LifecycleEventStore, FulfillmentWorkerStore, Protocol):
@@ -116,6 +118,8 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         openai_api_key=_optional_str(values.get("OPENAI_API_KEY")),
         openai_model=_optional_str(values.get("OPENAI_MODEL")),
         admin_api_token=_optional_str(values.get("JEDI_ADMIN_API_TOKEN")),
+        update_set_apply=_truthy(values.get("JEDI_UPDATE_SET_APPLY")),
+        update_set_user_name=_optional_str(values.get("JEDI_UPDATE_SET_USER_NAME")),
     )
 
 
@@ -241,6 +245,8 @@ def _runtime_handler(
                 transport=transport,
             ),
             instance_url=settings.servicenow_instance_url,
+            apply_update_set_changes=settings.update_set_apply,
+            update_set_user_name=settings.update_set_user_name,
         ),
     )
 

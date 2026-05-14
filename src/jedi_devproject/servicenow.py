@@ -409,6 +409,42 @@ class ServiceNowClient:
             return record if isinstance(record, dict) else None
         return None
 
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        query = "^".join(f"{key}={value}" for key, value in lookup.items())
+        params = {
+            "sysparm_query": query,
+            "sysparm_limit": str(limit),
+        }
+        if fields:
+            params["sysparm_fields"] = ",".join(fields)
+        response = self._transport.send(
+            HttpRequest(
+                method="GET",
+                url=f"{self._settings.base_url}/api/now/table/{table}",
+                headers={
+                    "Authorization": self._auth.authorization_header(),
+                    "Accept": "application/json",
+                },
+                params=params,
+            )
+        )
+        if response.status_code >= 400:
+            raise ServiceNowApiError(
+                f"ServiceNow API failed with status {response.status_code}: "
+                f"{redact_secrets(response.json_body)}"
+            )
+        records = response.json_body.get("result", [])
+        if not isinstance(records, list):
+            return []
+        return [record for record in records if isinstance(record, dict)]
+
     def attach_story_file(
         self,
         story_sys_id: str,

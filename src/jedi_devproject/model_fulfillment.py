@@ -18,6 +18,10 @@ from jedi_devproject.models import ProviderPolicy
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.rag import SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy
+from jedi_devproject.update_set_apply import (
+    UpdateSetApplyRequest,
+    apply_candidate_to_update_set,
+)
 from jedi_devproject.update_set_handoff import (
     UpdateSetHandoffRequest,
     create_update_set_handoff,
@@ -26,6 +30,22 @@ from jedi_devproject.writeback_orchestration import WritebackClient
 
 
 class ModelFulfillmentClient(WritebackClient, Protocol):
+    def fetch_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+    ) -> dict[str, Any] | None: ...
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]: ...
+
     def upsert_table_record(
         self,
         *,
@@ -43,6 +63,8 @@ class ModelCandidateFulfillmentConfig(BaseModel):
     rags: SpecializedRags
     provider: Any
     instance_url: str
+    apply_update_set_changes: bool = False
+    update_set_user_name: str | None = None
 
 
 def model_candidate_fulfillment_handler(
@@ -89,6 +111,8 @@ def model_candidate_fulfillment_handler(
                 candidate=candidate,
                 candidate_artifact_ref=_candidate_artifact_ref(artifacts),
                 instance_url=config.instance_url,
+                apply_update_set_changes=config.apply_update_set_changes,
+                update_set_user_name=config.update_set_user_name,
             ),
         )
 
@@ -103,8 +127,10 @@ def _create_handoff_after_persist(
     candidate: Any,
     candidate_artifact_ref: str,
     instance_url: str,
+    apply_update_set_changes: bool,
+    update_set_user_name: str | None,
 ) -> None:
-    create_update_set_handoff(
+    handoff = create_update_set_handoff(
         client=client,
         request=UpdateSetHandoffRequest(
             story_sys_id=story_sys_id,
@@ -113,6 +139,32 @@ def _create_handoff_after_persist(
             candidate_artifact_ref=candidate_artifact_ref,
             instance_url=instance_url,
         ),
+    )
+    if not apply_update_set_changes:
+        return
+    if update_set_user_name is None or update_set_user_name.strip() == "":
+        raise RuntimeError(
+            "JEDI_UPDATE_SET_USER_NAME is required when Update Set apply is enabled"
+        )
+    result = apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id=handoff.update_set_sys_id,
+            integration_user_name=update_set_user_name,
+            candidate=candidate,
+        ),
+    )
+    client.update_story_fields(
+        story_sys_id,
+        {
+            "work_notes": (
+                f"ServiceNow customer updates generated for {story_number}. "
+                f"Update Set: {handoff.update_set_name} ({handoff.update_set_url}). "
+                f"Applied changes: {result.applied_change_count}; "
+                f"customer updates: {result.customer_update_count}. "
+                f"Candidate artifact: {candidate_artifact_ref}."
+            )
+        },
     )
 
 

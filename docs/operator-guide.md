@@ -205,7 +205,9 @@ When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-cl
 
 After the implementation candidate artifact is durably stored, the worker creates or updates a ServiceNow `sys_update_set` handoff record named `JEDI <story number> - AI Candidate`. The Update Set description includes the candidate artifact ref, candidate hash, risk/confidence values, proposed change summary, and reviewer notes. The story receives a work note with a direct `sys_update_set.do?sys_id=...` link.
 
-This handoff record is the ServiceNow-native review surface. It is not a committed deployment and does not fabricate `sys_update_xml` entries. Candidate changes must still be applied through a controlled, allowlisted ServiceNow update path before the Update Set contains commit-ready platform changes.
+This handoff record is the ServiceNow-native review surface. It is not a committed deployment and does not fabricate `sys_update_xml` entries. When `JEDI_UPDATE_SET_APPLY=true`, the worker sets the configured integration user's current Update Set through `sys_user_preference`, applies only supported candidate changes through normal ServiceNow Table API calls, then verifies `sys_update_xml` entries exist for that Update Set. The current supported apply surface is `sys_dictionary` insert/update for custom fields; ambiguous form layout edits fail closed before mutation.
+
+Set `JEDI_UPDATE_SET_USER_NAME` to the ServiceNow `sys_user.user_name` used by the OAuth integration before enabling `JEDI_UPDATE_SET_APPLY`. If the user cannot be found, if the candidate contains unsupported changes, or if ServiceNow does not capture customer updates after mutation, the job fails and writes the failure back to story work notes.
 
 ## Container Runtime
 

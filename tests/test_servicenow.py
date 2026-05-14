@@ -871,6 +871,55 @@ def test_servicenow_client_fetches_table_record_by_lookup() -> None:
     assert request.params["sysparm_limit"] == "1"
 
 
+def test_servicenow_client_fetches_table_records_by_lookup_and_fields() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "customer-update-sys-id",
+                            "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                        }
+                    ]
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    records = client.fetch_table_records(
+        table="sys_update_xml",
+        lookup={"update_set": "update-set-sys-id"},
+        fields=["sys_id", "name"],
+        limit=25,
+    )
+
+    request = transport.requests[1]
+    assert records == [
+        {
+            "sys_id": "customer-update-sys-id",
+            "name": "sys_dictionary_rm_story_u_ai_review_notes",
+        }
+    ]
+    assert request.method == "GET"
+    assert request.url.endswith("/api/now/table/sys_update_xml")
+    assert request.params["sysparm_query"] == "update_set=update-set-sys-id"
+    assert request.params["sysparm_fields"] == "sys_id,name"
+    assert request.params["sysparm_limit"] == "25"
+
+
 def test_servicenow_client_fetch_table_record_returns_none_when_missing() -> None:
     transport = RecordingTransport(
         [

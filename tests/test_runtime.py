@@ -411,6 +411,31 @@ def test_load_runtime_settings_enables_openai_when_provider_is_explicit(
     assert settings.openai_model == "gpt-4o-2024-08-06"
 
 
+def test_load_runtime_settings_reads_update_set_apply_controls(
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_UPDATE_SET_APPLY=true",
+                "JEDI_UPDATE_SET_USER_NAME=jedi.integration",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.update_set_apply is True
+    assert settings.update_set_user_name == "jedi.integration"
+
+
 def test_create_runtime_api_wires_store_factory(tmp_path: Path) -> None:
     store = FakeRuntimeStore()
     database_urls: list[str] = []
