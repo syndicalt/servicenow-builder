@@ -59,6 +59,40 @@ class FakeApplyClient:
         )
         if table == "sys_update_xml":
             return cast(list[dict[str, Any]], self.customer_updates)
+        if table == "sys_ui_element" and lookup == {
+            "name": "rm_story",
+            "element": "description",
+        }:
+            return [
+                {
+                    "sys_id": "description-element-sys-id",
+                    "name": "rm_story",
+                    "element": "description",
+                    "sys_ui_section": {"value": "main-section-sys-id"},
+                    "position": "3",
+                }
+            ]
+        if table == "sys_ui_element" and lookup == {
+            "name": "rm_story",
+            "sys_ui_section": "main-section-sys-id",
+        }:
+            return [
+                {
+                    "sys_id": "short-description-element-sys-id",
+                    "element": "short_description",
+                    "position": "1",
+                },
+                {
+                    "sys_id": "description-element-sys-id",
+                    "element": "description",
+                    "position": "3",
+                },
+                {
+                    "sys_id": "acceptance-element-sys-id",
+                    "element": "acceptance_criteria",
+                    "position": "4",
+                },
+            ]
         return []
 
     def upsert_table_record(
@@ -151,10 +185,20 @@ def test_apply_candidate_sets_current_update_set_then_applies_dictionary_change(
     }
 
 
-def test_apply_candidate_rejects_unsupported_change_before_mutation() -> None:
+def test_apply_candidate_places_form_field_after_description_with_native_ui_elements() -> None:
     client = FakeApplyClient()
     candidate = _candidate(
         [
+            CandidateChange(
+                table="sys_dictionary",
+                operation="insert",
+                fields={
+                    "name": "rm_story",
+                    "element": "u_ai_review_notes",
+                    "column_label": "AI Review Notes",
+                    "internal_type": "journal_input",
+                },
+            ),
             CandidateChange(
                 table="sys_ui_form",
                 operation="update",
@@ -162,12 +206,58 @@ def test_apply_candidate_rejects_unsupported_change_before_mutation() -> None:
                     "table": "rm_story",
                     "field": "u_ai_review_notes",
                     "position": "below Description",
+                    "view": "default",
                 },
-            )
+            ),
         ]
     )
 
-    with pytest.raises(ValueError, match="unsupported update-set apply table: sys_ui_form"):
+    result = apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id="update-set-sys-id",
+            integration_user_name="jedi.integration",
+            candidate=candidate,
+        ),
+    )
+
+    assert result.applied_change_count == 2
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_user_preference",
+        "sys_dictionary",
+        "sys_ui_element",
+        "sys_ui_element",
+    ]
+    assert client.upserts[2] == {
+        "table": "sys_ui_element",
+        "lookup": {"sys_id": "acceptance-element-sys-id"},
+        "fields": {"position": "5"},
+    }
+    assert client.upserts[3] == {
+        "table": "sys_ui_element",
+        "lookup": {
+            "name": "rm_story",
+            "element": "u_ai_review_notes",
+            "sys_ui_section": "main-section-sys-id",
+        },
+        "fields": {
+            "name": "rm_story",
+            "element": "u_ai_review_notes",
+            "sys_ui_section": "main-section-sys-id",
+            "position": "4",
+        },
+    }
+
+
+def test_apply_candidate_rejects_unsupported_change_before_mutation() -> None:
+    client = FakeApplyClient()
+    candidate = _candidate(
+        [
+            CandidateChange(table="sys_user", operation="update", fields={"name": "bad"})
+        ]
+    )
+
+    with pytest.raises(ValueError, match="unsupported update-set apply table: sys_user"):
         apply_candidate_to_update_set(
             client=client,
             request=UpdateSetApplyRequest(

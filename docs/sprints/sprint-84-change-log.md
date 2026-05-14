@@ -9,12 +9,14 @@ Generate ServiceNow customer updates for reviewed AI candidates without fabricat
 - Added `update_set_apply` as the controlled apply-under-update-set service.
 - Added a ServiceNow table-list read path so the worker can verify captured `sys_update_xml` rows after applying supported changes.
 - Added `JEDI_UPDATE_SET_APPLY` and `JEDI_UPDATE_SET_USER_NAME` runtime controls.
-- Wired model fulfillment so the worker can create the Update Set handoff, set the integration user's current Update Set, apply supported dictionary changes, verify customer updates, and write a follow-up story work note.
-- Kept unsupported candidate changes fail-closed before mutation. Form layout edits are not applied until a deterministic ServiceNow form-layout implementation exists.
+- Wired model fulfillment so the worker can create the Update Set handoff, set the integration user's current Update Set, apply supported dictionary and form-layout changes, verify customer updates, and write a follow-up story work note.
+- Added deterministic default `rm_story` form placement through native `sys_ui_element` records, including position shifting for fields that follow Description.
+- Kept unsupported candidate changes fail-closed before mutation.
 
 ## Tests
 
 - Added unit coverage proving dictionary changes are applied only after selecting the handoff Update Set for the integration user.
+- Added unit coverage proving form placement creates native UI element updates and shifts following elements.
 - Added guardrail coverage proving unsupported tables fail before any ServiceNow mutation.
 - Added coverage proving the app reads `sys_update_xml` for verification and never writes it directly.
 - Added runtime setting coverage for the new update-set apply controls.

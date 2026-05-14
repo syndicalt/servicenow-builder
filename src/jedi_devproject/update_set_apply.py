@@ -48,6 +48,16 @@ class UpdateSetApplyResult(BaseModel):
     customer_update_count: int
 
 
+class PlannedFormLayoutChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    table_name: str
+    element: str
+    section_sys_id: str
+    position: int
+    shifted_elements: list[dict[str, str]]
+
+
 def apply_candidate_to_update_set(
     *,
     client: UpdateSetApplyClient,
@@ -55,8 +65,9 @@ def apply_candidate_to_update_set(
 ) -> UpdateSetApplyResult:
     if request.candidate.status is not CandidateStatus.READY_FOR_REVIEW:
         raise ValueError("candidate is not ready for Update Set apply")
-    normalized_changes = [
-        _normalize_supported_change(change) for change in request.candidate.changes
+    prepared_changes = [
+        _prepare_supported_change(client=client, change=change)
+        for change in request.candidate.changes
     ]
 
     user_sys_id = _integration_user_sys_id(
@@ -68,8 +79,11 @@ def apply_candidate_to_update_set(
         user_sys_id=user_sys_id,
         update_set_sys_id=request.update_set_sys_id,
     )
-    for change in normalized_changes:
-        _apply_dictionary_change(client=client, change=change)
+    for change in prepared_changes:
+        if isinstance(change, PlannedFormLayoutChange):
+            _apply_form_layout_change(client=client, change=change)
+        else:
+            _apply_dictionary_change(client=client, change=change)
 
     customer_updates = client.fetch_table_records(
         table="sys_update_xml",
@@ -80,16 +94,26 @@ def apply_candidate_to_update_set(
     if not customer_updates:
         raise RuntimeError(
             f"no customer updates captured for generated Update Set {request.update_set_sys_id}"
-        )
+    )
     return UpdateSetApplyResult(
-        applied_change_count=len(normalized_changes),
+        applied_change_count=len(prepared_changes),
         customer_update_count=len(customer_updates),
     )
 
 
-def _normalize_supported_change(change: CandidateChange) -> CandidateChange:
-    if change.table != "sys_dictionary":
-        raise ValueError(f"unsupported update-set apply table: {change.table}")
+def _prepare_supported_change(
+    *,
+    client: UpdateSetApplyClient,
+    change: CandidateChange,
+) -> CandidateChange | PlannedFormLayoutChange:
+    if change.table == "sys_dictionary":
+        return _normalize_dictionary_change(change)
+    if change.table == "sys_ui_form":
+        return _plan_form_layout_change(client=client, change=change)
+    raise ValueError(f"unsupported update-set apply table: {change.table}")
+
+
+def _normalize_dictionary_change(change: CandidateChange) -> CandidateChange:
     if change.operation not in {"insert", "update"}:
         raise ValueError(f"unsupported update-set apply operation: {change.operation}")
     fields = dict(change.fields)
@@ -107,6 +131,67 @@ def _normalize_supported_change(change: CandidateChange) -> CandidateChange:
             "sys_dictionary change missing required fields: " + ", ".join(missing)
         )
     return change.model_copy(update={"fields": _service_now_field_values(fields)})
+
+
+def _plan_form_layout_change(
+    *,
+    client: UpdateSetApplyClient,
+    change: CandidateChange,
+) -> PlannedFormLayoutChange:
+    if change.operation != "update":
+        raise ValueError(f"unsupported update-set apply operation: {change.operation}")
+    table_name = str(change.fields.get("table") or change.fields.get("name") or "")
+    element = str(change.fields.get("field") or change.fields.get("element") or "")
+    position = str(change.fields.get("position") or "")
+    view = str(change.fields.get("view") or "default").strip().lower()
+    if table_name != "rm_story":
+        raise ValueError("sys_ui_form change must target rm_story")
+    if not element.startswith("u_"):
+        raise ValueError("sys_ui_form change must target a custom field")
+    if view not in {"", "default"}:
+        raise ValueError("only default rm_story form view placement is supported")
+    if "description" not in position.lower():
+        raise ValueError("sys_ui_form change must place the field relative to Description")
+
+    description_elements = client.fetch_table_records(
+        table="sys_ui_element",
+        lookup={"name": table_name, "element": "description"},
+        fields=["sys_id", "name", "element", "sys_ui_section", "position"],
+        limit=10,
+    )
+    if len(description_elements) != 1:
+        raise RuntimeError("default Description form element lookup was ambiguous")
+    description_element = description_elements[0]
+    section_sys_id = _reference_value(description_element.get("sys_ui_section"))
+    description_position = _record_position(description_element)
+
+    section_elements = client.fetch_table_records(
+        table="sys_ui_element",
+        lookup={"name": table_name, "sys_ui_section": section_sys_id},
+        fields=["sys_id", "element", "position"],
+        limit=200,
+    )
+    insert_position = description_position + 1
+    shifted_elements = [
+        {
+            "sys_id": str(record["sys_id"]),
+            "position": str(_record_position(record) + 1),
+        }
+        for record in sorted(
+            section_elements,
+            key=_record_position,
+            reverse=True,
+        )
+        if str(record.get("element") or "") != element
+        and _record_position(record) >= insert_position
+    ]
+    return PlannedFormLayoutChange(
+        table_name=table_name,
+        element=element,
+        section_sys_id=section_sys_id,
+        position=insert_position,
+        shifted_elements=shifted_elements,
+    )
 
 
 def _service_now_field_values(fields: dict[str, Any]) -> dict[str, Any]:
@@ -161,3 +246,40 @@ def _apply_dictionary_change(
         },
         fields=change.fields,
     )
+
+
+def _apply_form_layout_change(
+    *,
+    client: UpdateSetApplyClient,
+    change: PlannedFormLayoutChange,
+) -> None:
+    for shifted_element in change.shifted_elements:
+        client.upsert_table_record(
+            table="sys_ui_element",
+            lookup={"sys_id": shifted_element["sys_id"]},
+            fields={"position": shifted_element["position"]},
+        )
+    client.upsert_table_record(
+        table="sys_ui_element",
+        lookup={
+            "name": change.table_name,
+            "element": change.element,
+            "sys_ui_section": change.section_sys_id,
+        },
+        fields={
+            "name": change.table_name,
+            "element": change.element,
+            "sys_ui_section": change.section_sys_id,
+            "position": str(change.position),
+        },
+    )
+
+
+def _reference_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("value") or "")
+    return str(value or "")
+
+
+def _record_position(record: dict[str, Any]) -> int:
+    return int(str(record.get("position") or "0"))
