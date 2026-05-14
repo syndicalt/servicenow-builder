@@ -178,6 +178,21 @@ def _plan_form_layout_change(
         raise ValueError("sys_ui_form change must target a custom field")
     if view not in {"", "default"}:
         raise ValueError("only default rm_story form view placement is supported")
+
+    section_name = str(
+        change.fields.get("form_section_name")
+        or change.fields.get("section")
+        or change.fields.get("caption")
+        or ""
+    ).strip()
+    if section_name:
+        return _plan_named_section_form_layout_change(
+            client=client,
+            table_name=table_name,
+            element=element,
+            section_name=section_name,
+        )
+
     if "description" not in position.lower():
         raise ValueError("sys_ui_form change must place the field relative to Description")
 
@@ -219,6 +234,38 @@ def _plan_form_layout_change(
         section_sys_id=section_sys_id,
         position=insert_position,
         shifted_elements=shifted_elements,
+    )
+
+
+def _plan_named_section_form_layout_change(
+    *,
+    client: UpdateSetApplyClient,
+    table_name: str,
+    element: str,
+    section_name: str,
+) -> PlannedFormLayoutChange:
+    sections = client.fetch_table_records(
+        table="sys_ui_section",
+        lookup={"name": table_name, "caption": section_name},
+        fields=["sys_id", "name", "caption", "view"],
+        limit=10,
+    )
+    if len(sections) != 1:
+        raise RuntimeError(f"form section lookup was ambiguous: {section_name}")
+    section_sys_id = _reference_value(sections[0].get("sys_id"))
+    section_elements = client.fetch_table_records(
+        table="sys_ui_element",
+        lookup={"name": table_name, "sys_ui_section": section_sys_id},
+        fields=["sys_id", "element", "position"],
+        limit=200,
+    )
+    insert_position = max([_record_position(record) for record in section_elements], default=-1) + 1
+    return PlannedFormLayoutChange(
+        table_name=table_name,
+        element=element,
+        section_sys_id=section_sys_id,
+        position=insert_position,
+        shifted_elements=[],
     )
 
 

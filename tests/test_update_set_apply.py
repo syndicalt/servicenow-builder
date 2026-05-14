@@ -59,6 +59,27 @@ class FakeApplyClient:
         )
         if table == "sys_update_xml":
             return cast(list[dict[str, Any]], self.customer_updates)
+        if table == "sys_ui_section" and lookup == {
+            "name": "rm_story",
+            "caption": "Notes",
+        }:
+            return [{"sys_id": "notes-section-sys-id", "caption": "Notes"}]
+        if table == "sys_ui_element" and lookup == {
+            "name": "rm_story",
+            "sys_ui_section": "notes-section-sys-id",
+        }:
+            return [
+                {
+                    "sys_id": "work-notes-element-sys-id",
+                    "element": "work_notes",
+                    "position": "0",
+                },
+                {
+                    "sys_id": "activity-element-sys-id",
+                    "element": "activity.xml",
+                    "position": "1",
+                },
+            ]
         if table == "sys_ui_element" and lookup == {
             "name": "rm_story",
             "element": "description",
@@ -281,10 +302,60 @@ def test_apply_candidate_infers_form_target_from_single_custom_dictionary_field(
         ),
     )
 
+    assert client.upserts[-1] == {
+        "table": "sys_ui_element",
+        "lookup": {
+            "name": "rm_story",
+            "element": "u_ai_review_notes",
+            "sys_ui_section": "main-section-sys-id",
+        },
+        "fields": {
+            "name": "rm_story",
+            "element": "u_ai_review_notes",
+            "sys_ui_section": "main-section-sys-id",
+            "position": "4",
+        },
+    }
+
+
+def test_apply_candidate_uses_named_form_section_when_provided() -> None:
+    client = FakeApplyClient()
+    candidate = _candidate(
+        [
+            CandidateChange(
+                table="sys_dictionary",
+                operation="insert",
+                fields={
+                    "name": "rm_story",
+                    "element": "u_ai_review_notes",
+                    "column_label": "AI Review Notes",
+                    "internal_type": "string",
+                },
+            ),
+            CandidateChange(
+                table="sys_ui_form",
+                operation="update",
+                fields={
+                    "field_name": "u_ai_review_notes",
+                    "form_section_name": "Notes",
+                },
+            ),
+        ]
+    )
+
+    apply_candidate_to_update_set(
+        client=client,
+        request=UpdateSetApplyRequest(
+            update_set_sys_id="update-set-sys-id",
+            integration_user_name="jedi.integration",
+            candidate=candidate,
+        ),
+    )
+
     assert client.upserts[-1]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
-        "sys_ui_section": "main-section-sys-id",
+        "sys_ui_section": "notes-section-sys-id",
     }
 
 
@@ -343,7 +414,7 @@ def test_apply_candidate_normalizes_model_field_aliases() -> None:
     assert client.upserts[-1]["lookup"] == {
         "name": "rm_story",
         "element": "u_ai_review_notes",
-        "sys_ui_section": "main-section-sys-id",
+        "sys_ui_section": "notes-section-sys-id",
     }
 
 
