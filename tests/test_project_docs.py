@@ -1312,3 +1312,23 @@ def test_capability_gate_plan_sequences_instance_discovery_before_build() -> Non
     assert "Task 5: Discovery-Backed Packet Integration" in plan
     assert "dynamic instance context" in plan
     assert "No model call should happen before discovery" in plan
+
+
+def test_operator_guide_documents_capability_based_gate() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "capability-based automation gate" in guide
+    assert "table names are metadata" in guide
+    assert "`dictionary_field_create`" in guide
+    assert "`form_layout_place_field`" in guide
+    assert "STRY0010001" in guide
+
+
+def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> None:
+    change_log = Path("docs/sprints/sprint-93-change-log.md").read_text(encoding="utf-8")
+
+    assert "STRY0010001" in change_log
+    assert "incident" in change_log
+    assert "u_antics" in change_log
+    assert "capability-based" in change_log
+    assert "generic dictionary field creation plus form placement" in change_log

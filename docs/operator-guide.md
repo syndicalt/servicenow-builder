@@ -203,11 +203,25 @@ Runtime OpenAI use is disabled unless `JEDI_MODEL_PROVIDER=openai` is set. `OPEN
 
 When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-claim path, then `model_candidate_fulfillment_handler` builds an `implementation_packet`, calls `OpenAIResponsesProvider`, validates the model response, and returns DB-ready JSON artifacts for the implementation packet and implementation candidate. The worker stores both artifacts in `artifact_blobs`, records DB-backed `artifact_refs`, and writes a ServiceNow work note keyed to the fulfillment job id. The model stage does not apply model-generated platform changes.
 
+## Capability-Based Automation Gate
+
+The capability-based automation gate is not table-based. In this gate, table names are metadata for risk, discovery, and validation; they are not allowlist gates by themselves.
+
+The baseline supported implementation capability is generic dictionary field creation plus form placement:
+
+- `dictionary_field_create`
+- `field_label_create`
+- `form_layout_place_field`
+
+For example, `STRY0010001` classifies as an automated Incident dictionary/form change for `incident.u_antics` when the story describes the target table, field label, string type, length, and placement below Description.
+
+Stories that are clear but require unsupported capabilities such as `acl_modify`, `flow_modify`, `business_rule_create`, `data_migration`, or `integration_modify` receive human-review feedback naming the unsupported capability. Stories missing required details receive clarification feedback through `u_ai_status=Needs Clarification` and a work note naming the missing details.
+
 After the implementation candidate artifact is durably stored, the worker generates reviewed Update Set XML for `JEDI <story number> - AI Candidate` and posts it to the ServiceNow-side importer `jedi_update_set_import`. The XML contains a `sys_remote_update_set` header and candidate customer updates linked through `remote_update_set`, never through a local `update_set`. After import, the worker looks up the retrieved update set by `remote_sys_id`, discovers the active `Ready for Testing` state choice for `rm_story`, and updates the story with `state=<Ready for Testing value>`, `u_ai_status=Ready for Testing`, and a work note containing a direct `sys_remote_update_set.do?sys_id=...` link.
 
 This retrieved Update Set is the ServiceNow-native review surface. It is not automatically committed and it does not mutate `sys_dictionary`, `sys_ui_element`, or local `sys_update_set` records during fulfillment. Reviewers must preview, scan, resolve, and commit the retrieved Update Set inside ServiceNow. The story entering Ready for Testing means the automated handoff is ready for human test/review; it does not mean the retrieved Update Set has been approved or committed. `JEDI_UPDATE_SET_APPLY` is retained only as a backward-compatible runtime setting; generated implementation candidates now use the retrieved Update Set handoff path and do not perform local apply-under-update-set mutation.
 
-If the deterministic packet gates produce a manual-build candidate, the worker stores the implementation packet and candidate artifacts, writes `u_ai_status=Human Review Required`, writes a story work note with the candidate artifact reference and eligibility reasons, and does not create a retrieved Update Set. This is the expected path for unsupported story shapes such as an Incident-form field request while the automated handoff only supports the allowlisted Story-table dictionary/form pattern.
+If the deterministic packet gates produce a non-automated candidate, the worker stores the implementation packet and candidate artifacts, writes either `u_ai_status=Needs Clarification` or `u_ai_status=Human Review Required`, writes a story work note with the candidate artifact reference and eligibility reasons, and does not create a retrieved Update Set.
 
 If the candidate contains unsupported changes, the importer endpoint is missing, the imported retrieved Update Set cannot be found by `remote_sys_id`, or the active `Ready for Testing` state choice cannot be discovered, the job fails and writes the failure back to story work notes. Runtime failure notification also discovers the active `Draft` state choice; when found, it sets `state=<Draft value>` and `u_ai_status=Automation Failed` so failed automation does not leave the story in Work in Progress with `Build In Progress`. The previous local-apply path is kept in code only as a legacy utility and must not be used for automated candidate fulfillment.
 
