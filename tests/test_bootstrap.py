@@ -266,11 +266,13 @@ def test_apply_bootstrap_fields_patches_existing_operational_fields_read_only() 
     ]
 
 
-def test_lifecycle_business_rule_spec_emits_draft_to_ready_event_only() -> None:
+def test_lifecycle_business_rule_spec_emits_ready_and_complete_events() -> None:
     spec = build_lifecycle_business_rule_spec(
         integration_identity="jedi-devproject-lifecycle-integration",
         draft_state_value="-6",
         ready_state_value="1",
+        ready_for_testing_state_value="-7",
+        complete_state_value="3",
         rest_message_name="Jedi DevProject Lifecycle Event API",
         rest_method_name="post_event",
     )
@@ -283,11 +285,17 @@ def test_lifecycle_business_rule_spec_emits_draft_to_ready_event_only() -> None:
     assert "current.state.changes()" in spec.condition
     assert "previous.state == '-6'" in spec.condition
     assert "current.state == '1'" in spec.condition
+    assert "previous.state == '-7'" in spec.condition
+    assert "current.state == '3'" in spec.condition
     assert "story_state_changed" in spec.script
     assert "servicenow-business-rule" in spec.script
     assert "jedi-devproject-lifecycle-integration" in spec.script
     assert "Jedi DevProject Lifecycle Event API" in spec.script
     assert "post_event" in spec.script
+    assert "previousStateLabel" in spec.script
+    assert "currentStateLabel" in spec.script
+    assert "Ready for Testing" in spec.script
+    assert "Complete" in spec.script
     assert "https://sidecar.example.gov/lifecycle/events" not in spec.script
     assert "current.number.toString()" in spec.script
     assert "current.sys_id" not in spec.script

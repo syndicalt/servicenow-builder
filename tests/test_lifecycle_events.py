@@ -81,6 +81,34 @@ def test_non_ready_transition_does_not_plan_evaluation() -> None:
     assert plan.reasons == ["unsupported_lifecycle_transition"]
 
 
+def test_ready_for_testing_to_complete_event_plans_story_closeout_without_build() -> None:
+    event = LifecycleStateChangeEvent.model_validate(
+        {
+            "event_id": "evt-20260514-uat-complete",
+            "event_type": LifecycleEventType.STORY_STATE_CHANGED,
+            "source": "servicenow-business-rule",
+            "table": "rm_story",
+            "story_number": "STRY0010002",
+            "previous_state": "Ready for Testing",
+            "current_state": "Complete",
+            "occurred_at": "2026-05-14T18:45:00Z",
+            "correlation_id": "STRY0010002-ReadyForTesting-Complete-20260514T184500Z",
+            "emitted_by": "jedi-devproject-lifecycle-integration",
+        }
+    )
+
+    plan = plan_story_ready_lifecycle_event(event)
+
+    assert plan.should_evaluate is False
+    assert plan.lifecycle_action == "close_story"
+    assert plan.story_number == "STRY0010002"
+    assert plan.from_state == "Ready for Testing"
+    assert plan.current_state == "Complete"
+    assert plan.claim_state is None
+    assert plan.idempotency_key == "evt-20260514-uat-complete"
+    assert plan.reasons == []
+
+
 def test_lifecycle_event_requires_idempotency_and_source_context() -> None:
     with pytest.raises(ValidationError) as exc:
         LifecycleStateChangeEvent.model_validate(

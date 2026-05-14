@@ -247,6 +247,14 @@ class _NoopStore:
     ) -> FulfillmentJobRecord:
         raise AssertionError("not called")
 
+    def close_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None:
+        raise AssertionError("not called")
+
     def claim_next_fulfillment_job(
         self,
         *,

@@ -27,6 +27,13 @@ class LifecycleEventStore(Protocol):
         story_number: str,
     ) -> FulfillmentJobRecord: ...
 
+    def close_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None: ...
+
 
 class LifecycleWebhookResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -68,6 +75,12 @@ def create_lifecycle_api(*, store: LifecycleEventStore) -> FastAPI:
                 story_number=event.story_number,
             )
             job_id = job.job_id
+        elif plan.lifecycle_action == "close_story":
+            closeout_job = store.close_latest_fulfillment_job_for_story(
+                story_number=event.story_number,
+                event_id=event.event_id,
+            )
+            job_id = closeout_job.job_id if closeout_job is not None else None
 
         return LifecycleWebhookResponse(
             accepted=True,

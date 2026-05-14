@@ -142,7 +142,7 @@ The lifecycle receiver is:
 POST /lifecycle/events
 ```
 
-A valid `Draft` to `Ready` `LifecycleStateChangeEvent` returns `202 Accepted`, records the event in `lifecycle_events`, enqueues one `fulfillment_jobs` row, and returns the queued `job_id`. Unsupported lifecycle transitions are still accepted and recorded, but they are not enqueued for fulfillment.
+A valid `Draft` to `Ready` `LifecycleStateChangeEvent` returns `202 Accepted`, records the event in `lifecycle_events`, enqueues one `fulfillment_jobs` row, and returns the queued `job_id`. A valid `Ready for Testing` to `Complete` event records the event and writes a `story_completed` audit entry against the latest fulfillment job for that story without enqueueing another build. Unsupported lifecycle transitions are still accepted and recorded, but they are not enqueued for fulfillment.
 
 The webhook request path does not execute fulfillment inline. Build evaluation, ServiceNow claim writeback, implementation packet generation, external build handoff, and Ready for Testing writeback must run in worker processing after a queued job is claimed.
 
@@ -362,7 +362,7 @@ Required fields:
 - `correlation_id`
 - `emitted_by`
 
-For the MVP, only `event_type=story_state_changed`, `table=rm_story`, `previous_state=Draft`, and `current_state=Ready` plans evaluation. The sidecar plan is `evaluate_story` with a later claim target of `Work in Progress`. That claim must still perform a fresh ServiceNow story read and allowlisted state-transition check before any mutation.
+For the MVP, only `event_type=story_state_changed`, `table=rm_story`, `previous_state=Draft`, and `current_state=Ready` plans evaluation. The sidecar plan is `evaluate_story` with a later claim target of `Work in Progress`. A `Ready for Testing` to `Complete` transition plans `close_story` and is treated as a UAT closeout signal only. That claim must still perform a fresh ServiceNow story read and allowlisted state-transition check before any mutation.
 
 The event boundary rejects unknown fields, including ServiceNow `story_sys_id`. Story number, idempotency key, correlation id, source, and emitted identity are enough for orchestration correlation without passing internal ServiceNow record identifiers through the external boundary.
 
@@ -378,6 +378,8 @@ python3 -m jedi_devproject.cli plan-lifecycle-business-rule \
   --integration-identity jedi-devproject-lifecycle-integration \
   --draft-state-value -6 \
   --ready-state-value 1 \
+  --ready-for-testing-state-value -7 \
+  --complete-state-value 3 \
   --run-id lifecycle-business-rule-20260513-001 \
   --spec-root artifacts/lifecycle-bootstrap
 ```
@@ -389,7 +391,7 @@ The command writes a local lifecycle webhook bootstrap bundle with two reviewed 
 
 The Business Rule references the named REST Message instead of setting the endpoint directly. This keeps the endpoint URL out of the Business Rule script, lets ServiceNow own authentication configuration, and gives reviewers a clean separation between trigger logic and transport configuration.
 
-The generated Business Rule emits `story_state_changed` only when the state changes from the supplied Draft value to the supplied Ready value. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
+The generated Business Rule emits `story_state_changed` when the state changes from the supplied Draft value to the supplied Ready value. If `--ready-for-testing-state-value` and `--complete-state-value` are supplied, it also emits the UAT closeout transition from Ready for Testing to Complete. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
 
 The artifact also includes `servicenow_records`, a deterministic plan for the ServiceNow tables that later apply code must create or update:
 

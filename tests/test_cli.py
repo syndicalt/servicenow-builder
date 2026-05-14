@@ -3043,6 +3043,10 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
             "-6",
             "--ready-state-value",
             "1",
+            "--ready-for-testing-state-value",
+            "-7",
+            "--complete-state-value",
+            "3",
             "--run-id",
             "lifecycle-business-rule-001",
             "--spec-root",
@@ -3070,9 +3074,13 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
     ]
     assert "previous.state == '-6'" in payload["business_rule"]["condition"]
     assert "current.state == '1'" in payload["business_rule"]["condition"]
+    assert "previous.state == '-7'" in payload["business_rule"]["condition"]
+    assert "current.state == '3'" in payload["business_rule"]["condition"]
     assert "https://sidecar.example.gov/lifecycle/events" not in payload["business_rule"]["script"]
     assert "Jedi DevProject Lifecycle Event API" in payload["business_rule"]["script"]
     assert "story_state_changed" in payload["business_rule"]["script"]
+    assert "Ready for Testing" in payload["business_rule"]["script"]
+    assert "Complete" in payload["business_rule"]["script"]
     assert "story_sys_id" not in json.dumps(payload)
 
 

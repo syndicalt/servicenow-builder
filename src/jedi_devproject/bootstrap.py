@@ -256,6 +256,8 @@ def build_lifecycle_business_rule_spec(
     integration_identity: str,
     draft_state_value: str,
     ready_state_value: str,
+    ready_for_testing_state_value: str | None = None,
+    complete_state_value: str | None = None,
     rest_message_name: str = "Jedi DevProject Lifecycle Event API",
     rest_method_name: str = "post_event",
 ) -> LifecycleBusinessRuleSpec:
@@ -264,13 +266,52 @@ def build_lifecycle_business_rule_spec(
     _require_non_empty("ready_state_value", ready_state_value)
     _require_non_empty("rest_message_name", rest_message_name)
     _require_non_empty("rest_method_name", rest_method_name)
+    if ready_for_testing_state_value is not None:
+        _require_non_empty("ready_for_testing_state_value", ready_for_testing_state_value)
+    if complete_state_value is not None:
+        _require_non_empty("complete_state_value", complete_state_value)
 
-    condition = (
-        "current.state.changes() && "
-        f"previous.state == {_js_string(draft_state_value)} && "
-        f"current.state == {_js_string(ready_state_value)}"
+    transition_conditions = [
+        (
+            f"(previous.state == {_js_string(draft_state_value)} && "
+            f"current.state == {_js_string(ready_state_value)})"
+        )
+    ]
+    complete_transition_enabled = (
+        ready_for_testing_state_value is not None and complete_state_value is not None
     )
+    if complete_transition_enabled:
+        assert ready_for_testing_state_value is not None
+        assert complete_state_value is not None
+        transition_conditions.append(
+            f"(previous.state == {_js_string(ready_for_testing_state_value)} && "
+            f"current.state == {_js_string(complete_state_value)})"
+        )
+
+    condition = "current.state.changes() && (" + " || ".join(transition_conditions) + ")"
+    complete_label_branch = ""
+    if complete_transition_enabled:
+        complete_label_branch = f"""
+    }} else if (
+        previous.state == {_js_string(ready_for_testing_state_value or "")} &&
+        current.state == {_js_string(complete_state_value or "")}
+    ) {{
+        previousStateLabel = 'Ready for Testing';
+        currentStateLabel = 'Complete';"""
     script = f"""(function executeRule(current, previous) {{
+    var previousStateLabel = 'Draft';
+    var currentStateLabel = 'Ready';
+
+    if (
+        previous.state == {_js_string(draft_state_value)} &&
+        current.state == {_js_string(ready_state_value)}
+    ) {{
+        previousStateLabel = 'Draft';
+        currentStateLabel = 'Ready';{complete_label_branch}
+    }} else {{
+        return;
+    }}
+
     var request = new sn_ws.RESTMessageV2(
         {_js_string(rest_message_name)},
         {_js_string(rest_method_name)}
@@ -290,8 +331,8 @@ def build_lifecycle_business_rule_spec(
         source: 'servicenow-business-rule',
         table: 'rm_story',
         story_number: current.number.toString(),
-        previous_state: 'Draft',
-        current_state: 'Ready',
+        previous_state: previousStateLabel,
+        current_state: currentStateLabel,
         occurred_at: new GlideDateTime().getValue(),
         correlation_id: eventId,
         emitted_by: {_js_string(integration_identity)}
@@ -318,12 +359,16 @@ def build_lifecycle_webhook_bootstrap_spec(
     integration_identity: str,
     draft_state_value: str,
     ready_state_value: str,
+    ready_for_testing_state_value: str | None = None,
+    complete_state_value: str | None = None,
 ) -> LifecycleWebhookBootstrapSpec:
     rest_message = build_lifecycle_rest_message_spec(endpoint_url=endpoint_url)
     business_rule = build_lifecycle_business_rule_spec(
         integration_identity=integration_identity,
         draft_state_value=draft_state_value,
         ready_state_value=ready_state_value,
+        ready_for_testing_state_value=ready_for_testing_state_value,
+        complete_state_value=complete_state_value,
         rest_message_name=rest_message.name,
         rest_method_name=rest_message.method_name,
     )

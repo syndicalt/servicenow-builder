@@ -98,17 +98,13 @@ def _job_row(*, status: str = "queued", attempt_count: int = 0) -> dict[str, obj
         "created_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
         "updated_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
         "locked_by": "worker-local-1" if status == "running" else None,
-        "locked_at": datetime(2026, 5, 13, 15, 1, tzinfo=UTC)
-        if status == "running"
-        else None,
+        "locked_at": datetime(2026, 5, 13, 15, 1, tzinfo=UTC) if status == "running" else None,
         "last_error": None,
     }
 
 
 def test_postgres_migration_defines_operational_schema() -> None:
-    migration = Path("db/migrations/0001_operational_store.sql").read_text(
-        encoding="utf-8"
-    )
+    migration = Path("db/migrations/0001_operational_store.sql").read_text(encoding="utf-8")
 
     assert "CREATE TABLE IF NOT EXISTS lifecycle_events" in migration
     assert "payload_json JSONB NOT NULL" in migration
@@ -279,6 +275,29 @@ def test_complete_fulfillment_job_marks_completed_and_records_event() -> None:
     assert completed_job.locked_by is None
 
 
+def test_close_latest_fulfillment_job_for_story_records_uat_complete_event() -> None:
+    connection = ScriptedPostgresConnection(rows=[_job_row(status="completed", attempt_count=1)])
+    store = _store(connection)
+
+    completed_job = store.close_latest_fulfillment_job_for_story(
+        story_number="STRY0010013",
+        event_id="evt-uat-complete",
+    )
+
+    executed_sql = connection.executed[0][0]
+    executed_params = connection.executed[0][1]
+    assert completed_job is not None
+    assert completed_job.status == "completed"
+    assert completed_job.story_number == "STRY0010013"
+    assert "WHERE story_number = %s" in executed_sql
+    assert "ORDER BY created_at DESC, job_id DESC" in executed_sql
+    assert "story_completed" in executed_params
+    assert (
+        "Story marked Complete in ServiceNow by lifecycle event evt-uat-complete" in executed_params
+    )
+    assert "STRY0010013" in executed_params
+
+
 def test_fail_fulfillment_job_marks_failed_and_preserves_error() -> None:
     failed_row = _job_row(status="failed", attempt_count=1)
     failed_row["last_error"] = "provider unavailable"
@@ -361,9 +380,7 @@ def test_record_json_artifact_persists_payload_and_db_backed_ref() -> None:
     assert "INSERT INTO artifact_refs" in joined_sql
     assert "db://artifact_blobs/" in joined_sql
     assert artifact == ArtifactBlobRecord.model_validate(blob_row)
-    assert connection.executed[0][1][4] == (
-        '{"story":{"number":"STRY0010013"},"task":"generate"}'
-    )
+    assert connection.executed[0][1][4] == ('{"story":{"number":"STRY0010013"},"task":"generate"}')
     assert connection.transaction_count == 1
 
 

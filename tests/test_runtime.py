@@ -29,6 +29,7 @@ class FakeRuntimeStore:
         self.claimed_job = claimed_job
         self.recorded_events: list[str] = []
         self.enqueued_jobs: list[tuple[str, str]] = []
+        self.closed_story_jobs: list[tuple[str, str]] = []
         self.completed_jobs: list[tuple[str, str]] = []
         self.failed_jobs: list[tuple[str, str]] = []
         self.artifact_refs: list[tuple[str, str, str, str]] = []
@@ -71,6 +72,17 @@ class FakeRuntimeStore:
     ) -> FulfillmentJobRecord:
         self.enqueued_jobs.append((event_id, story_number))
         return _job(event_id=event_id, story_number=story_number)
+
+    def close_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None:
+        self.closed_story_jobs.append((story_number, event_id))
+        return _job(event_id="evt-prior-ready", story_number=story_number).model_copy(
+            update={"status": "completed"}
+        )
 
     def claim_next_fulfillment_job(
         self,

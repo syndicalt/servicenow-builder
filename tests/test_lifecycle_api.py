@@ -13,6 +13,7 @@ class FakeOperationalStore:
     def __init__(self) -> None:
         self.recorded_events: list[LifecycleStateChangeEvent] = []
         self.enqueued_jobs: list[tuple[str, str]] = []
+        self.closed_story_jobs: list[tuple[str, str]] = []
 
     def record_lifecycle_event(
         self,
@@ -50,6 +51,26 @@ class FakeOperationalStore:
             last_error=None,
         )
 
+    def close_latest_fulfillment_job_for_story(
+        self,
+        *,
+        story_number: str,
+        event_id: str,
+    ) -> FulfillmentJobRecord | None:
+        self.closed_story_jobs.append((story_number, event_id))
+        return FulfillmentJobRecord(
+            job_id=f"job-prior-{story_number}",
+            event_id="evt-prior-ready",
+            story_number=story_number,
+            status="completed",
+            attempt_count=1,
+            created_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 14, 18, 45, tzinfo=UTC),
+            locked_by=None,
+            locked_at=None,
+            last_error=None,
+        )
+
 
 def _ready_event_payload() -> dict[str, str]:
     return {
@@ -64,6 +85,21 @@ def _ready_event_payload() -> dict[str, str]:
         "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
         "emitted_by": "jedi-devproject-lifecycle-integration",
     }
+
+
+def _complete_event_payload() -> dict[str, str]:
+    payload = _ready_event_payload()
+    payload.update(
+        {
+            "event_id": "evt-20260514-uat-complete",
+            "story_number": "STRY0010002",
+            "previous_state": "Ready for Testing",
+            "current_state": "Complete",
+            "occurred_at": "2026-05-14T18:45:00Z",
+            "correlation_id": "STRY0010002-ReadyForTesting-Complete-20260514T184500Z",
+        }
+    )
+    return payload
 
 
 def test_lifecycle_webhook_records_ready_event_and_enqueues_fulfillment() -> None:
@@ -84,6 +120,28 @@ def test_lifecycle_webhook_records_ready_event_and_enqueues_fulfillment() -> Non
     }
     assert [event.event_id for event in store.recorded_events] == ["evt-20260513-001"]
     assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
+    assert store.closed_story_jobs == []
+
+
+def test_lifecycle_webhook_records_complete_event_and_closes_related_job() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(create_lifecycle_api(store=store))
+
+    response = client.post("/lifecycle/events", json=_complete_event_payload())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "accepted": True,
+        "event_id": "evt-20260514-uat-complete",
+        "story_number": "STRY0010002",
+        "should_evaluate": False,
+        "lifecycle_action": "close_story",
+        "job_id": "job-prior-STRY0010002",
+        "reasons": [],
+    }
+    assert [event.event_id for event in store.recorded_events] == ["evt-20260514-uat-complete"]
+    assert store.enqueued_jobs == []
+    assert store.closed_story_jobs == [("STRY0010002", "evt-20260514-uat-complete")]
 
 
 def test_lifecycle_webhook_records_unsupported_transition_without_enqueueing() -> None:
