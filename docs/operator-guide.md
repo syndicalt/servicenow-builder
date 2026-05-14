@@ -155,6 +155,18 @@ The first production handler is `build_claim_fulfillment_handler()` in `jedi_dev
 
 The worker runs outside the webhook request. The webhook should only validate, record, enqueue, and acknowledge lifecycle events.
 
+## Runtime Wiring
+
+Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject.runtime`. Required environment values are:
+
+- `DATABASE_URL`
+- `SERVICENOW_INSTANCE_URL`
+- `SERVICENOW_CLIENT_ID`
+- `SERVICENOW_CLIENT_SECRET`
+- `JEDI_AUDIT_ROOT`
+
+Optional values are `JEDI_WORKER_ID` and `JEDI_BUILD_CLAIM_APPLY`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
+
 ## Lifecycle Event Contract
 
 ServiceNow should remain the human work surface. For automated orchestration, ServiceNow should emit explicit lifecycle events to the sidecar rather than using comments or work notes as machine commands.

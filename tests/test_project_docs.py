@@ -156,6 +156,16 @@ def test_operator_guide_documents_fulfillment_worker() -> None:
     assert "outside the webhook request" in guide
 
 
+def test_operator_guide_documents_runtime_wiring() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Runtime Wiring" in guide
+    assert "load_runtime_settings" in guide
+    assert "create_runtime_api" in guide
+    assert "process_one_runtime_fulfillment" in guide
+    assert "DATABASE_URL" in guide
+
+
 def test_sprint_sixty_eight_change_log_documents_operational_store() -> None:
     change_log = Path("docs/sprints/sprint-68-change-log.md").read_text(
         encoding="utf-8"
@@ -214,6 +224,18 @@ def test_sprint_seventy_two_change_log_documents_build_claim_handler() -> None:
     assert "execute_build_claim" in change_log
     assert "FulfillmentBlocked" in change_log
     assert "Work in Progress" in change_log
+
+
+def test_sprint_seventy_three_change_log_documents_runtime_wiring() -> None:
+    change_log = Path("docs/sprints/sprint-73-change-log.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "runtime" in change_log
+    assert "load_runtime_settings" in change_log
+    assert "create_runtime_api" in change_log
+    assert "process_one_runtime_fulfillment" in change_log
+    assert "DATABASE_URL" in change_log
 
 
 def test_sprint_twenty_nine_change_log_documents_packet_cli() -> None:
