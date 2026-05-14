@@ -595,6 +595,32 @@ class PostgresOperationalStore:
         )
         return [JobEventRecord.model_validate(row) for row in rows]
 
+    def recent_lifecycle_events(self, *, limit: int = 50) -> list[LifecycleEventRecord]:
+        rows = self._connection.fetch_all(
+            """
+            SELECT event_id, event_type, story_number, payload_json,
+                   received_at, validation_status
+            FROM lifecycle_events
+            ORDER BY received_at DESC, event_id DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return [LifecycleEventRecord.model_validate(row) for row in rows]
+
+    def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]:
+        rows = self._connection.fetch_all(
+            """
+            SELECT job_id, event_id, story_number, status, attempt_count,
+                   created_at, updated_at, locked_by, locked_at, last_error
+            FROM fulfillment_jobs
+            ORDER BY updated_at DESC, job_id DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return [FulfillmentJobRecord.model_validate(row) for row in rows]
+
     def record_artifact_ref(
         self,
         *,

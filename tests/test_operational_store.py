@@ -16,6 +16,7 @@ from jedi_devproject.operational_store import (
     ArtifactBlobRecord,
     ArtifactRefRecord,
     FulfillmentJobRecord,
+    LifecycleEventRecord,
     OperationalConnection,
     PostgresOperationalStore,
     connect_operational_store,
@@ -487,3 +488,38 @@ def test_get_artifact_blob_raises_for_missing_artifact() -> None:
         assert "Artifact blob not found: 404" in str(exc)
     else:
         raise AssertionError("missing artifact blob did not raise")
+
+
+def test_recent_lifecycle_events_returns_newest_events() -> None:
+    row = {
+        "event_id": "evt-002",
+        "event_type": "story_state_changed",
+        "story_number": "STRY0010002",
+        "payload_json": {"story_number": "STRY0010002"},
+        "received_at": datetime(2026, 5, 14, 18, 0, tzinfo=UTC),
+        "validation_status": "accepted",
+    }
+    connection = ScriptedPostgresConnection(rows=[[row]])
+    store = _store(connection)
+
+    events = store.recent_lifecycle_events(limit=10)
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "FROM lifecycle_events" in joined_sql
+    assert "ORDER BY received_at DESC, event_id DESC" in joined_sql
+    assert connection.executed[0][1] == (10,)
+    assert events == [LifecycleEventRecord.model_validate(row)]
+
+
+def test_recent_fulfillment_jobs_returns_newest_jobs() -> None:
+    row = _job_row(status="rejected", attempt_count=1)
+    connection = ScriptedPostgresConnection(rows=[[row]])
+    store = _store(connection)
+
+    jobs = store.recent_fulfillment_jobs(limit=25)
+
+    joined_sql = "\n".join(sql for sql, _params in connection.executed)
+    assert "FROM fulfillment_jobs" in joined_sql
+    assert "ORDER BY updated_at DESC, job_id DESC" in joined_sql
+    assert connection.executed[0][1] == (25,)
+    assert jobs == [FulfillmentJobRecord.model_validate(row)]

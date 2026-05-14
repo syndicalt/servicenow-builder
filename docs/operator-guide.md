@@ -159,9 +159,13 @@ The artifact read endpoints are:
 ```text
 GET /artifacts/{artifact_id}
 GET /jobs/{job_id}/artifacts
+GET /admin/lifecycle-events
+GET /admin/jobs
 ```
 
 `GET /artifacts/{artifact_id}` returns artifact metadata plus the JSON payload stored in `artifact_blobs`. It returns `404` when the artifact id is not found. `GET /jobs/{job_id}/artifacts` returns only the artifact references for the requested job, including `artifact_id`, `artifact_kind`, `path`, and SHA-256 hash.
+
+`GET /admin/lifecycle-events` returns the most recent lifecycle event summaries with event id, event type, story number, received timestamp, and validation status. It intentionally does not return raw event payload JSON or ServiceNow sys_ids. `GET /admin/jobs` returns the most recent fulfillment job summaries with status, attempt count, lock metadata, and the latest error text.
 
 These endpoints do not replace ServiceNow as the work surface. They provide a safe API for the admin GUI and operator diagnostics to inspect generated implementation packets and candidates. Lifecycle webhook calls do not use this admin token, and unauthenticated artifact reads are rejected.
 

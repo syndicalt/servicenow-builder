@@ -321,3 +321,9 @@ class _NoopStore:
 
     def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]:
         raise AssertionError("not called")
+
+    def recent_lifecycle_events(self, *, limit: int = 50) -> list[LifecycleEventRecord]:
+        raise AssertionError("not called")
+
+    def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]:
+        raise AssertionError("not called")

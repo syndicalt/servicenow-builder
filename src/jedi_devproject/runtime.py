@@ -35,6 +35,7 @@ from jedi_devproject.operational_store import (
     ArtifactBlobRecord,
     ArtifactRefRecord,
     FulfillmentJobRecord,
+    LifecycleEventRecord,
     connect_operational_store,
 )
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
@@ -81,6 +82,10 @@ class RuntimeStore(LifecycleEventStore, FulfillmentWorkerStore, Protocol):
     def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord: ...
 
     def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]: ...
+
+    def recent_lifecycle_events(self, *, limit: int = 50) -> list[LifecycleEventRecord]: ...
+
+    def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]: ...
 
 
 StoreFactory = Callable[[str], RuntimeStore]
@@ -157,6 +162,34 @@ def create_runtime_api(
             ],
         }
 
+    @app.get("/admin/lifecycle-events")
+    def list_lifecycle_events(
+        authorization: str | None = Header(default=None),
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        _require_admin_token(settings=settings, authorization=authorization)
+        safe_limit = _bounded_limit(limit)
+        return {
+            "events": [
+                _lifecycle_event_response(event)
+                for event in store.recent_lifecycle_events(limit=safe_limit)
+            ]
+        }
+
+    @app.get("/admin/jobs")
+    def list_jobs(
+        authorization: str | None = Header(default=None),
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        _require_admin_token(settings=settings, authorization=authorization)
+        safe_limit = _bounded_limit(limit)
+        return {
+            "jobs": [
+                _fulfillment_job_response(job)
+                for job in store.recent_fulfillment_jobs(limit=safe_limit)
+            ]
+        }
+
     return app
 
 
@@ -206,6 +239,35 @@ def _artifact_ref_response(ref: ArtifactRefRecord) -> dict[str, Any]:
         "artifact_id": ref.artifact_id,
         "created_at": _json_timestamp(ref.created_at),
     }
+
+
+def _lifecycle_event_response(event: LifecycleEventRecord) -> dict[str, Any]:
+    return {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "story_number": event.story_number,
+        "received_at": _json_timestamp(event.received_at),
+        "validation_status": event.validation_status,
+    }
+
+
+def _fulfillment_job_response(job: FulfillmentJobRecord) -> dict[str, Any]:
+    return {
+        "job_id": job.job_id,
+        "event_id": job.event_id,
+        "story_number": job.story_number,
+        "status": job.status,
+        "attempt_count": job.attempt_count,
+        "created_at": _json_timestamp(job.created_at),
+        "updated_at": _json_timestamp(job.updated_at),
+        "locked_by": job.locked_by,
+        "locked_at": _json_timestamp(job.locked_at) if job.locked_at is not None else None,
+        "last_error": job.last_error,
+    }
+
+
+def _bounded_limit(limit: int) -> int:
+    return min(max(limit, 1), 100)
 
 
 def _json_timestamp(value: datetime) -> str:

@@ -38,6 +38,8 @@ class FakeRuntimeStore:
         self.json_artifacts: list[tuple[str, str, str, str, dict[str, Any]]] = []
         self.artifact_blob_records: dict[int, ArtifactBlobRecord] = {}
         self.artifact_ref_records: dict[str, list[ArtifactRefRecord]] = {}
+        self.lifecycle_event_records: list[LifecycleEventRecord] = []
+        self.fulfillment_job_records: list[FulfillmentJobRecord] = []
         self.next_artifact_id = 1
         self.closed = False
 
@@ -178,6 +180,12 @@ class FakeRuntimeStore:
 
     def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]:
         return self.artifact_ref_records.get(job_id, [])
+
+    def recent_lifecycle_events(self, *, limit: int = 50) -> list[LifecycleEventRecord]:
+        return self.lifecycle_event_records[:limit]
+
+    def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]:
+        return self.fulfillment_job_records[:limit]
 
 
 class RecordingTransport:
@@ -651,6 +659,83 @@ def test_job_artifacts_lists_only_refs_for_requested_job(tmp_path: Path) -> None
                 "created_at": "2026-05-13T15:01:00Z",
             },
         ],
+    }
+
+
+def test_admin_lifecycle_events_lists_recent_events(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.lifecycle_event_records = [
+        LifecycleEventRecord(
+            event_id="evt-002",
+            event_type="story_state_changed",
+            story_number="STRY0010002",
+            payload_json={"story_number": "STRY0010002", "story_sys_id": "hidden"},
+            received_at=datetime(2026, 5, 14, 18, 0, tzinfo=UTC),
+            validation_status="accepted",
+        )
+    ]
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/admin/lifecycle-events",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "events": [
+            {
+                "event_id": "evt-002",
+                "event_type": "story_state_changed",
+                "story_number": "STRY0010002",
+                "received_at": "2026-05-14T18:00:00Z",
+                "validation_status": "accepted",
+            }
+        ]
+    }
+    assert "story_sys_id" not in response.text
+
+
+def test_admin_jobs_lists_recent_fulfillment_jobs(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.fulfillment_job_records = [
+        _job(event_id="evt-002", story_number="STRY0010002").model_copy(
+            update={"status": "rejected", "last_error": "Story returned to Draft"}
+        )
+    ]
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/admin/jobs",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "jobs": [
+            {
+                "job_id": "job-evt-002",
+                "event_id": "evt-002",
+                "story_number": "STRY0010002",
+                "status": "rejected",
+                "attempt_count": 1,
+                "created_at": "2026-05-13T15:00:00Z",
+                "updated_at": "2026-05-13T15:01:00Z",
+                "locked_by": "worker-1",
+                "locked_at": "2026-05-13T15:01:00Z",
+                "last_error": "Story returned to Draft",
+            }
+        ]
     }
 
 
