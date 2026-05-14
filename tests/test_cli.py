@@ -638,9 +638,7 @@ def test_cli_run_implementation_candidates_writes_batch_report(
         {
             "story_number": "STRY0010013",
             "status": "built",
-            "candidate_artifact": str(
-                artifact_root / "candidate-batch-001" / "STRY0010013.json"
-            ),
+            "candidate_artifact": str(artifact_root / "candidate-batch-001" / "STRY0010013.json"),
         }
     ]
     assert "abc123" not in serialized_report
@@ -858,27 +856,15 @@ def test_cli_run_lifecycle_smoke_builds_artifacts_and_plans_writeback(
     assert "client-secret" not in captured.out
     assert fake_client.updated_fields == []
     assert (
-        artifact_root
-        / "implementation-packets"
-        / "lifecycle-smoke-001"
-        / "STORY0010001.json"
+        artifact_root / "implementation-packets" / "lifecycle-smoke-001" / "STORY0010001.json"
     ).exists()
     assert (
-        artifact_root
-        / "implementation-candidates"
-        / "lifecycle-smoke-001"
-        / "STORY0010001.json"
+        artifact_root / "implementation-candidates" / "lifecycle-smoke-001" / "STORY0010001.json"
     ).exists()
     assert (
-        artifact_root
-        / "implementation-candidate-batches"
-        / "lifecycle-smoke-001.json"
+        artifact_root / "implementation-candidate-batches" / "lifecycle-smoke-001.json"
     ).exists()
-    manifest_path = (
-        artifact_root
-        / "lifecycle-manifests"
-        / "lifecycle-smoke-001.json"
-    )
+    manifest_path = artifact_root / "lifecycle-manifests" / "lifecycle-smoke-001.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["story_number"] == "STORY0010001"
     assert manifest["build_reference"] == "build-lifecycle-smoke-001"
@@ -1109,6 +1095,23 @@ class FakeServiceNowClient:
             if key_table == table and ast.literal_eval(key_lookup) == lookup:
                 return record
         return None
+
+    def probe_cicd_update_set_endpoint(self, *, action: str) -> dict[str, object]:
+        self.calls.append({"probe_cicd_update_set_endpoint": action})
+        required_parameter = {
+            "create": "update_set_name",
+            "retrieve": "update_set_id",
+        }[action]
+        return {
+            "status_code": 400,
+            "result": {
+                "status": "3",
+                "status_label": "Failed",
+                "status_message": f"Missing required parameter: {required_parameter}",
+                "status_detail": "",
+                "error": "",
+            },
+        }
 
     def attach_story_file(
         self,
@@ -1448,20 +1451,13 @@ def test_cli_plan_writeback_apply_updates_story_after_validation_and_confirmatio
                 "u_ai_status": "Ready for Testing",
                 "u_ai_build_reference": "build-20260513-001",
                 "u_ai_candidate_artifact": "artifacts/STRY0010013.json",
-                "work_notes": (
-                    "External build completed. "
-                    "Build reference: build-20260513-001."
-                ),
+                "work_notes": ("External build completed. Build reference: build-20260513-001."),
             },
         }
     ]
     assert "applied=True" in captured.out
     assert "abc123" not in captured.out
-    audit_path = (
-        tmp_path
-        / "writeback-audit"
-        / "STORY0010001-build-20260513-001.json"
-    )
+    audit_path = tmp_path / "writeback-audit" / "STORY0010001-build-20260513-001.json"
     assert audit_path.exists()
 
 
@@ -1614,6 +1610,41 @@ def test_cli_check_writeback_capability_reports_ready_instance(
     assert exit_code == 0
     assert "allowed=True" in captured.out
     assert "ready_for_testing_state=-7" in captured.out
+    assert "client-secret" not in captured.out
+
+
+def test_cli_check_cicd_update_set_capability_reports_available_instance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "check-cicd-update-set-capability",
+                "--env-file",
+                str(env_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "available=True" in captured.out
+    assert "create_status=400" in captured.out
+    assert "retrieve_status=400" in captured.out
+    assert "reasons=" in captured.out
     assert "client-secret" not in captured.out
 
 
@@ -1975,9 +2006,7 @@ def test_cli_plan_artifact_handoff_writes_decision_report(
     assert "attach_to_servicenow=1" in captured.out
     assert report["summary"]["delivery_evidence"] == 1
     assert len(report["decisions"][0]["artifact_sha256"]) == 64
-    assert report["decisions"][1]["service_now_attachment_label"] == (
-        "Approved Update Set XML"
-    )
+    assert report["decisions"][1]["service_now_attachment_label"] == ("Approved Update Set XML")
     assert "sys_id" not in json.dumps(report)
 
 
@@ -2735,11 +2764,7 @@ def test_cli_run_delivery_artifact_smoke_creates_placeholder_and_plans_attachmen
 
     captured = capsys.readouterr()
     export_path = artifact_root / "exports" / "delivery-smoke-001" / "STRY0010013.xml"
-    report_path = (
-        artifact_root
-        / "artifact-handoff-reports"
-        / "delivery-smoke-001.json"
-    )
+    report_path = artifact_root / "artifact-handoff-reports" / "delivery-smoke-001.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
 
     assert exit_code == 0
@@ -2777,20 +2802,10 @@ def test_cli_run_reviewed_delivery_smoke_creates_reviewed_handoff_path(
 
     captured = capsys.readouterr()
     export_path = artifact_root / "exports" / "reviewed-delivery-smoke-001" / "STRY0010013.xml"
-    job_path = (
-        artifact_root
-        / "reviewed-delivery-jobs"
-        / "reviewed-delivery-smoke-001.json"
-    )
-    report_path = (
-        artifact_root
-        / "artifact-handoff-reports"
-        / "reviewed-delivery-smoke-001.json"
-    )
+    job_path = artifact_root / "reviewed-delivery-jobs" / "reviewed-delivery-smoke-001.json"
+    report_path = artifact_root / "artifact-handoff-reports" / "reviewed-delivery-smoke-001.json"
     manifest_path = (
-        artifact_root
-        / "reviewed-delivery-lifecycle-manifests"
-        / "reviewed-delivery-smoke-001.json"
+        artifact_root / "reviewed-delivery-lifecycle-manifests" / "reviewed-delivery-smoke-001.json"
     )
     jobs = json.loads(job_path.read_text(encoding="utf-8"))
     report = json.loads(report_path.read_text(encoding="utf-8"))

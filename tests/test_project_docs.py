@@ -1136,3 +1136,25 @@ def test_sprint_sixty_seven_change_log_documents_lifecycle_verification() -> Non
     assert "record_missing" in change_log
     assert "field_mismatch" in change_log
     assert "read-only" in change_log
+
+
+def test_operator_guide_documents_cicd_update_set_capability_probe() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "check-cicd-update-set-capability" in guide
+    assert "/api/sn_cicd/update_set/create" in guide
+    assert "/api/sn_cicd/update_set/retrieve" in guide
+    assert "read-only" in guide
+    assert "update_set_name" in guide
+    assert "update_set_id" in guide
+    assert "does not prove that generated XML can be imported directly" in guide
+
+
+def test_sprint_eighty_seven_change_log_documents_cicd_capability_probe() -> None:
+    change_log = Path("docs/sprints/sprint-87-change-log.md").read_text(encoding="utf-8")
+
+    assert "CI/CD Update Set API" in change_log
+    assert "check-cicd-update-set-capability" in change_log
+    assert "ServiceNowClient.probe_cicd_update_set_endpoint" in change_log
+    assert "raw XML import API" in change_log
+    assert "reviewed ServiceNow-side importer" in change_log

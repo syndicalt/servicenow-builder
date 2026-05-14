@@ -209,6 +209,18 @@ This retrieved Update Set is the ServiceNow-native review surface. It is not aut
 
 If the candidate contains unsupported changes or the retrieved Update Set rows cannot be created, the job fails and writes the failure back to story work notes. The previous local-apply path is kept in code only as a legacy utility and must not be used for automated candidate fulfillment.
 
+## CI/CD Update Set API Capability
+
+Use `check-cicd-update-set-capability` to verify that the target ServiceNow instance exposes the Yokohama+ CI/CD Update Set API before designing promotion around it:
+
+```bash
+python3 -m jedi_devproject.cli check-cicd-update-set-capability --env-file .env
+```
+
+The command is read-only. It sends non-mutating `POST /api/sn_cicd/update_set/create` and `POST /api/sn_cicd/update_set/retrieve` probes without the required parameters. A `400` response naming `update_set_name` or `update_set_id` is treated as evidence that the API route is installed and reachable by the OAuth identity. `401`, `403`, and `404` fail closed.
+
+This probe does not prove that generated XML can be imported directly. The CI/CD Update Set API is the preferred lifecycle surface for create/retrieve/preview/commit/backout operations, but retrieval still expects a ServiceNow update source and source update set identity. If generated implementation XML remains the handoff artifact, a reviewed ServiceNow-side importer or a separate build/source instance is still required before CI/CD preview and commit can become the production path.
+
 ## Container Runtime
 
 The local container runtime is defined by `Dockerfile` and `docker-compose.yml`. It starts three services:

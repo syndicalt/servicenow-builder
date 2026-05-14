@@ -444,6 +444,24 @@ class ServiceNowClient:
             return []
         return [record for record in records if isinstance(record, dict)]
 
+    def probe_cicd_update_set_endpoint(self, *, action: str) -> dict[str, Any]:
+        if action not in {"create", "retrieve"}:
+            raise ValueError(f"unsupported CI/CD Update Set probe action: {action}")
+        response = self._transport.send(
+            HttpRequest(
+                method="POST",
+                url=f"{self._settings.base_url}/api/sn_cicd/update_set/{action}",
+                headers={
+                    "Authorization": self._auth.authorization_header(),
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+            )
+        )
+        body = dict(response.json_body)
+        body["status_code"] = response.status_code
+        return body
+
     def attach_story_file(
         self,
         story_sys_id: str,

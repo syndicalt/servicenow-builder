@@ -864,6 +864,47 @@ def test_servicenow_client_upsert_failure_includes_operation_context() -> None:
     assert "client-secret" not in message
 
 
+def test_servicenow_client_probes_cicd_update_set_endpoint_without_state_change() -> None:
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(
+                status_code=400,
+                json_body={
+                    "result": {
+                        "status": "3",
+                        "status_label": "Failed",
+                        "status_message": "Missing required parameter: update_set_name",
+                        "status_detail": "",
+                        "error": "",
+                    }
+                },
+            ),
+        ]
+    )
+    client = ServiceNowClient(
+        settings=ServiceNowSettings(instance_url="https://dev205693.service-now.com"),
+        auth=OAuthClientCredentials(
+            instance_url="https://dev205693.service-now.com",
+            client_id="client-id",
+            client_secret="client-secret",
+            transport=transport,
+        ),
+        transport=transport,
+    )
+
+    result = client.probe_cicd_update_set_endpoint(action="create")
+
+    request = transport.requests[1]
+    assert result["status_code"] == 400
+    assert result["result"]["status_message"] == ("Missing required parameter: update_set_name")
+    assert request.method == "POST"
+    assert request.url.endswith("/api/sn_cicd/update_set/create")
+    assert request.body == {}
+    assert request.params == {}
+    assert "client-secret" not in repr(request.sanitized())
+
+
 def test_servicenow_client_fetches_table_record_by_lookup() -> None:
     transport = RecordingTransport(
         [

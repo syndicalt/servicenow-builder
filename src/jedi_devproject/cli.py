@@ -32,6 +32,7 @@ from jedi_devproject.bootstrap import (
     plan_bootstrap_fields,
     verify_lifecycle_webhook_records,
 )
+from jedi_devproject.cicd_update_sets import evaluate_cicd_update_set_capability
 from jedi_devproject.external_build import (
     ExternalBuildPipelineResult,
     reviewed_delivery_jobs_from_build_result,
@@ -154,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Check whether the ServiceNow instance supports structured writeback.",
     )
     check_writeback.add_argument("--env-file", type=Path, default=Path(".env"))
+    check_cicd_update_set = subparsers.add_parser(
+        "check-cicd-update-set-capability",
+        help="Check whether the ServiceNow instance exposes the CI/CD Update Set API.",
+    )
+    check_cicd_update_set.add_argument("--env-file", type=Path, default=Path(".env"))
     verify_writeback_parser = subparsers.add_parser(
         "verify-writeback",
         help="Read ServiceNow and verify a completed structured writeback.",
@@ -572,9 +578,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
         )
         plan = writeback_result.plan
-        printable_fields = " ".join(
-            f"{key}={value}" for key, value in sorted(plan.fields.items())
-        )
+        printable_fields = " ".join(f"{key}={value}" for key, value in sorted(plan.fields.items()))
         printable_reasons = " ".join(
             f"reason={reason.replace(' ', '_')}"
             for reason in [*plan.reasons, *writeback_result.reasons]
@@ -600,11 +604,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
         elif args.apply and writeback_result.reasons:
             print(f"applied=False reason={writeback_result.reasons[-1]}")
-        return (
-            0
-            if writeback_result.allowed and (not args.apply or writeback_result.applied)
-            else 1
-        )
+        return 0 if writeback_result.allowed and (not args.apply or writeback_result.applied) else 1
 
     if args.command == "check-writeback-capability":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
@@ -618,6 +618,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0 if capability.allowed else 1
 
+    if args.command == "check-cicd-update-set-capability":
+        client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
+        cicd_capability = evaluate_cicd_update_set_capability(client)
+        probe_statuses = " ".join(
+            f"{probe.action}_status={probe.status_code}" for probe in cicd_capability.probes
+        )
+        reasons = ",".join(cicd_capability.reasons)
+        print(f"available={cicd_capability.available} {probe_statuses} reasons={reasons}")
+        return 0 if cicd_capability.available else 1
+
     if args.command == "verify-writeback":
         client = servicenow_client_from_env(args.env_file, transport=UrllibTransport())
         verification = verify_writeback(
@@ -629,9 +639,7 @@ def main(argv: list[str] | None = None) -> int:
         printable_fields = " ".join(
             f"{key}={value}" for key, value in sorted(verification.actual_fields.items())
         )
-        printable_reasons = " ".join(
-            f"reason={reason}" for reason in verification.reasons
-        )
+        printable_reasons = " ".join(f"reason={reason}" for reason in verification.reasons)
         print(
             f"verified={verification.verified} "
             f"story_number={verification.story_number} "
@@ -661,8 +669,7 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         print(
-            "lifecycle_manifest_written=True "
-            f"story_number={args.story_number} path={manifest_path}"
+            f"lifecycle_manifest_written=True story_number={args.story_number} path={manifest_path}"
         )
         return 0
 
@@ -675,9 +682,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"external_build_results=0 reason=invalid_build_result detail={exc}")
             return 1
 
-        writeback_jobs = [
-            writeback_job_from_build_result(build_result, from_state=args.from_state)
-        ]
+        writeback_jobs = [writeback_job_from_build_result(build_result, from_state=args.from_state)]
         try:
             external_delivery_jobs = reviewed_delivery_jobs_from_build_result(build_result)
         except ValueError as exc:
@@ -778,10 +783,7 @@ def main(argv: list[str] | None = None) -> int:
             report_path=args.report_file,
         )
         if not args.apply:
-            print(
-                "handoff_summary_written=False "
-                f"story_number={story_number} dry_run=True"
-            )
+            print(f"handoff_summary_written=False story_number={story_number} dry_run=True")
             return 0
         if args.confirm_story_number != story_number:
             print(
@@ -799,8 +801,7 @@ def main(argv: list[str] | None = None) -> int:
         stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
         if not stories:
             print(
-                "handoff_summary_written=False "
-                f"story_number={story_number} reason=story_not_found"
+                f"handoff_summary_written=False story_number={story_number} reason=story_not_found"
             )
             return 1
         client.update_story_fields(stories[0].sys_id, {"work_notes": work_note})
@@ -813,10 +814,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             delivery_jobs = delivery_attachment_jobs_from_report(report)
         except ValueError as exc:
-            print(
-                "delivery_attachments_planned=0 "
-                f"delivery_attachments_applied=0 reason={exc}"
-            )
+            print(f"delivery_attachments_planned=0 delivery_attachments_applied=0 reason={exc}")
             return 1
         for delivery_job in delivery_jobs:
             artifact_path = Path(delivery_job["artifact_path"])
@@ -1067,9 +1065,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "apply-lifecycle-webhook":
         try:
-            spec = LifecycleWebhookBootstrapSpec.model_validate(
-                _load_json_object(args.spec_file)
-            )
+            spec = LifecycleWebhookBootstrapSpec.model_validate(_load_json_object(args.spec_file))
         except (ValidationError, ValueError) as exc:
             print(
                 "lifecycle_webhook_applied=False "
@@ -1089,9 +1085,7 @@ def main(argv: list[str] | None = None) -> int:
                 filename=f"{args.run_id}.json",
                 payload=lifecycle_apply_result.model_dump(mode="json"),
             )
-        reasons = " ".join(
-            f"reason={reason}" for reason in lifecycle_apply_result.reasons
-        )
+        reasons = " ".join(f"reason={reason}" for reason in lifecycle_apply_result.reasons)
         print(
             f"lifecycle_webhook_applied={lifecycle_apply_result.applied} "
             f"upserted_records={len(lifecycle_apply_result.upserted_records)} "
@@ -1101,9 +1095,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "verify-lifecycle-webhook":
         try:
-            spec = LifecycleWebhookBootstrapSpec.model_validate(
-                _load_json_object(args.spec_file)
-            )
+            spec = LifecycleWebhookBootstrapSpec.model_validate(_load_json_object(args.spec_file))
         except (ValidationError, ValueError) as exc:
             print(
                 "lifecycle_webhook_verified=False "
@@ -1120,9 +1112,7 @@ def main(argv: list[str] | None = None) -> int:
             filename=f"{args.run_id}.json",
             payload=lifecycle_webhook_verification.model_dump(mode="json"),
         )
-        reasons = " ".join(
-            f"reason={reason}" for reason in lifecycle_webhook_verification.reasons
-        )
+        reasons = " ".join(f"reason={reason}" for reason in lifecycle_webhook_verification.reasons)
         print(
             f"lifecycle_webhook_verified={lifecycle_webhook_verification.verified} "
             f"matched_records={len(lifecycle_webhook_verification.matched_records)} "
@@ -1214,8 +1204,7 @@ def _load_implementation_candidate_jobs(path: Path) -> list[dict[str, Path]]:
         provider_response_file = item.get("provider_response_file")
         if not isinstance(sample_file, str) or not isinstance(provider_response_file, str):
             raise ValueError(
-                "implementation candidate job requires sample_file and "
-                "provider_response_file"
+                "implementation candidate job requires sample_file and provider_response_file"
             )
         jobs.append(
             {
@@ -1275,10 +1264,7 @@ def _write_apply_lifecycle_manifest(
         },
         verification=verification.model_dump(mode="json"),
     )
-    print(
-        "lifecycle_manifest_written=True "
-        f"story_number={story_number} path={manifest_path}"
-    )
+    print(f"lifecycle_manifest_written=True story_number={story_number} path={manifest_path}")
     return manifest_path
 
 
