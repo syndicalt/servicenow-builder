@@ -873,6 +873,207 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
     assert "db://artifact_blobs/2" in transport.requests[-1].body["work_notes"]
 
 
+def test_process_one_runtime_fulfillment_generates_incident_update_set_candidate(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore(claimed_job=_job().model_copy(update={"story_number": "STRY0010001"}))
+    incident_story = {
+        "sys_id": "incident-story-sys-id",
+        "number": "STRY0010001",
+        "short_description": "Add a New Field to the Incident Form",
+        "description": (
+            "As an incident manager, I would like a new field added to the "
+            "Incident form.\n\n- Field Name: Antics\n- Field Type: String\n"
+            "- Length: 4000"
+        ),
+        "acceptance_criteria": (
+            "- A new field labeled Antics exists on the incident form.\n"
+            "- The field is placed below the Description field."
+        ),
+        "story_points": "2",
+        "priority": "4",
+        "state": "Ready",
+    }
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(status_code=200, json_body={"result": [incident_story]}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "element": "state",
+                            "column_label": "State",
+                            "internal_type": "choice",
+                            "active": "true",
+                        },
+                        {
+                            "element": "u_ai_status",
+                            "column_label": "AI Status",
+                            "internal_type": "string",
+                            "active": "true",
+                        },
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": {"sys_id": "incident-story-sys-id"}},
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": [dict(incident_story, state="Work in Progress")]},
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": [{"name": "incident", "label": "Incident"}]},
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "element": "description",
+                            "column_label": "Description",
+                            "internal_type": "string",
+                            "max_length": "4000",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "incident-main-section",
+                            "name": "incident",
+                            "caption": "",
+                            "view": {"display_value": "Default view", "value": "default"},
+                            "sys_user": "",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {"sys_id": "number-element", "element": "number", "position": "1"},
+                        {
+                            "sys_id": "description-element",
+                            "element": "description",
+                            "position": "2",
+                        },
+                    ]
+                },
+            ),
+            HttpResponse(status_code=200, json_body={"result": []}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "output_text": (
+                        '{"changes":[{"table":"sys_dictionary","operation":"insert",'
+                        '"fields":[{"name":"name","value":"incident"},'
+                        '{"name":"element","value":"u_antics"},'
+                        '{"name":"column_label","value":"Antics"},'
+                        '{"name":"internal_type","value":"string"},'
+                        '{"name":"max_length","value":4000}],'
+                        '"sys_id":null,"rationale":null},'
+                        '{"table":"sys_ui_form","operation":"update",'
+                        '"fields":[{"name":"name","value":"incident"},'
+                        '{"name":"field_order","value":"u_antics"},'
+                        '{"name":"placement_anchor","value":"description"},'
+                        '{"name":"placement_position","value":"below"}],'
+                        '"sys_id":null,"rationale":null}],'
+                        '"test_plan":["Confirm Antics below Description."],'
+                        '"rollback_notes":["Remove incident.u_antics."]}'
+                    )
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "incident-main-section",
+                            "name": "incident",
+                            "caption": "",
+                            "view": {"display_value": "Default view", "value": "default"},
+                            "sys_user": "",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {"sys_id": "number-element", "element": "number", "position": "1"},
+                        {
+                            "sys_id": "description-element",
+                            "element": "description",
+                            "position": "2",
+                        },
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": [{"operation_uri": "/api/1860704/jedi_update_set_import"}]},
+            ),
+            HttpResponse(status_code=201, json_body={"result": {"status": "imported"}}),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "sys_id": "incident-remote-update-set",
+                            "name": "JEDI STRY0010001 - AI Candidate",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={
+                    "result": [
+                        {
+                            "label": "Ready for Testing",
+                            "value": "-7",
+                            "sequence": "300",
+                            "inactive": "false",
+                        }
+                    ]
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                json_body={"result": {"sys_id": "incident-story-sys-id"}},
+            ),
+        ]
+    )
+
+    result = process_one_runtime_fulfillment(
+        settings=_settings_with_openai(tmp_path, apply=True),
+        store_factory=lambda _database_url: store,
+        transport=transport,
+    )
+
+    posted_xml_requests = [
+        request
+        for request in transport.requests
+        if request.method == "POST" and request.url.endswith("/api/1860704/jedi_update_set_import")
+    ]
+    assert result.status == "completed"
+    assert len(posted_xml_requests) == 1
+    assert "sys_dictionary_incident_u_antics" in posted_xml_requests[0].body["update_set_xml"]
+    assert "sys_ui_section_incident-main-section" in posted_xml_requests[0].body["update_set_xml"]
+    assert transport.requests[-1].body["state"] == "-7"
+    assert transport.requests[-1].body["u_ai_status"] == "Ready for Testing"
+
+
 def test_process_one_runtime_fulfillment_rejects_openai_provider_without_api_key(
     tmp_path: Path,
 ) -> None:
