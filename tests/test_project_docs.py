@@ -1011,6 +1011,52 @@ def test_sprint_121_change_log_documents_generation_validator_hardening() -> Non
     assert "global-only Script Include" in change_log
 
 
+def test_ui_policy_generation_profile_adr_documents_mutation_boundary() -> None:
+    adr = Path("docs/adr/0010-ui-policy-generation-profile.md").read_text(encoding="utf-8")
+
+    assert "ADR 0010: UI Policy Generation Profile" in adr
+    assert "ui_policy_generate" in adr
+    assert "sys_ui_policy" in adr
+    assert "sys_ui_policy_action" in adr
+    assert "No runtime generation is enabled" in adr
+    assert "forbidden cases" in adr
+    assert "deterministic validators" in adr
+    assert "UAT story shape" in adr
+
+
+def test_operator_guide_documents_ui_policy_generation_profile_design() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "UI Policy Generation Capability" in guide
+    assert "ui_policy_generate" in guide
+    assert "sys_ui_policy" in guide
+    assert "sys_ui_policy_action" in guide
+    assert "UI Policy Generation Profile Design" in guide
+    assert "No runtime generation is enabled" in guide
+    assert "run scripts" in guide
+
+
+def test_sprint_122_change_log_documents_ui_policy_generation_design() -> None:
+    change_log = Path("docs/sprints/sprint-122-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 122 Change Log" in change_log
+    assert "UI Policy generation profile design" in change_log
+    assert "ADR 0010" in change_log
+    assert "ui_policy_generate" in change_log
+    assert "sys_ui_policy_action" in change_log
+    assert "No runtime generation is enabled" in change_log
+
+
+def test_production_backlog_moves_ui_policy_generation_after_validator_hardening() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 121 | Generation validator hardening" in backlog
+    assert "Sprint 122 | UI Policy generation profile design" in backlog
+    assert "Sprint 123 | UI Policy generation implementation" in backlog
+    assert "ADR 0010" in backlog
+    assert "ui_policy_generate" in backlog
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

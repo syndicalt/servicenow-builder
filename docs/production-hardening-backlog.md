@@ -38,6 +38,9 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 17 | Sprint 118 | Client Script generation implementation | The profile is designed; implementation can follow the Business Rule pattern without inventing client-side validators during coding. | Implement `client_script_generate` behind deterministic validators, generate reviewed `sys_script_client` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
 | 18 | Sprint 119 | Script Include generation profile design | Script Includes are reusable server-side code and need a separate safety case before mutation is enabled. | ADR 0009 defines `script_include_generate`, supported subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, UAT story shape, and confirms No runtime generation is enabled. |
 | 19 | Sprint 120 | Script Include generation implementation | The profile is designed; implementation can follow a narrow utility-only boundary without coupling caller generation to the same candidate. | Implement `script_include_generate` behind deterministic validators, generate reviewed `sys_script_include` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
+| 20 | Sprint 121 | Generation validator hardening | Executable ServiceNow artifact generation must fail closed on common write and scope mismatches before another mutation surface is added. | Business Rule, Client Script, and Script Include validators cover additional unsafe write/scope cases, and coverage remains above the 90% gate. |
+| 21 | Sprint 122 | UI Policy generation profile design | UI Policies are the next lower-risk ServiceNow surface, but they need an explicit declarative boundary before mutation is enabled. | ADR 0010 defines `ui_policy_generate`, supported subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, UAT story shape, and confirms No runtime generation is enabled. |
+| 22 | Sprint 123 | UI Policy generation implementation | The profile is designed; implementation can add reviewed declarative form behavior without using Client Script as a workaround. | Implement `ui_policy_generate` behind deterministic validators, generate reviewed `sys_ui_policy` and `sys_ui_policy_action` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
 
 ## Review Gates
 
@@ -92,5 +95,8 @@ Review for:
 17. Sprint 118: Client Script generation implementation.
 18. Sprint 119: Script Include generation profile design.
 19. Sprint 120: Script Include generation implementation.
+20. Sprint 121: Generation validator hardening.
+21. Sprint 122: UI Policy generation profile design.
+22. Sprint 123: UI Policy generation implementation.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

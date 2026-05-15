@@ -121,6 +121,7 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
         Capability.BUSINESS_RULE_GENERATE,
         Capability.CLIENT_SCRIPT_GENERATE,
         Capability.SCRIPT_INCLUDE_GENERATE,
+        Capability.UI_POLICY_GENERATE,
     ]
     assert all(profile.target_max_story_points == 5 for profile in profiles)
     assert all(profile.researcher for profile in profiles)
@@ -151,3 +152,18 @@ def test_script_include_generation_profile_is_enabled_at_current_maturity() -> N
     assert profile.creates_update_set is True
     assert "global privilege escalation" in profile.unsupported_cases
     assert "cross-scope access changes" in profile.unsupported_cases
+
+
+def test_ui_policy_generation_profile_is_designed_but_not_enabled() -> None:
+    profile = capability_profile(Capability.UI_POLICY_GENERATE)
+
+    assert profile.status == "designed"
+    assert profile.current_max_story_points == 0
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == ["sys_ui_policy", "sys_ui_policy_action"]
+    assert profile.required_instance_context == ["table_schema", "form_layout", "ui_policies"]
+    assert profile.creates_update_set is True
+    assert profile.researcher == "ui_policy_researcher"
+    assert profile.build_pipeline == "ui_policy_update_set_pipeline"
+    assert "run scripts" in profile.unsupported_cases
+    assert "cross-table behavior" in profile.unsupported_cases

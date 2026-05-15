@@ -334,3 +334,31 @@ def test_complete_script_include_story_is_eligible_for_automated_generation() ->
     assert assessment.target_table == "global"
     assert assessment.required_instance_context == ["script_includes"]
     assert assessment.reasons == ["supported utility script include generation request"]
+
+
+def test_complete_ui_policy_story_routes_to_unsupported_until_generation_is_enabled() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010122",
+            short_description="Create Incident assignment group UI Policy",
+            description=(
+                "Create a UI Policy on the Incident table. Condition: category is "
+                "software. Expected behavior: make the assignment_group field "
+                "mandatory and visible. Fields read: category. Fields affected: "
+                "assignment_group. Reverse if false: true."
+            ),
+            acceptance_criteria=(
+                "- When Incident category is software, Assignment group is mandatory.\n"
+                "- When Incident category is not software, the policy reverses.\n"
+                "- Rollback removes the generated UI Policy and UI Policy Action."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.UNSUPPORTED_CAPABILITY
+    assert Capability.UI_POLICY_GENERATE in assessment.capabilities
+    assert assessment.unsupported_capability_names == ["ui_policy_generate"]
+    assert assessment.target_table == "incident"
+    assert assessment.intent is None
+    assert assessment.reasons == ["request includes unsupported pipeline capabilities"]

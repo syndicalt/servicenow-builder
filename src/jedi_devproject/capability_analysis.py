@@ -318,6 +318,8 @@ def _requested_capabilities(text: str) -> set[Capability]:
         capabilities.add(Capability.SCRIPT_INCLUDE_GENERATE)
     elif "script include" in text:
         capabilities.add(Capability.SCRIPT_INCLUDE_ANALYZE)
+    if _is_ui_policy_generation_request(text):
+        capabilities.add(Capability.UI_POLICY_GENERATE)
     if "migrat" in text:
         capabilities.add(Capability.DATA_MIGRATION)
     if _is_integration_request(text):
@@ -470,6 +472,14 @@ def _is_script_include_generation_request(text: str) -> bool:
     return any(token in text for token in ["create", "add", "generate", "implement", "build"])
 
 
+def _is_ui_policy_generation_request(text: str) -> bool:
+    if "ui policy" not in text and "ui policies" not in text:
+        return False
+    if any(token in text for token in ["analyze", "analysis", "existing", "determine whether"]):
+        return False
+    return any(token in text for token in ["create", "add", "generate", "implement", "build"])
+
+
 def _missing_script_include_generation_details(text: str) -> list[str]:
     checks = [
         ("script include name", _script_include_name(text) is not None),
@@ -523,7 +533,12 @@ def _code_surface_capability(requested: set[Capability]) -> Capability | None:
 
 
 def _is_dictionary_form_request(text: str) -> bool:
-    if _is_business_rule_request(text) or _is_client_script_request(text):
+    if (
+        _is_business_rule_request(text)
+        or _is_client_script_request(text)
+        or "ui policy" in text
+        or "ui policies" in text
+    ):
         return False
     return ("field" in text or "column" in text) and "form" in text
 

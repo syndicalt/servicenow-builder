@@ -13,6 +13,7 @@ class Capability(StrEnum):
     CLIENT_SCRIPT_GENERATE = "client_script_generate"
     SCRIPT_INCLUDE_ANALYZE = "script_include_analyze"
     SCRIPT_INCLUDE_GENERATE = "script_include_generate"
+    UI_POLICY_GENERATE = "ui_policy_generate"
     DICTIONARY_FIELD_CREATE = "dictionary_field_create"
     FIELD_LABEL_CREATE = "field_label_create"
     FORM_LAYOUT_PLACE_FIELD = "form_layout_place_field"
@@ -232,6 +233,47 @@ def _generation_profile(
     )
 
 
+def _ui_policy_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.UI_POLICY_GENERATE,
+        status="designed",
+        supported_artifacts=["sys_ui_policy", "sys_ui_policy_action"],
+        required_instance_context=["table_schema", "form_layout", "ui_policies"],
+        deterministic_validators=[
+            "target_table_present",
+            "required_context_retrieved",
+            "structured_output_schema_valid",
+            "condition_fields_resolved",
+            "ui_policy_actions_validated",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "run scripts",
+            "advanced scripts",
+            "Client Script behavior",
+            "cross-table behavior",
+            "ACL changes",
+            "data migration",
+            "integration calls",
+        ],
+        uat_story_shape=[
+            "target table",
+            "policy name",
+            "condition",
+            "reverse if false decision",
+            "fields read",
+            "fields affected",
+            "mandatory/visible/read-only actions",
+            "test evidence",
+        ],
+        researcher="ui_policy_researcher",
+        build_pipeline="ui_policy_update_set_pipeline",
+        current_max_story_points=0,
+        target_max_story_points=5,
+        creates_update_set=True,
+    )
+
+
 CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.DICTIONARY_FIELD_CREATE: _dictionary_form_profile(
         capability=Capability.DICTIONARY_FIELD_CREATE
@@ -305,6 +347,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
         ],
         current_max_story_points=3,
     ),
+    Capability.UI_POLICY_GENERATE: _ui_policy_generation_profile(),
 }
 
 
@@ -319,6 +362,7 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
         CAPABILITY_REGISTRY[Capability.BUSINESS_RULE_GENERATE],
         CAPABILITY_REGISTRY[Capability.CLIENT_SCRIPT_GENERATE],
         CAPABILITY_REGISTRY[Capability.SCRIPT_INCLUDE_GENERATE],
+        CAPABILITY_REGISTRY[Capability.UI_POLICY_GENERATE],
     ]
 
 
