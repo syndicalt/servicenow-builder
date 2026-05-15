@@ -674,6 +674,74 @@ def test_model_candidate_handler_blocks_model_when_required_surface_context_miss
     )
 
 
+def test_model_candidate_handler_emits_flow_preflight_guidance_artifact() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010117",
+            short_description="Update Incident Triage Flow",
+            description=(
+                "Update the Incident Triage Flow Designer flow so new high-impact "
+                "incidents post a triage work note before assignment routing."
+            ),
+            acceptance_criteria=(
+                "The existing Flow Designer graph is retrieved for review. "
+                "If automated Flow generation is not supported, the worker records "
+                "explicit routing guidance instead of creating a retrieved Update Set."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010117"}))
+
+    assert provider.payloads == []
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "flow_preflight_guidance",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    guidance = result.artifacts[1].payload_json
+    candidate = result.artifacts[3].payload_json
+    assert guidance is not None
+    assert candidate is not None
+    assert result.artifacts[1].schema_version == "flow-preflight-guidance-v1"
+    assert guidance["schema_version"] == "flow-preflight-guidance-v1"
+    assert guidance["story_number"] == "STRY0010117"
+    assert guidance["capability"] == "flow_modify"
+    assert guidance["readiness_contract_version"] == "flow-builder-readiness-v1"
+    assert guidance["ready_for_runtime_generation"] is False
+    assert guidance["ready_for_retrieved_update_set_handoff"] is False
+    assert guidance["unsupported_reason_codes"] == [
+        "flow_builder_not_implemented",
+        "runtime_generation_disabled",
+        "retrieved_update_set_handoff_disabled",
+    ]
+    assert guidance["unsupported_reason_guidance"][0]["operator_action"] == (
+        "route_to_human_review"
+    )
+    assert "Flow Designer automation is context/preflight-only" in (
+        guidance["unsupported_reason_guidance"][0]["work_note"]
+    )
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert "unsupported capability: flow_modify" in candidate["eligibility_reasons"]
+
+
 def test_model_candidate_handler_runs_code_surface_analysis_without_model_or_update_set() -> None:
     client = FakeModelClient(
         story=Story(

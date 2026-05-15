@@ -375,6 +375,8 @@ Sprint 135 adds Flow unsupported reason codes. The readiness contract and every 
 
 Sprint 136 adds Flow unsupported reason guidance. The readiness contract and every Flow builder preflight plan now include `unsupported_reason_guidance`, with stable summaries, the `route_to_human_review` operator action, and ServiceNow work note text. This gives operators actionable feedback without duplicating unsupported Flow prose in worker or admin code. There is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
 
+Sprint 137 adds the Flow preflight guidance artifact. When fulfillment sees `flow_modify`, the worker now stores a `flow_preflight_guidance` artifact with schema `flow-preflight-guidance-v1`, the `flow-builder-readiness-v1` disabled readiness flags, `unsupported_reason_codes`, and `unsupported_reason_guidance` including `route_to_human_review`. This makes Flow routing guidance visible in persisted runtime evidence while preserving the boundary: no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

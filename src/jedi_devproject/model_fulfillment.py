@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome, capability_profile
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.enrichment import enrich_story
+from jedi_devproject.flow_designer_generation import flow_builder_readiness_contract
 from jedi_devproject.fulfillment_worker import (
     FulfillmentArtifactRef,
     FulfillmentExecutionResult,
@@ -108,6 +109,7 @@ def model_candidate_fulfillment_handler(
             packet=packet,
             surface_context_bundle=surface_context_bundle,
         )
+        flow_preflight_guidance = _flow_preflight_guidance_artifact(packet=packet)
 
         return FulfillmentExecutionResult(
             message=f"Implementation candidate generated for {job.story_number}",
@@ -132,6 +134,17 @@ def model_candidate_fulfillment_handler(
                         )
                     ]
                     if code_surface_analysis is not None
+                    else []
+                ),
+                *(
+                    [
+                        FulfillmentArtifactRef(
+                            artifact_kind="flow_preflight_guidance",
+                            schema_version="flow-preflight-guidance-v1",
+                            payload_json=flow_preflight_guidance,
+                        )
+                    ]
+                    if flow_preflight_guidance is not None
                     else []
                 ),
                 FulfillmentArtifactRef(
@@ -249,6 +262,30 @@ def _code_surface_capability(packet: Any) -> Capability | None:
         if capability.value in capabilities:
             return capability
     return None
+
+
+def _flow_preflight_guidance_artifact(*, packet: Any) -> dict[str, Any] | None:
+    capabilities = set(packet.capability_assessment.get("capabilities", []))
+    if Capability.FLOW_MODIFY.value not in capabilities:
+        return None
+    readiness = flow_builder_readiness_contract()
+    return {
+        "schema_version": "flow-preflight-guidance-v1",
+        "story_number": packet.story.number,
+        "capability": Capability.FLOW_MODIFY.value,
+        "readiness_contract_version": readiness.version,
+        "ready_for_runtime_generation": readiness.ready_for_runtime_generation,
+        "ready_for_retrieved_update_set_handoff": (
+            readiness.ready_for_retrieved_update_set_handoff
+        ),
+        "blocked_reason": readiness.blocked_reason,
+        "required_evidence": readiness.required_evidence,
+        "missing_evidence": readiness.missing_evidence,
+        "unsupported_reason_codes": readiness.unsupported_reason_codes,
+        "unsupported_reason_guidance": [
+            item.model_dump(mode="json") for item in readiness.unsupported_reason_guidance
+        ],
+    }
 
 
 def _public_doc_queries(story_text: str) -> list[str]:
