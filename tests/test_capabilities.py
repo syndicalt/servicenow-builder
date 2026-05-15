@@ -5,6 +5,7 @@ from jedi_devproject.capabilities import (
     StoryCapabilityAssessment,
     SuitabilityOutcome,
     capability_profile,
+    generation_capability_profiles,
 )
 
 
@@ -91,3 +92,36 @@ def test_code_surface_analysis_profiles_are_context_only() -> None:
         assert artifact_table in profile.supported_artifacts
         assert "generation" in " ".join(profile.unsupported_cases)
         assert profile.creates_update_set is False
+
+
+def test_capability_profiles_record_current_and_target_story_point_maturity() -> None:
+    dictionary_profile = capability_profile(Capability.DICTIONARY_FIELD_CREATE)
+    business_rule_profile = capability_profile(Capability.BUSINESS_RULE_GENERATE)
+
+    assert dictionary_profile.current_max_story_points == 5
+    assert dictionary_profile.target_max_story_points == 5
+    assert dictionary_profile.researcher == "dictionary_form_researcher"
+    assert dictionary_profile.build_pipeline == "dictionary_form_update_set_pipeline"
+    assert dictionary_profile.creates_update_set is True
+
+    assert business_rule_profile.status == "designed"
+    assert business_rule_profile.current_max_story_points == 0
+    assert business_rule_profile.target_max_story_points == 5
+    assert business_rule_profile.researcher == "code_surface_researcher"
+    assert business_rule_profile.build_pipeline == "business_rule_update_set_pipeline"
+    assert business_rule_profile.creates_update_set is True
+
+
+def test_generation_registry_names_every_handled_surface_pipeline() -> None:
+    profiles = generation_capability_profiles()
+
+    assert [profile.capability for profile in profiles] == [
+        Capability.DICTIONARY_FIELD_CREATE,
+        Capability.FORM_LAYOUT_PLACE_FIELD,
+        Capability.BUSINESS_RULE_GENERATE,
+        Capability.CLIENT_SCRIPT_GENERATE,
+        Capability.SCRIPT_INCLUDE_GENERATE,
+    ]
+    assert all(profile.target_max_story_points == 5 for profile in profiles)
+    assert all(profile.researcher for profile in profiles)
+    assert all(profile.build_pipeline for profile in profiles)

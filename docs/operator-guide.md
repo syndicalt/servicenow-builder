@@ -335,6 +335,12 @@ New ServiceNow build surfaces must be introduced through the Capability Extensio
 
 A `CapabilityProfile` must name its supported artifacts, UAT story shape, required context surfaces through `required_instance_context`, model packet schema, output validators, deterministic validators, unsupported cases, retrieved Update Set evidence, and tests. The runtime may call a model only after deterministic story analysis selects an active profile, the investigator retrieves the required context surfaces, and the profile's validators are available. If any of those conditions fail, the story routes to clarification or human review.
 
+### Capability Maturity Model
+
+Each `CapabilityProfile` carries both `current_max_story_points` and `target_max_story_points`. The full-maturity target for autonomous handling is 5 story points. A capability may still have a lower current limit, including `0`, until its researcher, deterministic validators, build_pipeline, and retrieved Update Set evidence are implemented.
+
+The `researcher` field names the context worker responsible for gathering live ServiceNow state before model or builder execution. The `build_pipeline` field names the deterministic path that converts validated structured intent into reviewed ServiceNow artifacts. This keeps the product aimed at 5 story points without pretending every surface is currently safe to mutate.
+
 Business Rule analysis first is the next supported implementation step. Sprint 112 should retrieve and classify current `sys_script` state, decide whether a story is a Business Rule candidate, and report missing inputs or unsupported cases without creating Business Rules. Business Rule generation can follow only after that profile proves the context and validation path.
 
 Flow Designer remains context-only. Flow Designer context-only review can retrieve and summarize relevant flow records, but generated flow mutation is unsupported until a separate profile defines graph retrieval, output shape, validators, and retrieved Update Set evidence.

@@ -21,7 +21,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.FORM_LAYOUT_PLACE_FIELD,
 }
 
-MAX_AUTOMATED_POINTS = 3
+FULL_MATURITY_MAX_AUTOMATED_POINTS = 5
 
 
 def analyze_story_capabilities(
@@ -37,9 +37,10 @@ def analyze_story_capabilities(
     target_table = intent.target_table if intent is not None else _target_table(text)
     reasons: list[str] = []
 
-    if story.story_points > MAX_AUTOMATED_POINTS:
+    if story.story_points > FULL_MATURITY_MAX_AUTOMATED_POINTS:
         reasons.append(
-            f"story points exceed max: {story.story_points:.1f} > {MAX_AUTOMATED_POINTS}"
+            "story points exceed full-maturity max: "
+            f"{story.story_points:.1f} > {FULL_MATURITY_MAX_AUTOMATED_POINTS}"
         )
         return _assessment(
             story=story,

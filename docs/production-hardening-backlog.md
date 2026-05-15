@@ -32,7 +32,8 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 11 | Sprint 112 | Business Rule analysis capability | Business Rules are the right next capability candidate, but generation should not start until the app can retrieve and classify the live `sys_script` surface. | Done: context-only first implementation retrieves relevant Business Rule context, classifies candidate stories, names missing inputs and unsupported cases, stores code surface analysis evidence, and adds no new mutation surface. |
 | 12 | Sprint 113 | Code surface analysis capability | Business Rule, Client Script, and Script Include analysis share the same code-surface pattern; duplicating one-off analyzers would create drift before generation profiles exist. | Done: `business_rule_analyze`, `client_script_analyze`, and `script_include_analyze` use shared `code-surface-analysis-v1` artifacts, skip model calls, skip retrieved Update Set creation, and write human-review feedback. |
 | 13 | Sprint 114 | Business Rule generation profile design | Business Rule generation should not be implemented until the mutation profile, validators, XML evidence, and UAT story shape are explicit. | ADR 0007 defines `business_rule_generate`, supported subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, UAT story shape, and confirms No runtime generation is enabled. |
-| 14 | Sprint 115 | Business Rule generation implementation | The profile is now designed; implementation can begin without inventing the mutation boundary during coding. | Implement `business_rule_generate` behind deterministic validators, generate reviewed `sys_script` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
+| 14 | Sprint 115 | Generation foundation and maturity model | The product target is autonomous handling of 5 story point work, but each surface needs explicit maturity, researcher, and build pipeline metadata before mutation expands. | `CapabilityProfile` records `current_max_story_points`, `target_max_story_points`, `researcher`, and `build_pipeline`; handled surfaces have generation profiles; analysis uses a 5 story point full-maturity ceiling. |
+| 15 | Sprint 116 | Business Rule generation implementation | The profile and maturity foundation are now designed; implementation can begin without inventing the mutation boundary during coding. | Implement `business_rule_generate` behind deterministic validators, generate reviewed `sys_script` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
 
 ## Review Gates
 
@@ -81,6 +82,7 @@ Review for:
 11. Sprint 112: Business Rule analysis capability.
 12. Sprint 113: Code surface analysis capability.
 13. Sprint 114: Business Rule generation profile design.
-14. Sprint 115: Business Rule generation implementation.
+14. Sprint 115: Generation foundation and maturity model.
+15. Sprint 116: Business Rule generation implementation.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

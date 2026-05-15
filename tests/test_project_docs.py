@@ -788,14 +788,48 @@ def test_sprint_one_hundred_fourteen_change_log_documents_generation_profile_des
     assert "No runtime generation is enabled" in change_log
 
 
-def test_production_backlog_moves_business_rule_generation_implementation_to_sprint_115() -> None:
+def test_production_backlog_moves_business_rule_generation_after_foundation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
     assert "Sprint 114 | Business Rule generation profile design" in backlog
     assert "ADR 0007" in backlog
-    assert "Sprint 115 | Business Rule generation implementation" in backlog
+    assert "Sprint 115 | Generation foundation and maturity model" in backlog
+    assert "Sprint 116 | Business Rule generation implementation" in backlog
     assert "business_rule_generate" in backlog
     assert "No runtime generation is enabled" in backlog
+
+
+def test_operator_guide_documents_capability_maturity_target() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Capability Maturity Model" in guide
+    assert "current_max_story_points" in guide
+    assert "target_max_story_points" in guide
+    assert "5 story points" in guide
+    assert "researcher" in guide
+    assert "build_pipeline" in guide
+
+
+def test_sprint_one_hundred_fifteen_change_log_documents_generation_foundation() -> None:
+    change_log = Path("docs/sprints/sprint-115-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 115 Change Log" in change_log
+    assert "generation foundation" in change_log
+    assert "current_max_story_points" in change_log
+    assert "target_max_story_points" in change_log
+    assert "business_rule_generate" in change_log
+    assert "client_script_generate" in change_log
+    assert "script_include_generate" in change_log
+    assert "5 story points" in change_log
+
+
+def test_production_backlog_documents_maturity_foundation_before_surface_generation() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 115 | Generation foundation and maturity model" in backlog
+    assert "current_max_story_points" in backlog
+    assert "target_max_story_points" in backlog
+    assert "Sprint 116 | Business Rule generation implementation" in backlog
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

@@ -147,7 +147,33 @@ def test_high_point_story_routes_to_manual_developer_build() -> None:
     )
 
     assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
-    assert "story points exceed max: 8.0 > 3" in assessment.reasons
+    assert "story points exceed full-maturity max: 8.0 > 5" in assessment.reasons
+
+
+def test_five_point_dictionary_form_story_remains_automated_when_details_are_clear() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010115",
+            short_description="Add Vendor Reference field to Problem form",
+            description=(
+                "Add a new custom reference field named u_vendor_reference to the "
+                "Problem table. The field should reference the core_company table "
+                "and only allow companies where vendor=true. Place the field on "
+                "the default Problem form below the Description field."
+            ),
+            acceptance_criteria=(
+                "- The field type is Reference.\n"
+                "- The field references core_company.\n"
+                "- The field uses a reference qualifier of vendor=true."
+            ),
+            story_points=5,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.intent is not None
+    assert assessment.intent.target_table == "problem"
+    assert assessment.reasons == ["supported low-complexity dictionary/form request"]
 
 
 def test_business_rule_story_routes_to_context_analysis() -> None:
