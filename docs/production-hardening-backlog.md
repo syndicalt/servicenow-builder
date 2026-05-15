@@ -36,6 +36,8 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 15 | Sprint 116 | Business Rule generation implementation | The profile and maturity foundation are now designed; implementation can begin without inventing the mutation boundary during coding. | Implement `business_rule_generate` behind deterministic validators, generate reviewed `sys_script` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
 | 16 | Sprint 117 | Client Script generation profile design | Client Scripts are the next code-surface candidate, but browser-side behavior needs a separate safety case before mutation is enabled. | ADR 0008 defines `client_script_generate`, supported subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, UAT story shape, and confirms No runtime generation is enabled. |
 | 17 | Sprint 118 | Client Script generation implementation | The profile is designed; implementation can follow the Business Rule pattern without inventing client-side validators during coding. | Implement `client_script_generate` behind deterministic validators, generate reviewed `sys_script_client` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
+| 18 | Sprint 119 | Script Include generation profile design | Script Includes are reusable server-side code and need a separate safety case before mutation is enabled. | ADR 0009 defines `script_include_generate`, supported subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, UAT story shape, and confirms No runtime generation is enabled. |
+| 19 | Sprint 120 | Script Include generation implementation | The profile is designed; implementation can follow a narrow utility-only boundary without coupling caller generation to the same candidate. | Implement `script_include_generate` behind deterministic validators, generate reviewed `sys_script_include` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
 
 ## Review Gates
 
@@ -88,5 +90,7 @@ Review for:
 15. Sprint 116: Business Rule generation implementation.
 16. Sprint 117: Client Script generation profile design.
 17. Sprint 118: Client Script generation implementation.
+18. Sprint 119: Script Include generation profile design.
+19. Sprint 120: Script Include generation implementation.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

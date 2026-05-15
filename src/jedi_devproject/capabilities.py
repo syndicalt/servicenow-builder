@@ -292,9 +292,9 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.SCRIPT_INCLUDE_GENERATE: _generation_profile(
         capability=Capability.SCRIPT_INCLUDE_GENERATE,
-        status="planned",
+        status="designed",
         supported_artifact="sys_script_include",
-        required_instance_context=["script_includes", "code_surface_analysis"],
+        required_instance_context=["script_includes"],
         researcher="code_surface_researcher",
         build_pipeline="script_include_update_set_pipeline",
         unsupported_cases=[

@@ -138,3 +138,16 @@ def test_client_script_generation_profile_is_enabled_at_current_maturity() -> No
     assert profile.creates_update_set is True
     assert "DOM manipulation outside g_form APIs" in profile.unsupported_cases
     assert "GlideAjax dependency creation" in profile.unsupported_cases
+
+
+def test_script_include_generation_profile_is_designed_but_not_enabled() -> None:
+    profile = capability_profile(Capability.SCRIPT_INCLUDE_GENERATE)
+
+    assert profile.status == "designed"
+    assert profile.current_max_story_points == 0
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == ["sys_script_include"]
+    assert profile.required_instance_context == ["script_includes"]
+    assert profile.creates_update_set is True
+    assert "global privilege escalation" in profile.unsupported_cases
+    assert "cross-scope access changes" in profile.unsupported_cases

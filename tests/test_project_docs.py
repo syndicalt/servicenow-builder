@@ -931,6 +931,52 @@ def test_sprint_one_hundred_eighteen_change_log_documents_client_script_generati
     assert "forbidden Client Script" in change_log
 
 
+def test_script_include_generation_profile_adr_documents_mutation_boundary() -> None:
+    adr = Path("docs/adr/0009-script-include-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ADR 0009: Script Include Generation Profile" in adr
+    assert "script_include_generate" in adr
+    assert "sys_script_include" in adr
+    assert "server-side utility" in adr
+    assert "No runtime generation is enabled" in adr
+    assert "forbidden cases" in adr
+    assert "deterministic validators" in adr
+    assert "UAT story shape" in adr
+
+
+def test_operator_guide_documents_script_include_generation_profile_design() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Script Include Generation Profile Design" in guide
+    assert "script_include_generate" in guide
+    assert "sys_script_include" in guide
+    assert "No runtime generation is enabled for Script Includes" in guide
+    assert "global privilege escalation" in guide
+    assert "cross-scope access changes" in guide
+
+
+def test_sprint_one_hundred_nineteen_change_log_documents_script_include_design() -> None:
+    change_log = Path("docs/sprints/sprint-119-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 119 Change Log" in change_log
+    assert "Script Include generation profile design" in change_log
+    assert "ADR 0009" in change_log
+    assert "script_include_generate" in change_log
+    assert "sys_script_include" in change_log
+    assert "No runtime generation is enabled" in change_log
+
+
+def test_production_backlog_moves_script_include_generation_after_design() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 119 | Script Include generation profile design" in backlog
+    assert "Sprint 120 | Script Include generation implementation" in backlog
+    assert "ADR 0009" in backlog
+    assert "script_include_generate" in backlog
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
