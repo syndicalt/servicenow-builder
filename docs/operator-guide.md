@@ -329,6 +329,16 @@ If the deterministic packet gates produce a non-automated candidate, the worker 
 
 If the candidate contains unsupported changes, the importer endpoint is missing, the imported retrieved Update Set cannot be found by `remote_sys_id`, or the active `Ready for Testing` state choice cannot be discovered, the job fails and writes the failure back to story work notes. Runtime failure notification also discovers the active `Draft` state choice; when found, it sets `state=<Draft value>` and `u_ai_status=Automation Failed` so failed automation does not leave the story in Work in Progress with `Build In Progress`. The previous local-apply path is kept in code only as a legacy utility and must not be used for automated candidate fulfillment.
 
+### Capability Extension Model
+
+New ServiceNow build surfaces must be introduced through the Capability Extension Contract, not by adding one-off provider prompts. Each supported capability has a versioned `CapabilityProfile` in the capability registry.
+
+A `CapabilityProfile` must name its supported artifacts, UAT story shape, required context surfaces through `required_instance_context`, model packet schema, output validators, deterministic validators, unsupported cases, retrieved Update Set evidence, and tests. The runtime may call a model only after deterministic story analysis selects an active profile, the investigator retrieves the required context surfaces, and the profile's validators are available. If any of those conditions fail, the story routes to clarification or human review.
+
+Business Rule analysis first is the next supported implementation step. Sprint 112 should retrieve and classify current `sys_script` state, decide whether a story is a Business Rule candidate, and report missing inputs or unsupported cases without creating Business Rules. Business Rule generation can follow only after that profile proves the context and validation path.
+
+Flow Designer remains context-only. Flow Designer context-only review can retrieve and summarize relevant flow records, but generated flow mutation is unsupported until a separate profile defines graph retrieval, output shape, validators, and retrieved Update Set evidence.
+
 ## CI/CD Update Set API Capability
 
 Use `check-cicd-update-set-capability` to verify that the target ServiceNow instance exposes the Yokohama+ CI/CD Update Set API before designing promotion around it:

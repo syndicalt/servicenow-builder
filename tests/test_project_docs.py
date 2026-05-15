@@ -640,6 +640,72 @@ def test_sprint_one_hundred_ten_change_log_documents_abuse_controls() -> None:
     assert "per-process" in change_log
 
 
+def test_capability_extension_adr_documents_registry_contract() -> None:
+    adr = Path("docs/adr/0006-capability-extension-architecture.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Capability Extension Architecture" in adr
+    assert "CapabilityProfile" in adr
+    assert "capability registry" in adr
+    assert "required_instance_context" in adr
+    assert "required context surfaces" in adr
+    assert "deterministic validators" in adr
+    assert "validators" in adr
+    assert "unsupported cases" in adr
+    assert "UAT story shape" in adr
+    assert "retrieved Update Set" in adr
+    assert "Retrieved Update Set preview/commit remains" in adr
+    assert "Business Rule analysis first" in adr
+    assert "Business Rule generation" in adr
+    assert "Flow Designer remains context-only" in adr
+
+
+def test_operator_guide_documents_capability_extension_model() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Capability Extension Model" in guide
+    assert "Capability Extension Contract" in guide
+    assert "CapabilityProfile" in guide
+    assert "capability registry" in guide
+    assert "required_instance_context" in guide
+    assert "required context surfaces" in guide
+    assert "deterministic validators" in guide
+    assert "output validators" in guide
+    assert "Business Rule analysis first" in guide
+    assert "Business Rule generation" in guide
+    assert "Flow Designer context-only review" in guide
+    assert "human review" in guide
+
+
+def test_production_backlog_moves_capability_implementation_to_sprint_112() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 111 | Capability backlog design" in backlog
+    assert "ADR names the extension contract" in backlog
+    assert "ADR 0006" in backlog
+    assert "CapabilityProfile" in backlog
+    assert "Sprint 112 | Business Rule analysis capability" in backlog
+    assert "context-only first implementation" in backlog
+    assert "No new mutation surface" in backlog
+
+
+def test_sprint_one_hundred_eleven_change_log_documents_capability_design() -> None:
+    change_log = Path("docs/sprints/sprint-111-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 111 Change Log" in change_log
+    assert "Capability backlog design" in change_log
+    assert "ADR 0006" in change_log
+    assert "CapabilityProfile" in change_log
+    assert "capability registry" in change_log
+    assert "Business Rule analysis first" in change_log
+    assert "Business Rule generation" in change_log
+    assert "Flow Designer remains context-only" in change_log
+    assert "Flow Designer context-only" in change_log
+    assert "No new mutation surface" in change_log
+    assert "no new mutation surface" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

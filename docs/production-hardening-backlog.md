@@ -28,7 +28,8 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 7 | Sprint 108 | Runtime configuration and secret posture review | Production deployments need explicit failure behavior when required auth secrets are missing. | Startup/runtime checks fail closed for missing production auth settings. Operator docs describe required secrets, rotation expectations, and dev-only exceptions. |
 | 8 | Sprint 109 | Observability and audit event quality | Postgres has events and jobs, but production operations need consistent correlation and safe diagnostics. | Lifecycle events, job events, artifact refs, ServiceNow work notes, and admin views share correlation ids. Error messages are redacted and actionable. |
 | 9 | Sprint 110 | Rate limiting and abuse controls | Public API exposure needs request volume controls even when authenticated. | Lifecycle and admin endpoints have bounded request sizes, bounded list limits, and documented rate/abuse behavior. |
-| 10 | Sprint 111 | Capability backlog design | Generic dictionary/form placement is the only baseline build capability. The next capability should be selected deliberately. | ADR names the next supported capability, required validators, unsupported cases, and UAT story shape before implementation begins. |
+| 10 | Sprint 111 | Capability backlog design | Generic dictionary/form placement is the only baseline build capability. The next capability should be selected deliberately. | ADR names the extension contract; ADR 0006 names the extension contract, `CapabilityProfile` requirements, required validators, unsupported cases, UAT story shape, and Business Rule analysis first before implementation begins. |
+| 11 | Sprint 112 | Business Rule analysis capability | Business Rules are the right next capability candidate, but generation should not start until the app can retrieve and classify the live `sys_script` surface. | context-only first implementation retrieves relevant Business Rule context, classifies candidate stories, names missing inputs and unsupported cases, and adds no new mutation surface. |
 
 ## Review Gates
 
@@ -72,5 +73,8 @@ Review for:
 6. Sprint 107: Surface evidence hardening.
 7. Sprint 108: Runtime configuration and secret posture review.
 8. Sprint 109: Observability and audit event quality.
+9. Sprint 110: Rate limiting and abuse controls.
+10. Sprint 111: Capability backlog design.
+11. Sprint 112: Business Rule analysis capability.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.
