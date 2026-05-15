@@ -339,6 +339,50 @@ def _client_script_candidate() -> UpdateSetCandidate:
     )
 
 
+def _script_include_candidate() -> UpdateSetCandidate:
+    return UpdateSetCandidate(
+        story_number="STRY0010120",
+        name="UPD_STRY0010120_LLM_Implementation",
+        eligibility_decision="eligible",
+        eligibility_reasons=["supported utility script include generation request"],
+        confidence=0.7,
+        risk_score=0.3,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange(
+                table="sys_script_include",
+                operation="insert",
+                fields={
+                    "name": "JediIncidentUtils",
+                    "api_name": "global.JediIncidentUtils",
+                    "scope": "global",
+                    "client_callable": False,
+                    "active": True,
+                    "description": "Utility helpers for Incident automation.",
+                    "script": (
+                        "var JediIncidentUtils = Class.create();\n"
+                        "JediIncidentUtils.prototype = {\n"
+                        "    initialize: function() {},\n"
+                        "    normalizeCategory: function(category) {\n"
+                        "        return String(category || '').toLowerCase();\n"
+                        "    },\n"
+                        "    type: 'JediIncidentUtils'\n"
+                        "};"
+                    ),
+                    "public_methods": ["normalizeCategory(category)"],
+                    "tables_read": [],
+                    "tables_written": [],
+                    "fields_read": [],
+                    "fields_written": [],
+                },
+                rationale="Add the requested server-side utility Script Include.",
+            )
+        ],
+        reviewer_notes=["Call normalizeCategory('Software') and confirm software."],
+        artifact_hash="d" * 64,
+    )
+
+
 def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
@@ -722,6 +766,66 @@ def test_create_update_set_handoff_rejects_forbidden_client_script_browser_api()
     assert client.imports == []
 
 
+def test_create_update_set_handoff_imports_script_include_customer_update() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010120",
+            candidate=_script_include_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/120",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_include_jediincidentutils" in imported_xml
+    assert "<sys_script_include action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<name>JediIncidentUtils</name>" in imported_xml
+    assert "<api_name>global.JediIncidentUtils</api_name>" in imported_xml
+    assert "<client_callable>false</client_callable>" in imported_xml
+    assert "normalizeCategory" in imported_xml
+    assert client.story_updates[-1]["fields"]["state"] == "-7"
+    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+
+
+def test_create_update_set_handoff_rejects_client_callable_script_include() -> None:
+    client = FakeUpdateSetClient()
+    forbidden_fields = {
+        **_script_include_candidate().changes[0].fields,
+        "client_callable": True,
+    }
+    candidate = _script_include_candidate().model_copy(
+        update={
+            "changes": [
+                _script_include_candidate().changes[0].model_copy(
+                    update={"fields": forbidden_fields}
+                )
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010120",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/120",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "client callable Script Includes are not supported" in str(exc)
+    else:
+        raise AssertionError("client callable Script Include was accepted")
+
+    assert client.imports == []
+
+
 def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> None:
     client = FakeUpdateSetClient()
     candidate = _candidate().model_copy(
@@ -750,7 +854,7 @@ def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> Non
             ),
         )
     except ValueError as exc:
-        assert "unsupported retrieved Update Set table: sys_script_include" in str(exc)
+        assert "retrieved Update Set candidate mixes unsupported change types" in str(exc)
     else:
         raise AssertionError("unsupported candidate table was accepted")
 

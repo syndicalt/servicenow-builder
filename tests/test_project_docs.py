@@ -949,10 +949,10 @@ def test_script_include_generation_profile_adr_documents_mutation_boundary() -> 
 def test_operator_guide_documents_script_include_generation_profile_design() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
-    assert "Script Include Generation Profile Design" in guide
+    assert "Script Include Generation Capability" in guide
     assert "script_include_generate" in guide
     assert "sys_script_include" in guide
-    assert "No runtime generation is enabled for Script Includes" in guide
+    assert "Script Include Generation Profile Design" in guide
     assert "global privilege escalation" in guide
     assert "cross-scope access changes" in guide
 
@@ -975,6 +975,30 @@ def test_production_backlog_moves_script_include_generation_after_design() -> No
     assert "Sprint 120 | Script Include generation implementation" in backlog
     assert "ADR 0009" in backlog
     assert "script_include_generate" in backlog
+
+
+def test_operator_guide_documents_enabled_script_include_generation_boundary() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Script Include Generation Capability" in guide
+    assert "script_include_generate" in guide
+    assert "current_max_story_points=3" in guide
+    assert "target_max_story_points=5" in guide
+    assert "client callable Script Includes are not supported" in guide
+    assert "forbidden Script Include" in guide
+
+
+def test_sprint_one_hundred_twenty_change_log_documents_script_include_generation() -> None:
+    change_log = Path("docs/sprints/sprint-120-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 120 Change Log" in change_log
+    assert "Script Include generation implementation" in change_log
+    assert "script_include_generate" in change_log
+    assert "sys_script_include" in change_log
+    assert "current_max_story_points=3" in change_log
+    assert "target_max_story_points=5" in change_log
+    assert "retrieved Update Set" in change_log
+    assert "forbidden Script Include" in change_log
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

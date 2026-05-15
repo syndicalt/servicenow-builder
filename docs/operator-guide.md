@@ -379,15 +379,15 @@ Unsupported behavior includes DOM manipulation outside g_form APIs, `document` o
 
 The provider output must be structured implementation intent, not authoritative XML. Required fields include target table, script name, Client Script type, target field for `onChange`, condition summary, script body, fields read, fields written, messages shown, test plan, rollback notes, and reviewer notes. Deterministic validators approve table context, script type, target field, allowed client APIs, field access, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported. Any forbidden Client Script behavior fails closed before import.
 
-### Script Include Generation Profile Design
+### Script Include Generation Capability
 
-`script_include_generate` is designed but not enabled. No runtime generation is enabled for Script Includes until the `sys_script_include` XML builder, deterministic validators, and model-output contract are implemented and tested.
+The Sprint 119 Script Include Generation Profile Design is implemented for the first production-hardening subset. `script_include_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
 
-The first supported subset is server-side utility Script Includes only: one generated `sys_script_include` record per story, one named class or function, explicit scope, explicit client-callable decision, and no simultaneous caller creation. Generated changes must become `sys_script_include` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
+The supported subset is server-side utility Script Includes only: one generated `sys_script_include` record per story, one named class or function, explicit scope, explicit client-callable decision, and no simultaneous caller creation. Generated changes must become `sys_script_include` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
 
 Unsupported behavior includes global privilege escalation, cross-scope access changes, role changes, ACL changes, system property changes, credentials, secrets, tokens, API keys, outbound REST/SOAP/email/event calls, broad GlideRecord mutation, data migration, background repair logic, and any Script Include that requires simultaneous Business Rule, Client Script, Flow, scheduled job, or integration creation.
 
-The future provider output must be structured implementation intent, not authoritative XML. Required fields include Script Include name, API name, scope, client-callable flag, active flag, description, script body, public methods, tables read, tables written, fields read, fields written, test plan, rollback notes, and reviewer notes. Deterministic validators must approve identifier shape, retrieved Script Include context, script safety, caller boundary, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported.
+client callable Script Includes are not supported in the first implementation because that would also require GlideAjax caller design. The provider output must be structured implementation intent, not authoritative XML. Required fields include Script Include name, API name, scope, client-callable flag, active flag, description, script body, public methods, tables read, tables written, fields read, fields written, test plan, rollback notes, and reviewer notes. Deterministic validators approve identifier shape, retrieved Script Include context, script safety, caller boundary, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported. Any forbidden Script Include behavior fails closed before import.
 
 ## CI/CD Update Set API Capability
 

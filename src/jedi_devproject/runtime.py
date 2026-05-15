@@ -919,7 +919,13 @@ def _story_state_choice_value(*, client: ServiceNowClient, label: str) -> str | 
 def _default_model_allowlist_policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.DICTIONARY_FORM},
-        tables={"sys_dictionary", "sys_ui_form", "sys_script", "sys_script_client"},
+        tables={
+            "sys_dictionary",
+            "sys_ui_form",
+            "sys_script",
+            "sys_script_client",
+            "sys_script_include",
+        },
         operations={"insert", "update"},
         max_points=3,
     )

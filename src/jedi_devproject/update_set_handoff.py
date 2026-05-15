@@ -14,6 +14,7 @@ from jedi_devproject.generic_dictionary_form import (
     dictionary_form_customer_updates,
 )
 from jedi_devproject.models import CandidateChange, CandidateStatus, UpdateSetCandidate
+from jedi_devproject.script_include_generation import script_include_customer_updates
 from jedi_devproject.servicenow import StoryStateChoice
 from jedi_devproject.writeback import build_state_mapping_from_choices
 
@@ -258,6 +259,11 @@ def _customer_updates_for_candidate(
             changes=candidate.changes,
             remote_update_set_sys_id=remote_update_set_sys_id,
         )
+    elif tables == {"sys_script_include"}:
+        updates = script_include_customer_updates(
+            changes=candidate.changes,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        )
     elif tables.issubset({"sys_dictionary", "sys_ui_form"}):
         intent = _dictionary_form_intent(candidate.changes)
         updates = dictionary_form_customer_updates(
@@ -271,6 +277,7 @@ def _customer_updates_for_candidate(
             "sys_ui_form",
             "sys_script",
             "sys_script_client",
+            "sys_script_include",
         }
         if not unsupported_tables:
             raise ValueError("retrieved Update Set candidate mixes unsupported change types")

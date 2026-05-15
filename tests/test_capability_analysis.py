@@ -305,3 +305,32 @@ def test_script_include_story_routes_to_global_context_analysis() -> None:
     assert assessment.target_table == "global"
     assert assessment.required_instance_context == ["script_includes"]
     assert "script include generation is not enabled yet" in assessment.reasons
+
+
+def test_complete_script_include_story_is_eligible_for_automated_generation() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010120",
+            short_description="Create JediIncidentUtils Script Include",
+            description=(
+                "Create a Script Include named JediIncidentUtils in Global scope. "
+                "Client callable: false. Expected server-side behavior: provide a "
+                "normalizeCategory(category) function that returns the category "
+                "lowercased. Tables read: none. Tables written: none. Fields read: "
+                "none. Fields written: none."
+            ),
+            acceptance_criteria=(
+                "- Calling normalizeCategory('Software') returns software.\n"
+                "- The Script Include is not client callable.\n"
+                "- Rollback removes the generated Script Include."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert Capability.SCRIPT_INCLUDE_GENERATE in assessment.capabilities
+    assert Capability.SCRIPT_INCLUDE_ANALYZE not in assessment.capabilities
+    assert assessment.target_table == "global"
+    assert assessment.required_instance_context == ["script_includes"]
+    assert assessment.reasons == ["supported utility script include generation request"]

@@ -18,6 +18,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.CLIENT_SCRIPT_ANALYZE,
     Capability.CLIENT_SCRIPT_GENERATE,
     Capability.SCRIPT_INCLUDE_ANALYZE,
+    Capability.SCRIPT_INCLUDE_GENERATE,
     Capability.DICTIONARY_FIELD_CREATE,
     Capability.FIELD_LABEL_CREATE,
     Capability.FORM_LAYOUT_PLACE_FIELD,
@@ -97,6 +98,24 @@ def analyze_story_capabilities(
         reasons.append(
             "client script generation includes forbidden behavior: "
             f"{', '.join(forbidden_client_script_details)}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
+    forbidden_script_include_details = _script_include_forbidden_details(text)
+    if Capability.SCRIPT_INCLUDE_GENERATE in requested and forbidden_script_include_details:
+        reasons.append(
+            "script include generation includes forbidden behavior: "
+            f"{', '.join(forbidden_script_include_details)}"
         )
         return _assessment(
             story=story,
@@ -195,6 +214,22 @@ def analyze_story_capabilities(
             required_instance_context=profile.required_instance_context,
         )
 
+    if Capability.SCRIPT_INCLUDE_GENERATE in requested:
+        profile = capability_profile(Capability.SCRIPT_INCLUDE_GENERATE)
+        reasons.append("supported utility script include generation request")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
+        )
+
     reasons.append("supported low-complexity dictionary/form request")
     return _assessment(
         story=story,
@@ -279,7 +314,9 @@ def _requested_capabilities(text: str) -> set[Capability]:
         capabilities.add(Capability.CLIENT_SCRIPT_GENERATE)
     elif "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text:
         capabilities.add(Capability.CLIENT_SCRIPT_ANALYZE)
-    if "script include" in text:
+    if _is_script_include_generation_request(text):
+        capabilities.add(Capability.SCRIPT_INCLUDE_GENERATE)
+    elif "script include" in text:
         capabilities.add(Capability.SCRIPT_INCLUDE_ANALYZE)
     if "migrat" in text:
         capabilities.add(Capability.DATA_MIGRATION)
@@ -310,6 +347,8 @@ def _missing_details(text: str) -> list[str]:
         missing.extend(_missing_client_script_generation_details(text))
     elif _is_client_script_request(text) and _target_table(text) is None:
         missing.append("target table")
+    if _is_script_include_generation_request(text):
+        missing.extend(_missing_script_include_generation_details(text))
     return missing
 
 
@@ -421,6 +460,55 @@ def _is_integration_request(text: str) -> bool:
             "endpoint",
         ]
     )
+
+
+def _is_script_include_generation_request(text: str) -> bool:
+    if "script include" not in text:
+        return False
+    if any(token in text for token in ["analyze", "analysis", "existing", "determine whether"]):
+        return False
+    return any(token in text for token in ["create", "add", "generate", "implement", "build"])
+
+
+def _missing_script_include_generation_details(text: str) -> list[str]:
+    checks = [
+        ("script include name", _script_include_name(text) is not None),
+        ("scope", "scope" in text or "global" in text),
+        ("client callable decision", "client callable:" in text or "not client callable" in text),
+        ("expected behavior", "expected server-side behavior:" in text),
+        ("tables read", "tables read:" in text),
+        ("tables written", "tables written:" in text),
+        ("fields read", "fields read:" in text),
+        ("fields written", "fields written:" in text),
+    ]
+    return [label for label, present in checks if not present]
+
+
+def _script_include_forbidden_details(text: str) -> list[str]:
+    if not _is_script_include_generation_request(text):
+        return []
+    forbidden_patterns = {
+        "client callable Script Includes": ["client callable: true"],
+        "global privilege escalation": ["privilege escalation", "elevated privilege"],
+        "cross-scope access changes": ["cross-scope", "cross scope"],
+        "security changes": [" acl", " role", "system property"],
+        "outbound calls": ["rest", "soap", "endpoint", "api call", "http://", "https://"],
+        "credentials": ["credential", "password", "token", "api key", "secret"],
+        "broad GlideRecord mutation": ["deleterecord", "deletemultiple", "updatemultiple"],
+        "caller creation": ["business rule", "client script", "flow", "scheduled job"],
+    }
+    return [
+        label
+        for label, tokens in forbidden_patterns.items()
+        if any(token in text for token in tokens)
+    ]
+
+
+def _script_include_name(text: str) -> str | None:
+    match = re.search(r"script include named ([a-zA-Z][a-zA-Z0-9_]*)", text)
+    if match:
+        return match.group(1)
+    return None
 
 
 def _code_surface_capability(requested: set[Capability]) -> Capability | None:

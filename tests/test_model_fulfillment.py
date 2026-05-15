@@ -243,7 +243,13 @@ def _job() -> FulfillmentJobRecord:
 def _policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.DICTIONARY_FORM},
-        tables={"sys_dictionary", "sys_ui_form", "sys_script", "sys_script_client"},
+        tables={
+            "sys_dictionary",
+            "sys_ui_form",
+            "sys_script",
+            "sys_script_client",
+            "sys_script_include",
+        },
         operations={"insert", "update"},
         max_points=3,
     )
@@ -970,6 +976,104 @@ def test_model_candidate_handler_runs_script_include_analysis_without_target_tab
     assert "script-include-sys-id" not in str(analysis)
     assert "secret-value" not in str(analysis)
     assert "code_surface_analysis:first" in candidate["eligibility_reasons"]
+
+
+def test_model_candidate_handler_generates_script_include_update_set_handoff() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010120",
+            short_description="Create JediIncidentUtils Script Include",
+            description=(
+                "Create a Script Include named JediIncidentUtils in Global scope. "
+                "Client callable: false. Expected server-side behavior: provide a "
+                "normalizeCategory(category) function that returns the category "
+                "lowercased. Tables read: none. Tables written: none. Fields read: "
+                "none. Fields written: none."
+            ),
+            acceptance_criteria=(
+                "Calling normalizeCategory('Software') returns software. "
+                "Rollback removes the generated Script Include."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_script_include",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "JediIncidentUtils",
+                        "api_name": "global.JediIncidentUtils",
+                        "scope": "global",
+                        "client_callable": False,
+                        "active": True,
+                        "description": "Utility helpers for Incident automation.",
+                        "script": (
+                            "var JediIncidentUtils = Class.create();\n"
+                            "JediIncidentUtils.prototype = {\n"
+                            "    initialize: function() {},\n"
+                            "    normalizeCategory: function(category) {\n"
+                            "        return String(category || '').toLowerCase();\n"
+                            "    },\n"
+                            "    type: 'JediIncidentUtils'\n"
+                            "};"
+                        ),
+                        "public_methods": ["normalizeCategory(category)"],
+                        "tables_read": [],
+                        "tables_written": [],
+                        "fields_read": [],
+                        "fields_written": [],
+                    },
+                }
+            ],
+            "test_plan": ["Call normalizeCategory('Software') and confirm software."],
+            "rollback_notes": ["Delete the generated Script Include."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010120"}))
+
+    assert provider.payloads[0]["controls"]["capability_assessment"]["capabilities"] == [
+        "script_include_generate"
+    ]
+    candidate = result.artifacts[2].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["table"] == "sys_script_include"
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/120",
+                sha256="0" * 64,
+                artifact_id=120,
+            )
+        ]
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_include_jediincidentutils" in imported_xml
+    assert "<api_name>global.JediIncidentUtils</api_name>" in imported_xml
+    updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert updated_fields["u_ai_status"] == "Ready for Testing"
 
 
 def test_model_fulfillment_writes_needs_clarification_feedback() -> None:
