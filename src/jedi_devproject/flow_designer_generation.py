@@ -90,6 +90,37 @@ class FlowGraphBuilderPlan(BaseModel):
     required_customer_update_tables: list[str]
     preflight_checks: list[str]
     required_builder_evidence: list[str]
+    xml_shape_repository_version: str
+    xml_shape_tables: list[str]
+
+
+class FlowXmlShape(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    table: str
+    update_type: str
+    root_element: Literal["record_update"]
+    record_element: str
+    action: Literal["INSERT_OR_UPDATE"]
+    required_fields: list[str]
+    forbidden_fields: list[str] = Field(default_factory=list)
+    review_notes: list[str]
+
+
+class FlowXmlShapeRepository(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["flow-xml-shapes-v1"]
+    runtime_generation_enabled: bool
+    retrieved_update_set_handoff_enabled: bool
+    shapes: list[FlowXmlShape]
+    evidence: list[str]
+
+    def shape(self, table: str) -> FlowXmlShape:
+        for shape in self.shapes:
+            if shape.table == table:
+                return shape
+        raise KeyError(f"Flow XML shape not found: {table}")
 
 
 def validate_flow_graph_diff_candidate(
@@ -128,6 +159,7 @@ def plan_flow_graph_builder(
         raise ValueError("Flow builder design does not accept customer updates")
     if intent.existing_graph_hash != retrieved_graph_hash:
         raise ValueError("retrieved graph hash does not match Flow graph diff")
+    repository = flow_xml_shape_repository()
     return FlowGraphBuilderPlan(
         capability=intent.capability,
         flow_name=intent.flow_name,
@@ -156,6 +188,109 @@ def plan_flow_graph_builder(
             "flow_snapshot_update_strategy_defined",
             "rollback_customer_update_strategy_defined",
             "servicenow_preview_commit_review_required",
+        ],
+        xml_shape_repository_version=repository.version,
+        xml_shape_tables=[shape.table for shape in repository.shapes],
+    )
+
+
+def flow_xml_shape_repository() -> FlowXmlShapeRepository:
+    return FlowXmlShapeRepository(
+        version="flow-xml-shapes-v1",
+        runtime_generation_enabled=False,
+        retrieved_update_set_handoff_enabled=False,
+        shapes=[
+            FlowXmlShape(
+                table="sys_hub_flow",
+                update_type="Flow",
+                root_element="record_update",
+                record_element="sys_hub_flow",
+                action="INSERT_OR_UPDATE",
+                required_fields=[
+                    "sys_id",
+                    "sys_update_name",
+                    "name",
+                    "active",
+                    "status",
+                    "latest_snapshot",
+                ],
+                forbidden_fields=[
+                    "sys_created_by",
+                    "sys_created_on",
+                    "sys_domain",
+                    "sys_domain_path",
+                    "sys_updated_by",
+                    "sys_updated_on",
+                ],
+                review_notes=[
+                    "Flow shape is repository evidence only; it is not generated at runtime.",
+                    "Snapshot strategy must be proven before this shape can be emitted.",
+                ],
+            ),
+            FlowXmlShape(
+                table="sys_hub_action_instance",
+                update_type="Flow Action Instance",
+                root_element="record_update",
+                record_element="sys_hub_action_instance",
+                action="INSERT_OR_UPDATE",
+                required_fields=[
+                    "sys_id",
+                    "sys_update_name",
+                    "flow",
+                    "action_type",
+                    "display_text",
+                    "order",
+                ],
+                forbidden_fields=[
+                    "action_inputs",
+                    "compiled_snapshot",
+                    "sys_created_by",
+                    "sys_created_on",
+                    "sys_updated_by",
+                    "sys_updated_on",
+                ],
+                review_notes=[
+                    "Action inputs require a separate value mapping strategy.",
+                    "Custom actions, spokes, credentials, scripts, and endpoints remain forbidden.",
+                ],
+            ),
+            FlowXmlShape(
+                table="sys_hub_flow_logic_instance_v2",
+                update_type="Flow Logic Instance",
+                root_element="record_update",
+                record_element="sys_hub_flow_logic_instance_v2",
+                action="INSERT_OR_UPDATE",
+                required_fields=[
+                    "sys_id",
+                    "sys_update_name",
+                    "flow",
+                    "logic_definition",
+                    "display_text",
+                    "order",
+                ],
+                forbidden_fields=[
+                    "values",
+                    "decision_table",
+                    "workflow_reference",
+                    "sys_created_by",
+                    "sys_created_on",
+                    "sys_updated_by",
+                    "sys_updated_on",
+                ],
+                review_notes=[
+                    (
+                        "Condition value serialization must be proven before this shape can be "
+                        "emitted."
+                    ),
+                    "Workflow references and approval orchestration remain forbidden.",
+                ],
+            ),
+        ],
+        evidence=[
+            "xml_shape_repository_available",
+            "flow_shapes_are_review_metadata_only",
+            "runtime_generation_disabled",
+            "retrieved_update_set_handoff_disabled",
         ],
     )
 

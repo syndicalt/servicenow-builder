@@ -1194,6 +1194,33 @@ def test_sprint_127_change_log_documents_flow_builder_design() -> None:
     assert "retrieved Update Set handoff remains disabled" in change_log
 
 
+def test_flow_designer_docs_document_xml_shape_repository() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in [guide, adr]:
+        assert "flow-xml-shapes-v1" in text
+        assert "Flow XML shape repository" in text
+        assert "sys_hub_action_instance" in text
+        assert "sys_hub_flow_logic_instance_v2" in text
+        assert "review metadata only" in text
+        assert "no Flow XML builder" in text
+
+
+def test_sprint_128_change_log_documents_flow_xml_shape_repository() -> None:
+    change_log = Path("docs/sprints/sprint-128-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 128 Change Log" in change_log
+    assert "Flow XML shape repository" in change_log
+    assert "flow-xml-shapes-v1" in change_log
+    assert "sys_hub_flow" in change_log
+    assert "sys_hub_action_instance" in change_log
+    assert "sys_hub_flow_logic_instance_v2" in change_log
+    assert "no Flow XML builder" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
@@ -1201,6 +1228,7 @@ def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> 
     assert "Sprint 125 | Flow graph retrieval hardening" in backlog
     assert "Sprint 126 | Flow graph diff contract validation" in backlog
     assert "Sprint 127 | Flow builder preflight design" in backlog
+    assert "Sprint 128 | Flow XML shape repository" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

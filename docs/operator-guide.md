@@ -357,6 +357,8 @@ Sprint 126 adds validation-only graph diff support for the pseudo-table `sys_hub
 
 Sprint 127 adds Flow Designer builder preflight planning. The preflight verifies `retrieved_graph_hash_matches_existing_graph_hash`, keeps `runtime_generation_enabled=false`, keeps retrieved Update Set handoff disabled, and reports `Flow Designer builder is design-only`; runtime generation remains disabled. Required evidence before implementation can proceed includes `xml_shape_repository_available`, customer update naming, flow snapshot update strategy, rollback customer update strategy, and ServiceNow preview/commit review.
 
+Sprint 128 adds the Flow XML shape repository `flow-xml-shapes-v1`. The repository contains review metadata only for `sys_hub_flow`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2` customer-update shapes. It records the `record_update` root, `INSERT_OR_UPDATE` action, required fields, forbidden fields, and shape-specific review notes. There is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

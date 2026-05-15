@@ -20,6 +20,8 @@ Sprint 126 adds a validation-only `sys_hub_flow_graph_diff` contract. This contr
 
 Sprint 127 adds Flow Designer builder preflight planning. The preflight verifies `retrieved_graph_hash_matches_existing_graph_hash` and emits the builder evidence still required before customer updates can be produced. The current blocked reason is `Flow Designer builder is design-only`; runtime generation remains disabled.
 
+Sprint 128 adds the Flow XML shape repository `flow-xml-shapes-v1`. The repository documents approved customer-update shapes for `sys_hub_flow`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2`. These shapes are review metadata only; there is still no Flow XML builder and no retrieved Update Set handoff.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -79,6 +81,15 @@ The builder preflight requires these evidence items before implementation can mo
 - `flow_snapshot_update_strategy_defined`.
 - `rollback_customer_update_strategy_defined`.
 - `servicenow_preview_commit_review_required`.
+
+The Flow XML shape repository records:
+
+- root element `record_update`.
+- record element for each target table.
+- `INSERT_OR_UPDATE` as the only allowed action.
+- required fields needed before a customer update can be emitted.
+- forbidden fields that should not be generated.
+- review notes explaining shape-specific risks.
 
 ## Deterministic Validators
 

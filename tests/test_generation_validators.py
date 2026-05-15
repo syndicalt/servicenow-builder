@@ -5,6 +5,7 @@ import pytest
 from jedi_devproject.business_rule_generation import business_rule_customer_updates
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.flow_designer_generation import (
+    flow_xml_shape_repository,
     plan_flow_graph_builder,
     validate_flow_graph_diff_candidate,
 )
@@ -264,6 +265,12 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
     ]
     assert "retrieved_graph_hash_matches_existing_graph_hash" in plan.preflight_checks
     assert "xml_shape_repository_available" in plan.required_builder_evidence
+    assert plan.xml_shape_repository_version == "flow-xml-shapes-v1"
+    assert plan.xml_shape_tables == [
+        "sys_hub_flow",
+        "sys_hub_action_instance",
+        "sys_hub_flow_logic_instance_v2",
+    ]
 
 
 def test_flow_graph_builder_plan_rejects_stale_graph_hash() -> None:
@@ -291,6 +298,31 @@ def test_flow_graph_builder_plan_rejects_premature_customer_update_records() -> 
             retrieved_node_ids=_retrieved_flow_nodes(),
             retrieved_graph_hash="a" * 64,
         )
+
+
+def test_flow_xml_shape_repository_contains_required_flow_customer_update_shapes() -> None:
+    repository = flow_xml_shape_repository()
+
+    assert repository.runtime_generation_enabled is False
+    assert repository.retrieved_update_set_handoff_enabled is False
+    assert repository.version == "flow-xml-shapes-v1"
+    assert [shape.table for shape in repository.shapes] == [
+        "sys_hub_flow",
+        "sys_hub_action_instance",
+        "sys_hub_flow_logic_instance_v2",
+    ]
+    assert all(shape.root_element == "record_update" for shape in repository.shapes)
+    assert all(shape.action == "INSERT_OR_UPDATE" for shape in repository.shapes)
+    assert "sys_id" in repository.shape("sys_hub_action_instance").required_fields
+    assert "flow" in repository.shape("sys_hub_action_instance").required_fields
+    assert "xml_shape_repository_available" in repository.evidence
+
+
+def test_flow_xml_shape_repository_rejects_unknown_shape_lookup() -> None:
+    repository = flow_xml_shape_repository()
+
+    with pytest.raises(KeyError, match="Flow XML shape not found"):
+        repository.shape("sys_hub_spoke_instance")
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:
