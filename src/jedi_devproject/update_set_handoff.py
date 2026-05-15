@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
+from jedi_devproject.business_rule_generation import business_rule_customer_updates
 from jedi_devproject.generic_dictionary_form import (
     DictionaryFormIntent,
     dictionary_form_customer_updates,
@@ -245,19 +246,24 @@ def _customer_updates_for_candidate(
     candidate: UpdateSetCandidate,
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    unsupported_tables = {
-        change.table
-        for change in candidate.changes
-        if change.table not in {"sys_dictionary", "sys_ui_form"}
-    }
-    if unsupported_tables:
+    tables = {change.table for change in candidate.changes}
+    if tables == {"sys_script"}:
+        updates = business_rule_customer_updates(
+            changes=candidate.changes,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        )
+    elif tables.issubset({"sys_dictionary", "sys_ui_form"}):
+        intent = _dictionary_form_intent(candidate.changes)
+        updates = dictionary_form_customer_updates(
+            client=client,
+            intent=intent,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        )
+    else:
+        unsupported_tables = tables - {"sys_dictionary", "sys_ui_form", "sys_script"}
+        if not unsupported_tables:
+            raise ValueError("retrieved Update Set candidate mixes unsupported change types")
         raise ValueError(f"unsupported retrieved Update Set table: {sorted(unsupported_tables)[0]}")
-    intent = _dictionary_form_intent(candidate.changes)
-    updates = dictionary_form_customer_updates(
-        client=client,
-        intent=intent,
-        remote_update_set_sys_id=remote_update_set_sys_id,
-    )
     if not updates:
         raise ValueError("retrieved Update Set handoff requires at least one customer update")
     return updates

@@ -14,6 +14,7 @@ from jedi_devproject.risk import RiskInput, calculate_risk_score
 
 SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.BUSINESS_RULE_ANALYZE,
+    Capability.BUSINESS_RULE_GENERATE,
     Capability.CLIENT_SCRIPT_ANALYZE,
     Capability.SCRIPT_INCLUDE_ANALYZE,
     Capability.DICTIONARY_FIELD_CREATE,
@@ -22,6 +23,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
 }
 
 FULL_MATURITY_MAX_AUTOMATED_POINTS = 5
+CURRENT_AUTOMATION_MAX_POINTS = 3
 
 
 def analyze_story_capabilities(
@@ -41,6 +43,41 @@ def analyze_story_capabilities(
         reasons.append(
             "story points exceed full-maturity max: "
             f"{story.story_points:.1f} > {FULL_MATURITY_MAX_AUTOMATED_POINTS}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
+    if story.story_points > CURRENT_AUTOMATION_MAX_POINTS:
+        reasons.append(
+            "story points exceed current automation max: "
+            f"{story.story_points:.1f} > {CURRENT_AUTOMATION_MAX_POINTS}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
+    forbidden_business_rule_details = _business_rule_forbidden_details(text)
+    if Capability.BUSINESS_RULE_GENERATE in requested and forbidden_business_rule_details:
+        reasons.append(
+            "business rule generation includes forbidden behavior: "
+            f"{', '.join(forbidden_business_rule_details)}"
         )
         return _assessment(
             story=story,
@@ -97,6 +134,22 @@ def analyze_story_capabilities(
         return _assessment(
             story=story,
             outcome=SuitabilityOutcome.CONTEXT_ANALYSIS,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
+        )
+
+    if Capability.BUSINESS_RULE_GENERATE in requested:
+        profile = capability_profile(Capability.BUSINESS_RULE_GENERATE)
+        reasons.append("supported table-local business rule generation request")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
             requested=requested,
             supported=supported_capabilities,
             intent=intent,
@@ -183,7 +236,9 @@ def _requested_capabilities(text: str) -> set[Capability]:
         capabilities.add(Capability.ACL_MODIFY)
     if "workflow" in text or "flow designer" in text:
         capabilities.add(Capability.FLOW_MODIFY)
-    if "business rule" in text or "server script" in text:
+    if _is_business_rule_generation_request(text):
+        capabilities.add(Capability.BUSINESS_RULE_GENERATE)
+    elif "business rule" in text or "server script" in text:
         capabilities.add(Capability.BUSINESS_RULE_ANALYZE)
     if "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text:
         capabilities.add(Capability.CLIENT_SCRIPT_ANALYZE)
@@ -210,7 +265,9 @@ def _missing_details(text: str) -> list[str]:
         missing.append("field label or field name")
     if _is_dictionary_form_request(text) and _field_type(text) is None:
         missing.append("field type")
-    if _is_business_rule_request(text) and _target_table(text) is None:
+    if _is_business_rule_generation_request(text):
+        missing.extend(_missing_business_rule_generation_details(text))
+    elif _is_business_rule_request(text) and _target_table(text) is None:
         missing.append("target table")
     if _is_client_script_request(text) and _target_table(text) is None:
         missing.append("target table")
@@ -219,6 +276,45 @@ def _missing_details(text: str) -> list[str]:
 
 def _is_business_rule_request(text: str) -> bool:
     return "business rule" in text or "server script" in text
+
+
+def _is_business_rule_generation_request(text: str) -> bool:
+    if not _is_business_rule_request(text):
+        return False
+    if any(token in text for token in ["analyze", "analysis", "existing", "determine whether"]):
+        return False
+    return any(token in text for token in ["create", "add", "generate", "implement", "build"])
+
+
+def _missing_business_rule_generation_details(text: str) -> list[str]:
+    checks = [
+        ("target table", _target_table(text) is not None),
+        ("trigger timing", "before" in text or "after" in text),
+        ("trigger operations", "insert" in text or "update" in text),
+        ("explicit condition", "condition:" in text or "when " in text),
+        ("expected behavior", "expected behavior:" in text or "set " in text),
+        ("fields read", "fields read:" in text),
+        ("fields written", "fields written:" in text),
+    ]
+    return [label for label, present in checks if not present]
+
+
+def _business_rule_forbidden_details(text: str) -> list[str]:
+    if not _is_business_rule_generation_request(text):
+        return []
+    forbidden_patterns = {
+        "delete rules": ["delete rule", "delete business rule", "on delete"],
+        "async/display rules": ["async", "display business rule"],
+        "scheduled jobs": ["scheduled job", "schedule"],
+        "outbound calls": ["rest", "soap", "endpoint", "api call", "http://", "https://"],
+        "credentials": ["credential", "password", "token", "api key", "secret"],
+        "cross-table writes": ["gliderecord", "another table", "other table", "cross-table"],
+    }
+    return [
+        label
+        for label, tokens in forbidden_patterns.items()
+        if any(token in text for token in tokens)
+    ]
 
 
 def _is_client_script_request(text: str) -> bool:

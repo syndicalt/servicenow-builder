@@ -150,7 +150,7 @@ def test_high_point_story_routes_to_manual_developer_build() -> None:
     assert "story points exceed full-maturity max: 8.0 > 5" in assessment.reasons
 
 
-def test_five_point_dictionary_form_story_remains_automated_when_details_are_clear() -> None:
+def test_five_point_dictionary_form_story_routes_to_manual_until_current_maturity_expands() -> None:
     assessment = analyze_story_capabilities(
         _story(
             number="STRY0010115",
@@ -170,10 +170,36 @@ def test_five_point_dictionary_form_story_remains_automated_when_details_are_cle
         )
     )
 
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert "story points exceed current automation max: 5.0 > 3" in assessment.reasons
+
+
+def test_complete_business_rule_story_is_eligible_for_automated_generation() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010116",
+            short_description="Create Incident priority note Business Rule",
+            description=(
+                "Create a before update Business Rule on the Incident table. "
+                "Condition: priority changes to 1 - Critical. Expected behavior: "
+                "set work_notes to Priority escalated by automation. Fields read: "
+                "priority. Fields written: work_notes."
+            ),
+            acceptance_criteria=(
+                "- Updating an Incident priority to 1 - Critical adds the work note.\n"
+                "- The rule runs before update only.\n"
+                "- Rollback removes the generated Business Rule."
+            ),
+            story_points=3,
+        )
+    )
+
     assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
-    assert assessment.intent is not None
-    assert assessment.intent.target_table == "problem"
-    assert assessment.reasons == ["supported low-complexity dictionary/form request"]
+    assert Capability.BUSINESS_RULE_GENERATE in assessment.capabilities
+    assert Capability.BUSINESS_RULE_ANALYZE not in assessment.capabilities
+    assert assessment.target_table == "incident"
+    assert assessment.required_instance_context == ["table_schema", "business_rules"]
+    assert assessment.reasons == ["supported table-local business rule generation request"]
 
 
 def test_business_rule_story_routes_to_context_analysis() -> None:

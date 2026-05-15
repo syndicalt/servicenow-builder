@@ -184,7 +184,7 @@ def _dictionary_form_profile(*, capability: Capability) -> CapabilityProfile:
         ],
         researcher="dictionary_form_researcher",
         build_pipeline="dictionary_form_update_set_pipeline",
-        current_max_story_points=5,
+        current_max_story_points=3,
         target_max_story_points=5,
         creates_update_set=True,
     )
@@ -199,6 +199,7 @@ def _generation_profile(
     researcher: str,
     build_pipeline: str,
     unsupported_cases: list[str],
+    current_max_story_points: int = 0,
 ) -> CapabilityProfile:
     return CapabilityProfile(
         capability=capability,
@@ -225,7 +226,7 @@ def _generation_profile(
         ],
         researcher=researcher,
         build_pipeline=build_pipeline,
-        current_max_story_points=0,
+        current_max_story_points=current_max_story_points,
         target_max_story_points=5,
         creates_update_set=True,
     )
@@ -258,9 +259,9 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.BUSINESS_RULE_GENERATE: _generation_profile(
         capability=Capability.BUSINESS_RULE_GENERATE,
-        status="designed",
+        status="enabled",
         supported_artifact="sys_script",
-        required_instance_context=["table_schema", "business_rules", "code_surface_analysis"],
+        required_instance_context=["table_schema", "business_rules"],
         researcher="code_surface_researcher",
         build_pipeline="business_rule_update_set_pipeline",
         unsupported_cases=[
@@ -272,6 +273,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
             "cross-table writes",
             "broad GlideRecord mutation",
         ],
+        current_max_story_points=3,
     ),
     Capability.CLIENT_SCRIPT_GENERATE: _generation_profile(
         capability=Capability.CLIENT_SCRIPT_GENERATE,

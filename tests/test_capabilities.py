@@ -98,14 +98,14 @@ def test_capability_profiles_record_current_and_target_story_point_maturity() ->
     dictionary_profile = capability_profile(Capability.DICTIONARY_FIELD_CREATE)
     business_rule_profile = capability_profile(Capability.BUSINESS_RULE_GENERATE)
 
-    assert dictionary_profile.current_max_story_points == 5
+    assert dictionary_profile.current_max_story_points == 3
     assert dictionary_profile.target_max_story_points == 5
     assert dictionary_profile.researcher == "dictionary_form_researcher"
     assert dictionary_profile.build_pipeline == "dictionary_form_update_set_pipeline"
     assert dictionary_profile.creates_update_set is True
 
-    assert business_rule_profile.status == "designed"
-    assert business_rule_profile.current_max_story_points == 0
+    assert business_rule_profile.status == "enabled"
+    assert business_rule_profile.current_max_story_points == 3
     assert business_rule_profile.target_max_story_points == 5
     assert business_rule_profile.researcher == "code_surface_researcher"
     assert business_rule_profile.build_pipeline == "business_rule_update_set_pipeline"

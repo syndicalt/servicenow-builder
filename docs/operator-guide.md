@@ -359,15 +359,15 @@ When selected, the runtime retrieves the required context, redacts script-like f
 
 The story receives human-review feedback through the normal work-note path. Code surface generation remains unsupported until separate mutation profiles define output schema, deterministic validators, retrieved Update Set XML evidence, and UAT expectations for each artifact type.
 
-### Business Rule Generation Profile Design
+### Business Rule Generation Capability
 
-`business_rule_generate` is designed but not enabled. No runtime generation is enabled for Business Rules until the mutation profile, validators, and XML builder are implemented and tested.
+`business_rule_generate` is enabled for the first production-hardening subset. The current maturity limit is `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
 
-The first supported subset is table-local Business Rules only: `before/after` timing, `insert/update` operations, one target table, one generated rule, and an explicit condition. Generated changes must become `sys_script` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
+The supported subset is table-local Business Rules only: `before/after` timing, `insert/update` operations, one target table, one generated rule, and an explicit condition. Generated changes must become `sys_script` customer updates wrapped in `sys_update_xml` for retrieved Update Set review. Retrieved Update Set preview/commit remains the human review boundary.
 
 Unsupported behavior includes delete rules, async/display rules, scheduled jobs, ACL changes, Script Include creation, no outbound REST or SOAP calls, no credentials or endpoint construction, no cross-table writes, no broad GlideRecord mutation, and no system-table mutation outside the intended `sys_script` customer update.
 
-The future provider output must be structured implementation intent, not authoritative XML. Required fields include target table, rule name, timing, operations, condition summary, condition expression, script body, fields read, fields written, test plan, rollback notes, and reviewer notes. Deterministic validators must approve table context, operation scope, script safety, field access, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported.
+The provider output must be structured implementation intent, not authoritative XML. Required fields include target table, rule name, timing, operations, condition summary, condition expression, script body, fields read, fields written, test plan, rollback notes, and reviewer notes. Deterministic validators approve table context, operation scope, script safety, field access, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported. Scripts containing forbidden tokens such as `GlideRecord`, destructive update/delete APIs, outbound HTTP/S endpoints, credential access, passwords, tokens, or API keys fail closed before import.
 
 ## CI/CD Update Set API Capability
 

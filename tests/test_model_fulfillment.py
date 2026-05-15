@@ -243,7 +243,7 @@ def _job() -> FulfillmentJobRecord:
 def _policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.DICTIONARY_FORM},
-        tables={"sys_dictionary", "sys_ui_form"},
+        tables={"sys_dictionary", "sys_ui_form", "sys_script"},
         operations={"insert", "update"},
         max_points=3,
     )
@@ -684,6 +684,100 @@ def test_model_candidate_handler_runs_code_surface_analysis_without_model_or_upd
     assert feedback_fields["u_ai_status"] == "Human Review Required"
     assert "Code surface analysis completed" in feedback_fields["work_notes"]
     assert "db://artifact_blobs/103" in feedback_fields["work_notes"]
+
+
+def test_model_candidate_handler_generates_business_rule_update_set_handoff() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010116",
+            short_description="Create Incident priority note Business Rule",
+            description=(
+                "Create a before update Business Rule on the Incident table. "
+                "Condition: priority changes to 1 - Critical. Expected behavior: "
+                "set work_notes to Priority escalated by automation. Fields read: "
+                "priority. Fields written: work_notes."
+            ),
+            acceptance_criteria=(
+                "Updating an Incident priority to 1 - Critical adds a work note. "
+                "Rollback removes the generated Business Rule."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_script",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "JEDI Incident Priority Note",
+                        "collection": "incident",
+                        "when": "before",
+                        "action_insert": False,
+                        "action_update": True,
+                        "filter_condition": "priority changes to 1",
+                        "script": (
+                            "if (current.priority.changesTo('1')) {\n"
+                            "    current.work_notes = 'Priority escalated by automation.';\n"
+                            "}"
+                        ),
+                        "fields_read": ["priority"],
+                        "fields_written": ["work_notes"],
+                    },
+                }
+            ],
+            "test_plan": ["Update Incident priority to Critical and confirm work note."],
+            "rollback_notes": ["Delete the generated Business Rule."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010116"}))
+
+    assert provider.payloads[0]["controls"]["capability_assessment"]["capabilities"] == [
+        "business_rule_generate"
+    ]
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    candidate = result.artifacts[2].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["table"] == "sys_script"
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/116",
+                sha256="6" * 64,
+                artifact_id=116,
+            )
+        ]
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_incident_jedi_incident_priority_note" in imported_xml
+    assert "<collection>incident</collection>" in imported_xml
+    updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert updated_fields["u_ai_status"] == "Ready for Testing"
 
 
 def test_model_candidate_handler_runs_client_script_analysis() -> None:

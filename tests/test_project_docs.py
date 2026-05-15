@@ -764,17 +764,17 @@ def test_business_rule_generation_profile_adr_documents_mutation_boundary() -> N
     assert "No runtime generation is enabled" in adr
 
 
-def test_operator_guide_documents_business_rule_generation_profile_design() -> None:
+def test_operator_guide_documents_business_rule_generation_profile_boundary() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
-    assert "Business Rule Generation Profile Design" in guide
+    assert "Business Rule Generation Capability" in guide
     assert "business_rule_generate" in guide
     assert "sys_script" in guide
     assert "sys_update_xml" in guide
     assert "table-local" in guide
     assert "no outbound REST" in guide
     assert "no cross-table writes" in guide
-    assert "No runtime generation is enabled" in guide
+    assert "current_max_story_points=3" in guide
 
 
 def test_sprint_one_hundred_fourteen_change_log_documents_generation_profile_design() -> None:
@@ -830,6 +830,31 @@ def test_production_backlog_documents_maturity_foundation_before_surface_generat
     assert "current_max_story_points" in backlog
     assert "target_max_story_points" in backlog
     assert "Sprint 116 | Business Rule generation implementation" in backlog
+
+
+def test_operator_guide_documents_enabled_business_rule_generation_boundary() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Business Rule Generation Capability" in guide
+    assert "business_rule_generate" in guide
+    assert "current_max_story_points=3" in guide
+    assert "target_max_story_points=5" in guide
+    assert "Retrieved Update Set preview/commit remains" in guide
+    assert "GlideRecord" in guide
+    assert "forbidden" in guide
+
+
+def test_sprint_one_hundred_sixteen_change_log_documents_business_rule_generation() -> None:
+    change_log = Path("docs/sprints/sprint-116-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 116 Change Log" in change_log
+    assert "Business Rule generation implementation" in change_log
+    assert "business_rule_generate" in change_log
+    assert "sys_script" in change_log
+    assert "current_max_story_points=3" in change_log
+    assert "target_max_story_points=5" in change_log
+    assert "retrieved Update Set" in change_log
+    assert "forbidden Business Rule script" in change_log
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

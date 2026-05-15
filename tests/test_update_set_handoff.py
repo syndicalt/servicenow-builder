@@ -40,6 +40,14 @@ class FakeUpdateSetClient:
                     "state": "loaded",
                 }
             ]
+        if table == "sys_remote_update_set" and str(lookup.get("remote_sys_id") or "").strip():
+            return [
+                {
+                    "sys_id": "remote-update-set-sys-id",
+                    "name": "JEDI Generated AI Candidate",
+                    "state": "loaded",
+                }
+            ]
         if table == "sys_ui_section" and lookup == {"name": "rm_story"}:
             return [
                 {
@@ -254,6 +262,42 @@ def _minimal_model_dictionary_form_candidate() -> UpdateSetCandidate:
                 ),
             ]
         }
+    )
+
+
+def _business_rule_candidate() -> UpdateSetCandidate:
+    return UpdateSetCandidate(
+        story_number="STRY0010116",
+        name="UPD_STRY0010116_LLM_Implementation",
+        eligibility_decision="eligible",
+        eligibility_reasons=["supported table-local business rule generation request"],
+        confidence=0.72,
+        risk_score=0.25,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange(
+                table="sys_script",
+                operation="insert",
+                fields={
+                    "name": "JEDI Incident Priority Note",
+                    "collection": "incident",
+                    "when": "before",
+                    "action_insert": False,
+                    "action_update": True,
+                    "filter_condition": "priority changes to 1",
+                    "script": (
+                        "if (current.priority.changesTo('1')) {\n"
+                        "    current.work_notes = 'Priority escalated by automation.';\n"
+                        "}"
+                    ),
+                    "fields_read": ["priority"],
+                    "fields_written": ["work_notes"],
+                },
+                rationale="Add the requested table-local Business Rule.",
+            )
+        ],
+        reviewer_notes=["Update an Incident priority to Critical and confirm the work note."],
+        artifact_hash="b" * 64,
     )
 
 
@@ -518,6 +562,66 @@ def test_create_update_set_handoff_preserves_reference_field_metadata() -> None:
     assert "<use_reference_qualifier>simple</use_reference_qualifier>" in imported_xml
     assert "<reference_qual>vendor=true</reference_qual>" in imported_xml
     assert "<reference_qual_condition>vendor=true</reference_qual_condition>" in imported_xml
+
+
+def test_create_update_set_handoff_imports_business_rule_customer_update() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010116",
+            candidate=_business_rule_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/116",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_incident_jedi_incident_priority_note" in imported_xml
+    assert "<sys_script action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<collection>incident</collection>" in imported_xml
+    assert "<when>before</when>" in imported_xml
+    assert "<action_update>true</action_update>" in imported_xml
+    assert "current.priority.changesTo" in imported_xml
+    assert client.story_updates[-1]["fields"]["state"] == "-7"
+    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+
+
+def test_create_update_set_handoff_rejects_forbidden_business_rule_script() -> None:
+    client = FakeUpdateSetClient()
+    forbidden_fields = {
+        **_business_rule_candidate().changes[0].fields,
+        "script": "new GlideRecord('sys_user').query();",
+    }
+    candidate = _business_rule_candidate().model_copy(
+        update={
+            "changes": [
+                _business_rule_candidate().changes[0].model_copy(
+                    update={"fields": forbidden_fields}
+                )
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010116",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/116",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "forbidden Business Rule script token: GlideRecord" in str(exc)
+    else:
+        raise AssertionError("forbidden Business Rule script was accepted")
+
+    assert client.imports == []
 
 
 def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> None:
