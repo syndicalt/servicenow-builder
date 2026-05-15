@@ -7,7 +7,10 @@ from pydantic import BaseModel, Field
 from jedi_devproject.capabilities import SuitabilityOutcome
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.context_escalation import plan_context_escalation
-from jedi_devproject.instance_discovery import InstanceDiscoveryContext
+from jedi_devproject.instance_discovery import (
+    InstanceDiscoveryContext,
+    ServiceNowSurfaceContextBundle,
+)
 from jedi_devproject.models import (
     CandidateChange,
     CandidateStatus,
@@ -52,6 +55,7 @@ class ImplementationPacket(BaseModel):
     capability_assessment: dict[str, Any] = Field(default_factory=dict)
     normalized_intent: dict[str, Any] | None = None
     instance_context: dict[str, Any] | None = None
+    instance_context_bundle: dict[str, Any] | None = None
     context_sufficiency: dict[str, Any] = Field(default_factory=dict)
     context_sections: dict[str, str]
     retrieval_citations: list[RetrievalCitation]
@@ -71,11 +75,12 @@ class ImplementationPacket(BaseModel):
                 "capability_assessment": self.capability_assessment,
                 "normalized_intent": self.normalized_intent,
                 "context_sufficiency": self.context_sufficiency,
-                "context_escalation": plan_context_escalation(
-                    self.context_sufficiency
-                ).model_dump(mode="json"),
+                "context_escalation": plan_context_escalation(self.context_sufficiency).model_dump(
+                    mode="json"
+                ),
             },
             "instance_context": self.instance_context,
+            "instance_context_bundle": self.instance_context_bundle,
             "context": self.context_sections,
             "citations": [
                 citation.model_dump(mode="json") for citation in self.retrieval_citations
@@ -91,6 +96,7 @@ def build_implementation_packet(
     provider_policy: ProviderPolicy,
     rags: SpecializedRags,
     discovery_context: InstanceDiscoveryContext | None = None,
+    surface_context_bundle: ServiceNowSurfaceContextBundle | None = None,
 ) -> ImplementationPacket:
     assessment = analyze_story_capabilities(story)
     safety_reasons = [
@@ -146,8 +152,14 @@ def build_implementation_packet(
         instance_context=(
             discovery_context.model_dump(mode="json") if discovery_context is not None else None
         ),
+        instance_context_bundle=(
+            surface_context_bundle.model_dump(mode="json")
+            if surface_context_bundle is not None
+            else None
+        ),
         context_sufficiency=_context_sufficiency(
             discovery_context=discovery_context,
+            surface_context_bundle=surface_context_bundle,
         ),
         context_sections=context_sections,
         retrieval_citations=citations,
@@ -167,6 +179,7 @@ def build_implementation_packet(
 def _context_sufficiency(
     *,
     discovery_context: InstanceDiscoveryContext | None,
+    surface_context_bundle: ServiceNowSurfaceContextBundle | None = None,
 ) -> dict[str, Any]:
     if discovery_context is None:
         return {
@@ -182,13 +195,19 @@ def _context_sufficiency(
         missing_context.append("custom_field_support")
     if not discovery_context.form_sections:
         missing_context.append("form_sections")
+    if surface_context_bundle is not None:
+        missing_context.extend(surface_context_bundle.missing_required_surfaces)
     status = "sufficient" if not missing_context else "insufficient"
     score = 0.95 if status == "sufficient" else 0.2
     return {
         "status": status,
         "score": score,
         "missing_context": missing_context,
-        "evidence": discovery_context.evidence,
+        "evidence": (
+            surface_context_bundle.evidence
+            if surface_context_bundle is not None
+            else discovery_context.evidence
+        ),
     }
 
 
@@ -245,6 +264,9 @@ def generate_implementation_update_set_candidate_from_packet(
     provider: ModelProvider,
 ) -> UpdateSetCandidate:
     if packet.safety_decision != SuitabilityOutcome.AUTOMATED_BUILD.value:
+        return _manual_review_candidate(packet=packet)
+    context_plan = plan_context_escalation(packet.context_sufficiency)
+    if not context_plan.should_call_model:
         return _manual_review_candidate(packet=packet)
     response = _normalize_placeholder_sys_ids(provider.generate(packet.to_model_payload()))
     _validate_response(
@@ -304,17 +326,18 @@ def _manual_review_candidate(
     *,
     packet: ImplementationPacket,
 ) -> UpdateSetCandidate:
+    context_plan = plan_context_escalation(packet.context_sufficiency)
     candidate = UpdateSetCandidate(
         story_number=packet.story.number,
         name=f"UPD_{packet.story.number}_Manual_Build",
         eligibility_decision=_candidate_decision(packet.safety_decision),
-        eligibility_reasons=packet.safety_reasons,
+        eligibility_reasons=[*packet.safety_reasons, *context_plan.reasons],
         confidence=0.0,
         risk_score=1.0,
         status=CandidateStatus.MANUAL_BUILD,
         retrieval_citations=packet.retrieval_citations,
         reviewer_notes=[
-            "Model invocation skipped by deterministic safety gate.",
+            "Model invocation skipped by deterministic safety or context gate.",
         ],
     )
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})

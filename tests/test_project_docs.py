@@ -516,6 +516,29 @@ def test_sprint_one_hundred_five_change_log_documents_hmac_cutover() -> None:
     assert "it is not recorded" in change_log
 
 
+def test_operator_guide_documents_surface_investigation_before_model_calls() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "instance_context_bundle" in guide
+    assert "Business Rules" in guide
+    assert "Client Scripts" in guide
+    assert "Flow Designer records" in guide
+    assert "CMDB/discovery indicators" in guide
+    assert "provider is not called" in guide
+    assert "does not call public documentation sites directly" in guide
+
+
+def test_sprint_one_hundred_six_change_log_documents_surface_investigator() -> None:
+    change_log = Path("docs/sprints/sprint-106-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 106 Change Log" in change_log
+    assert "ServiceNowSurfaceContextBundle" in change_log
+    assert "Business Rules" in change_log
+    assert "Flow Designer records" in change_log
+    assert "missing required Flow context blocks provider invocation" in change_log
+    assert "does not perform live public internet calls" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

@@ -16,8 +16,8 @@ from jedi_devproject.implementation_packet import (
     generate_implementation_update_set_candidate_from_packet,
 )
 from jedi_devproject.instance_discovery import (
-    InstanceDiscoveryContext,
-    discover_dictionary_form_context,
+    ServiceNowSurfaceContextBundle,
+    discover_servicenow_surface_context,
 )
 from jedi_devproject.models import CandidateStatus, ProviderPolicy, UpdateSetCandidate
 from jedi_devproject.operational_store import FulfillmentJobRecord
@@ -86,13 +86,16 @@ def model_candidate_fulfillment_handler(
             raise RuntimeError(f"story not found: {job.story_number}")
 
         story = enrich_story(stories[0]).enriched_story
-        discovery_context = _discovery_context_for_story(client=client, story=story)
+        surface_context_bundle = _surface_context_for_story(client=client, story=story)
         packet = build_implementation_packet(
             story=story,
             policy=config.policy,
             provider_policy=config.provider_policy,
             rags=config.rags,
-            discovery_context=discovery_context,
+            discovery_context=(
+                surface_context_bundle.table_context if surface_context_bundle is not None else None
+            ),
+            surface_context_bundle=surface_context_bundle,
         )
         candidate = generate_implementation_update_set_candidate_from_packet(
             packet=packet,
@@ -103,6 +106,17 @@ def model_candidate_fulfillment_handler(
         return FulfillmentExecutionResult(
             message=f"Implementation candidate generated for {job.story_number}",
             artifacts=[
+                *(
+                    [
+                        FulfillmentArtifactRef(
+                            artifact_kind="instance_context_bundle",
+                            schema_version="servicenow-surface-context-v1",
+                            payload_json=surface_context_bundle.model_dump(mode="json"),
+                        )
+                    ]
+                    if surface_context_bundle is not None
+                    else []
+                ),
                 FulfillmentArtifactRef(
                     artifact_kind="implementation_packet",
                     schema_version="implementation-packet-v1",
@@ -129,18 +143,36 @@ def model_candidate_fulfillment_handler(
     return handle
 
 
-def _discovery_context_for_story(
+def _surface_context_for_story(
     *,
     client: ModelFulfillmentClient,
     story: Any,
-) -> InstanceDiscoveryContext | None:
+) -> ServiceNowSurfaceContextBundle | None:
     assessment = analyze_story_capabilities(story)
     if assessment.intent is None:
         return None
-    return discover_dictionary_form_context(
+    story_text = " ".join(
+        str(value)
+        for value in [
+            story.short_description,
+            story.description,
+            story.acceptance_criteria or "",
+        ]
+        if value
+    )
+    return discover_servicenow_surface_context(
         client=client,
         target_table=assessment.intent.target_table,
+        story_text=story_text,
+        public_doc_queries=_public_doc_queries(story_text),
     )
+
+
+def _public_doc_queries(story_text: str) -> list[str]:
+    lowered = story_text.lower()
+    if not any(token in lowered for token in ["documentation", "public docs", "docs"]):
+        return []
+    return ["ServiceNow public documentation for requested platform surfaces"]
 
 
 def _create_handoff_after_persist(

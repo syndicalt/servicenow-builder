@@ -128,6 +128,20 @@ class FakeModelClient:
             return [{"sys_id": "description-element", "element": "description", "position": "2"}]
         if table == "sys_security_acl":
             return []
+        if table == "sys_script":
+            return []
+        if table == "sys_script_client":
+            return []
+        if table == "sys_ui_policy":
+            return []
+        if table == "sys_hub_flow":
+            return [{"sys_id": "flow-sys-id", "name": "Incident Triage", "active": "true"}]
+        if table == "sys_script_include":
+            return []
+        if table == "cmdb_ci":
+            return []
+        if table == "sys_rest_message":
+            return []
         if table == "sys_remote_update_set":
             return [
                 {
@@ -275,16 +289,22 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
 
     assert result.message == "Implementation candidate generated for STRY0010013"
     assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
         "implementation_packet",
         "implementation_candidate",
     ]
-    assert result.artifacts[0].schema_version == "implementation-packet-v1"
-    assert result.artifacts[1].schema_version == "implementation-candidate-v1"
-    packet = result.artifacts[0].payload_json
-    candidate = result.artifacts[1].payload_json
+    assert result.artifacts[0].schema_version == "servicenow-surface-context-v1"
+    assert result.artifacts[1].schema_version == "implementation-packet-v1"
+    assert result.artifacts[2].schema_version == "implementation-candidate-v1"
+    context_bundle = result.artifacts[0].payload_json
+    packet = result.artifacts[1].payload_json
+    candidate = result.artifacts[2].payload_json
+    assert context_bundle is not None
     assert packet is not None
     assert candidate is not None
+    assert context_bundle["target_table"] == "rm_story"
     assert packet["provider_id"] == "openai-chatgpt"
+    assert packet["instance_context_bundle"]["target_table"] == "rm_story"
     assert packet["story"]["number"] == "STRY0010013"
     assert "story-sys-id" not in str(packet)
     assert candidate["status"] == "Ready for Review"
@@ -295,6 +315,12 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
 
     result.after_artifacts_persisted(
         [
+            FulfillmentPersistedArtifact(
+                artifact_kind="instance_context_bundle",
+                path="db://artifact_blobs/0",
+                sha256="0" * 64,
+                artifact_id=0,
+            ),
             FulfillmentPersistedArtifact(
                 artifact_kind="implementation_packet",
                 path="db://artifact_blobs/1",
@@ -357,6 +383,12 @@ def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
 
     result.after_artifacts_persisted(
         [
+            FulfillmentPersistedArtifact(
+                artifact_kind="instance_context_bundle",
+                path="db://artifact_blobs/1",
+                sha256="a" * 64,
+                artifact_id=1,
+            ),
             FulfillmentPersistedArtifact(
                 artifact_kind="implementation_candidate",
                 path="db://artifact_blobs/2",
@@ -444,7 +476,8 @@ def test_model_candidate_handler_builds_incident_candidate_after_instance_discov
     result = handler(_job().model_copy(update={"story_number": "STRY0010001"}))
 
     assert result.artifacts[1].payload_json is not None
-    candidate = result.artifacts[1].payload_json
+    assert result.artifacts[2].payload_json is not None
+    candidate = result.artifacts[2].payload_json
     assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
     assert candidate["changes"][0]["fields"]["name"] == "incident"
     assert candidate["changes"][0]["fields"]["element"] == "u_antics"
@@ -458,6 +491,73 @@ def test_model_candidate_handler_builds_incident_candidate_after_instance_discov
         "sys_security_acl",
     }
     assert result.after_artifacts_persisted is not None
+
+
+def test_model_candidate_handler_blocks_model_when_required_surface_context_missing() -> None:
+    class MissingFlowClient(FakeModelClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, object]]:
+            if table == "sys_hub_flow":
+                self.fetches.append(
+                    {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
+                )
+                return []
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    client = MissingFlowClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010106",
+            short_description="Add a New Field to the Incident Form after checking Flow",
+            description=(
+                "As an incident manager, I would like a new field added to the "
+                "Incident form, but first inspect the Incident Flow for triage "
+                "dependencies.\n\n- Field Name: Escalation Notes\n"
+                "- Field Type: String\n- Length: 4000"
+            ),
+            acceptance_criteria="The field exists and does not conflict with Flow logic.",
+            story_points=2,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010106"}))
+
+    assert provider.payloads == []
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    assert result.artifacts[0].payload_json is not None
+    assert result.artifacts[0].payload_json["missing_required_surfaces"] == ["flows"]
+    assert result.artifacts[2].payload_json is not None
+    assert result.artifacts[2].payload_json["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert "context_insufficient:flows" in result.artifacts[2].payload_json["eligibility_reasons"]
 
 
 def test_model_fulfillment_writes_needs_clarification_feedback() -> None:

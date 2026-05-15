@@ -46,13 +46,25 @@ from jedi_devproject.external_build import (
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
-    generate_implementation_update_set_candidate,
+    generate_implementation_update_set_candidate_from_packet,
+)
+from jedi_devproject.instance_discovery import (
+    DiscoveredField,
+    DiscoveredFormElement,
+    DiscoveredFormSection,
+    InstanceDiscoveryContext,
 )
 from jedi_devproject.lifecycle_events import (
     LifecycleStateChangeEvent,
     plan_story_ready_lifecycle_event,
 )
-from jedi_devproject.models import DataClassification, ProviderPolicy, ProviderStatus, Story
+from jedi_devproject.models import (
+    DataClassification,
+    ProviderPolicy,
+    ProviderStatus,
+    Story,
+    UpdateSetCandidate,
+)
 from jedi_devproject.pipeline import PipelineInputs, run_pipeline
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy, StoryType
@@ -420,13 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         provider = StaticResponseProvider(_load_json_object(args.provider_response_file))
         for story in stories:
-            candidate = generate_implementation_update_set_candidate(
-                story=story,
-                policy=_default_policy(),
-                provider_policy=_default_implementation_provider_policy(),
-                rags=_default_rags(),
-                provider=provider,
-            )
+            candidate = _build_offline_implementation_candidate(story=story, provider=provider)
             write_candidate_artifact(
                 args.artifact_root,
                 run_id=args.run_id,
@@ -448,11 +454,8 @@ def main(argv: list[str] | None = None) -> int:
             provider = StaticResponseProvider(_load_json_object(job["provider_response_file"]))
             for story in stories:
                 try:
-                    candidate = generate_implementation_update_set_candidate(
+                    candidate = _build_offline_implementation_candidate(
                         story=story,
-                        policy=_default_policy(),
-                        provider_policy=_default_implementation_provider_policy(),
-                        rags=_default_rags(),
                         provider=provider,
                     )
                     candidate_path = write_candidate_artifact(
@@ -509,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
             policy=_default_policy(),
             provider_policy=_default_implementation_provider_policy(),
             rags=_default_rags(),
+            discovery_context=_offline_discovery_context(story),
         )
         packet_root = args.artifact_root / "implementation-packets" / args.run_id
         write_json_artifact_once(
@@ -517,11 +521,8 @@ def main(argv: list[str] | None = None) -> int:
             payload=packet.to_model_payload(),
         )
 
-        candidate = generate_implementation_update_set_candidate(
+        candidate = _build_offline_implementation_candidate(
             story=story,
-            policy=_default_policy(),
-            provider_policy=_default_implementation_provider_policy(),
-            rags=_default_rags(),
             provider=StaticResponseProvider(_load_json_object(args.provider_response_file)),
         )
         candidate_path = write_candidate_artifact(
@@ -1398,6 +1399,62 @@ class StaticResponseProvider:
 
     def generate(self, payload: dict[str, object]) -> dict[str, object]:
         return self._response
+
+
+def _build_offline_implementation_candidate(
+    *,
+    story: Story,
+    provider: StaticResponseProvider,
+) -> UpdateSetCandidate:
+    policy = _default_policy()
+    packet = build_implementation_packet(
+        story=story,
+        policy=policy,
+        provider_policy=_default_implementation_provider_policy(),
+        rags=_default_rags(),
+        discovery_context=_offline_discovery_context(story),
+    )
+    return generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=policy,
+        provider=provider,
+    )
+
+
+def _offline_discovery_context(story: Story) -> InstanceDiscoveryContext:
+    target_table = str(story.additional_context.get("target_table") or "rm_story")
+    anchor = str(story.additional_context.get("placement_anchor") or "description")
+    return InstanceDiscoveryContext(
+        target_table=target_table,
+        table_label=target_table.replace("_", " ").title(),
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element=anchor,
+                column_label=anchor.replace("_", " ").title(),
+                internal_type="string",
+                max_length=4000,
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="offline-section-redacted",
+                name=target_table,
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="offline-element-redacted",
+                        element=anchor,
+                        position=1,
+                    )
+                ],
+            )
+        ],
+        evidence=[
+            f"offline_reviewed_context:{target_table}",
+            f"offline_reviewed_anchor:{anchor}",
+        ],
+    )
 
 
 def _default_policy() -> AllowlistPolicy:

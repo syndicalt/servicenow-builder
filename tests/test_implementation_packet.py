@@ -3,12 +3,16 @@ from jedi_devproject.implementation_packet import (
     build_implementation_packet,
     generate_implementation_candidate,
     generate_implementation_update_set_candidate,
+    generate_implementation_update_set_candidate_from_packet,
 )
 from jedi_devproject.instance_discovery import (
     DiscoveredField,
     DiscoveredFormElement,
     DiscoveredFormSection,
     InstanceDiscoveryContext,
+    ServiceNowSurfaceContext,
+    ServiceNowSurfaceContextBundle,
+    ServiceNowSurfaceRecord,
 )
 from jedi_devproject.models import (
     CandidateStatus,
@@ -126,6 +130,37 @@ def _provider_policy() -> ProviderPolicy:
     )
 
 
+def _discovery_context() -> InstanceDiscoveryContext:
+    return InstanceDiscoveryContext(
+        target_table="rm_story",
+        table_label="Story",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="description",
+                column_label="Description",
+                internal_type="string",
+                max_length=4000,
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="story-main-section",
+                name="rm_story",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="description-element",
+                        element="description",
+                        position=2,
+                    )
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:rm_story", "sys_ui_section:rm_story"],
+    )
+
+
 def test_build_implementation_packet_contains_grounded_context_and_controls() -> None:
     packet = build_implementation_packet(
         story=_story(),
@@ -204,6 +239,143 @@ def test_build_implementation_packet_includes_discovered_instance_context() -> N
     assert packet.context_sufficiency["status"] == "sufficient"
     assert packet.context_sufficiency["score"] == 0.95
     assert packet.output_contract["must_use_discovered_instance_context"] is True
+
+
+def test_build_implementation_packet_includes_surface_context_bundle() -> None:
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="description",
+                column_label="Description",
+                internal_type="string",
+                max_length=4000,
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="description-element",
+                        element="description",
+                        position=2,
+                    )
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:incident"],
+    )
+    bundle = ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "form_layout", "business_rules"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="business_rules",
+                source_table="sys_script",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_script",
+                        name="Incident State Guard",
+                        active=True,
+                        summary="before",
+                    )
+                ],
+                evidence=["sys_script:incident"],
+            )
+        ],
+        evidence=["sys_dictionary:incident", "sys_script:incident"],
+    )
+
+    packet = build_implementation_packet(
+        story=_story().model_copy(
+            update={
+                "short_description": "Add incident field after checking business rules",
+                "description": "Add a field to incident and account for business rules.",
+            }
+        ),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=table_context,
+        surface_context_bundle=bundle,
+    )
+
+    payload = packet.to_model_payload()
+
+    assert packet.instance_context_bundle is not None
+    assert packet.instance_context_bundle["target_table"] == "incident"
+    assert packet.context_sufficiency["status"] == "sufficient"
+    assert "sys_script:incident" in packet.context_sufficiency["evidence"]
+    assert payload["instance_context_bundle"]["surfaces"][0]["surface"] == "business_rules"
+    assert "business-rule-sys-id" not in packet.model_dump_json()
+
+
+def test_build_implementation_packet_marks_missing_required_surface_insufficient() -> None:
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="description",
+                column_label="Description",
+                internal_type="string",
+            )
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="description-element",
+                        element="description",
+                        position=2,
+                    )
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:incident"],
+    )
+    bundle = ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "form_layout", "flows"],
+        table_context=table_context,
+        surfaces=[],
+        missing_required_surfaces=["flows"],
+        evidence=["sys_dictionary:incident"],
+    )
+
+    packet = build_implementation_packet(
+        story=_story().model_copy(
+            update={
+                "short_description": "Update Incident Flow",
+                "description": "Update the Incident Flow before adding a field.",
+            }
+        ),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=table_context,
+        surface_context_bundle=bundle,
+    )
+
+    assert packet.context_sufficiency["status"] == "insufficient"
+    assert packet.context_sufficiency["missing_context"] == ["flows"]
+    assert packet.to_model_payload()["controls"]["context_escalation"] == {
+        "action": "manual_review",
+        "should_retrieve": False,
+        "should_call_model": False,
+        "reasons": ["context_insufficient:flows"],
+    }
 
 
 def test_build_implementation_packet_marks_missing_instance_context_for_retrieval() -> None:
@@ -328,12 +500,17 @@ def test_generate_implementation_candidate_rejects_missing_rollback_notes() -> N
 
 def test_generate_implementation_update_set_candidate_maps_validated_model_response() -> None:
     provider = RecordingImplementationProvider()
-
-    candidate = generate_implementation_update_set_candidate(
+    packet = build_implementation_packet(
         story=_story(),
         policy=_policy(),
         provider_policy=_provider_policy(),
         rags=_rags(),
+        discovery_context=_discovery_context(),
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_policy(),
         provider=provider,
     )
 
@@ -366,12 +543,17 @@ def test_generate_implementation_update_set_candidate_treats_placeholder_sys_id_
             "rollback_notes": ["Remove field from form."],
         }
     )
-
-    candidate = generate_implementation_update_set_candidate(
+    packet = build_implementation_packet(
         story=_story(),
         policy=_policy(),
         provider_policy=_provider_policy(),
         rags=_rags(),
+        discovery_context=_discovery_context(),
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_policy(),
         provider=provider,
     )
 
@@ -392,4 +574,4 @@ def test_generate_implementation_update_set_candidate_skips_provider_for_manual_
     assert candidate.status is CandidateStatus.MANUAL_BUILD
     assert candidate.eligibility_decision == "manual_review"
     assert candidate.changes == []
-    assert "deterministic safety gate" in candidate.reviewer_notes[0]
+    assert "deterministic safety or context gate" in candidate.reviewer_notes[0]

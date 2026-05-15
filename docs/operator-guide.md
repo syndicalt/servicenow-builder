@@ -249,7 +249,11 @@ The model-facing schema requires ServiceNow field mutations as explicit `name/va
 
 Runtime OpenAI use is disabled unless `JEDI_MODEL_PROVIDER=openai` is set. `OPENAI_API_KEY` and `OPENAI_MODEL` must also be present when that provider is enabled. Having `OPENAI_API_KEY` in the host environment does not by itself activate model calls.
 
-When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-claim path, then `model_candidate_fulfillment_handler` builds an `implementation_packet`, calls `OpenAIResponsesProvider`, validates the model response, and returns DB-ready JSON artifacts for the implementation packet and implementation candidate. The worker stores both artifacts in `artifact_blobs`, records DB-backed `artifact_refs`, and writes a ServiceNow work note keyed to the fulfillment job id. The model stage does not apply model-generated platform changes.
+When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-claim path, then `model_candidate_fulfillment_handler` builds an `instance_context_bundle`, builds an `implementation_packet`, calls `OpenAIResponsesProvider` only when context is sufficient, validates the model response, and returns DB-ready JSON artifacts for the context bundle, implementation packet, and implementation candidate. The worker stores those artifacts in `artifact_blobs`, records DB-backed `artifact_refs`, and writes a ServiceNow work note keyed to the fulfillment job id. The model stage does not apply model-generated platform changes.
+
+Before model generation, the worker investigates the target ServiceNow surface. This is broader than table/form metadata. Depending on story signals, the `instance_context_bundle` can include table schema, form layout, Business Rules, Client Scripts, UI Policies, Flow Designer records, Script Includes, ACL indicators, CMDB/discovery indicators, outbound REST integration surfaces, and public documentation queries routed through the approved RAG boundary.
+
+The worker uses read-only Table API retrieval for live instance surfaces and does not call public documentation sites directly at runtime. Public documentation context must come through curated or approved RAG sources with citations. If required context cannot be retrieved, the implementation packet records `context_sufficiency.status=insufficient`, the provider is not called, and the story receives human-review or clarification feedback rather than a guessed implementation.
 
 ## Capability-Based Automation Gate
 
