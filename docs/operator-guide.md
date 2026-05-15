@@ -255,6 +255,17 @@ Use the story number plus `correlation_id` to connect ServiceNow work notes, the
 
 Admin diagnostics remain minimized. Raw lifecycle payload JSON is not returned by list views, ServiceNow sys_ids are not shown in the dashboard, and diagnostic database URL passwords are redacted before `last_error` is returned by admin job views.
 
+### Rate Limits and Payload Bounds
+
+The hosted API applies bounded request handling before expensive processing:
+
+- Lifecycle webhook bodies over `JEDI_LIFECYCLE_WEBHOOK_MAX_BODY_BYTES` are rejected with `413`.
+- Lifecycle webhook bursts over `JEDI_LIFECYCLE_RATE_LIMIT_MAX_REQUESTS` within `JEDI_LIFECYCLE_RATE_LIMIT_WINDOW_SECONDS` are rejected with `429`.
+- Admin JSON endpoints use `JEDI_ADMIN_RATE_LIMIT_MAX_REQUESTS` and `JEDI_ADMIN_RATE_LIMIT_WINDOW_SECONDS` and return `429` when exceeded.
+- Admin list endpoints cap requested limits at 100 rows even when callers request a larger value.
+
+Defaults are intentionally conservative for the PDI/Railway MVP: lifecycle webhooks allow 64 KiB bodies, 60 lifecycle calls per 60 seconds, and 120 admin calls per 60 seconds. These controls are a per-process MVP control. They are not a distributed Federal production abuse-control boundary. Production should also enforce request size, request rate, IP reputation, and alerting at an edge, WAF, or API gateway layer approved by the customer environment.
+
 ### Production Runtime Fail-Closed Checklist
 
 Production API and worker entrypoints call `validate_runtime_settings()` before opening the operational store or processing work. Development can run with local defaults, but `JEDI_ENVIRONMENT=production` fails closed unless the runtime posture is explicit.

@@ -14,6 +14,7 @@ from jedi_devproject.operational_store import (
     FulfillmentJobRecord,
     LifecycleEventRecord,
 )
+from jedi_devproject.rate_limit import InMemoryRateLimiter
 from jedi_devproject.runtime import (
     RuntimeConfigError,
     RuntimeSettings,
@@ -41,6 +42,8 @@ class FakeRuntimeStore:
         self.artifact_ref_records: dict[str, list[ArtifactRefRecord]] = {}
         self.lifecycle_event_records: list[LifecycleEventRecord] = []
         self.fulfillment_job_records: list[FulfillmentJobRecord] = []
+        self.lifecycle_event_limits: list[int] = []
+        self.fulfillment_job_limits: list[int] = []
         self.next_artifact_id = 1
         self.closed = False
 
@@ -184,9 +187,11 @@ class FakeRuntimeStore:
         return self.artifact_ref_records.get(job_id, [])
 
     def recent_lifecycle_events(self, *, limit: int = 50) -> list[LifecycleEventRecord]:
+        self.lifecycle_event_limits.append(limit)
         return self.lifecycle_event_records[:limit]
 
     def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]:
+        self.fulfillment_job_limits.append(limit)
         return self.fulfillment_job_records[:limit]
 
 
@@ -476,6 +481,11 @@ def test_load_runtime_settings_reads_lifecycle_webhook_hmac_config(tmp_path: Pat
                 "JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=hmac_sha256",
                 "JEDI_LIFECYCLE_WEBHOOK_SECRET=webhook-secret",
                 "JEDI_LIFECYCLE_WEBHOOK_MAX_SKEW_SECONDS=120",
+                "JEDI_LIFECYCLE_WEBHOOK_MAX_BODY_BYTES=4096",
+                "JEDI_LIFECYCLE_RATE_LIMIT_MAX_REQUESTS=5",
+                "JEDI_LIFECYCLE_RATE_LIMIT_WINDOW_SECONDS=30",
+                "JEDI_ADMIN_RATE_LIMIT_MAX_REQUESTS=7",
+                "JEDI_ADMIN_RATE_LIMIT_WINDOW_SECONDS=45",
             ]
         ),
         encoding="utf-8",
@@ -486,6 +496,11 @@ def test_load_runtime_settings_reads_lifecycle_webhook_hmac_config(tmp_path: Pat
     assert settings.lifecycle_webhook_auth_mode == "hmac_sha256"
     assert settings.lifecycle_webhook_secret == "webhook-secret"
     assert settings.lifecycle_webhook_max_skew_seconds == 120
+    assert settings.lifecycle_webhook_max_body_bytes == 4096
+    assert settings.lifecycle_rate_limit_max_requests == 5
+    assert settings.lifecycle_rate_limit_window_seconds == 30
+    assert settings.admin_rate_limit_max_requests == 7
+    assert settings.admin_rate_limit_window_seconds == 45
 
 
 def test_validate_runtime_settings_allows_development_disabled_auth(
@@ -954,6 +969,25 @@ def test_admin_lifecycle_events_lists_recent_events(tmp_path: Path) -> None:
     assert "story_sys_id" not in response.text
 
 
+def test_admin_lifecycle_events_caps_excessive_limits(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/admin/lifecycle-events?limit=100000",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"events": []}
+    assert store.lifecycle_event_limits == [100]
+
+
 def test_admin_jobs_lists_recent_fulfillment_jobs(tmp_path: Path) -> None:
     store = FakeRuntimeStore()
     store.fulfillment_job_records = [
@@ -991,6 +1025,53 @@ def test_admin_jobs_lists_recent_fulfillment_jobs(tmp_path: Path) -> None:
             }
         ]
     }
+
+
+def test_admin_jobs_rate_limits_repeated_requests(tmp_path: Path) -> None:
+    now = [1000.0]
+    store = FakeRuntimeStore()
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+            admin_rate_limiter=InMemoryRateLimiter(
+                max_requests=2,
+                window_seconds=60,
+                clock=lambda: now[0],
+            ),
+        )
+    )
+    headers = {"Authorization": "Bearer admin-token"}
+
+    assert client.get("/admin/jobs", headers=headers).status_code == 200
+    assert client.get("/admin/jobs", headers=headers).status_code == 200
+    response = client.get("/admin/jobs", headers=headers)
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "rate limit exceeded"
+
+
+def test_admin_jobs_uses_runtime_rate_limit_settings(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    settings = _settings_with_admin_token(tmp_path).model_copy(
+        update={
+            "admin_rate_limit_max_requests": 1,
+            "admin_rate_limit_window_seconds": 60,
+        }
+    )
+    client = TestClient(
+        create_runtime_api(
+            settings=settings,
+            store_factory=lambda _database_url: store,
+        )
+    )
+    headers = {"Authorization": "Bearer admin-token"}
+
+    assert client.get("/admin/jobs", headers=headers).status_code == 200
+    response = client.get("/admin/jobs", headers=headers)
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "rate limit exceeded"
 
 
 def test_admin_jobs_redacts_sensitive_diagnostics(tmp_path: Path) -> None:

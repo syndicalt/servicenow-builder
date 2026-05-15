@@ -15,6 +15,7 @@ from jedi_devproject.lifecycle_events import (
     plan_story_ready_lifecycle_event,
 )
 from jedi_devproject.operational_store import FulfillmentJobRecord, LifecycleEventRecord
+from jedi_devproject.rate_limit import InMemoryRateLimiter
 
 
 class LifecycleEventStore(Protocol):
@@ -82,6 +83,8 @@ def create_lifecycle_api(
     webhook_secret: str | None = None,
     runtime_environment: str = "development",
     webhook_max_skew_seconds: int = 300,
+    max_request_body_bytes: int = 64 * 1024,
+    rate_limiter: InMemoryRateLimiter | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Jedi DevProject Lifecycle API",
@@ -113,6 +116,11 @@ def create_lifecycle_api(
         ),
     ) -> LifecycleWebhookResponse:
         body = await request.body()
+        _require_request_size(body=body, max_request_body_bytes=max_request_body_bytes)
+        _require_rate_limit(
+            rate_limiter=rate_limiter,
+            key=_request_rate_limit_key(request),
+        )
         _require_lifecycle_webhook_auth(
             auth_mode=webhook_auth_mode,
             configured_secret=webhook_secret,
@@ -177,6 +185,37 @@ def create_lifecycle_api(
         )
 
     return app
+
+
+def _require_request_size(*, body: bytes, max_request_body_bytes: int) -> None:
+    if max_request_body_bytes < 1:
+        raise RuntimeError("max_request_body_bytes must be at least 1")
+    if len(body) > max_request_body_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="lifecycle webhook payload is too large",
+        )
+
+
+def _require_rate_limit(
+    *,
+    rate_limiter: InMemoryRateLimiter | None,
+    key: str,
+) -> None:
+    if rate_limiter is None:
+        return
+    decision = rate_limiter.check(key)
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate limit exceeded",
+            headers={"Retry-After": str(decision.retry_after_seconds)},
+        )
+
+
+def _request_rate_limit_key(request: Request) -> str:
+    client_host = request.client.host if request.client is not None else "unknown"
+    return f"{client_host}:{request.url.path}"
 
 
 def _require_lifecycle_webhook_auth(

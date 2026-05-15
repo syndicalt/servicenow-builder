@@ -616,6 +616,30 @@ def test_sprint_one_hundred_nine_change_log_documents_audit_correlation() -> Non
     assert "diagnostic database URL passwords" in change_log
 
 
+def test_operator_guide_documents_rate_limit_and_payload_bounds() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Rate Limits and Payload Bounds" in guide
+    assert "JEDI_LIFECYCLE_WEBHOOK_MAX_BODY_BYTES" in guide
+    assert "JEDI_LIFECYCLE_RATE_LIMIT_MAX_REQUESTS" in guide
+    assert "JEDI_ADMIN_RATE_LIMIT_MAX_REQUESTS" in guide
+    assert "429" in guide
+    assert "413" in guide
+    assert "per-process MVP control" in guide
+    assert "edge, WAF, or API gateway" in guide
+
+
+def test_sprint_one_hundred_ten_change_log_documents_abuse_controls() -> None:
+    change_log = Path("docs/sprints/sprint-110-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 110 Change Log" in change_log
+    assert "request body size" in change_log
+    assert "InMemoryRateLimiter" in change_log
+    assert "429" in change_log
+    assert "413" in change_log
+    assert "per-process" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

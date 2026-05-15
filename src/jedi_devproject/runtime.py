@@ -49,6 +49,7 @@ from jedi_devproject.operational_store import (
     connect_operational_store,
 )
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
+from jedi_devproject.rate_limit import InMemoryRateLimiter
 from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import (
     HttpTransport,
@@ -87,6 +88,11 @@ class RuntimeSettings(BaseModel):
     lifecycle_webhook_auth_mode: LifecycleWebhookAuthMode = "disabled"
     lifecycle_webhook_secret: str | None = None
     lifecycle_webhook_max_skew_seconds: int = 300
+    lifecycle_webhook_max_body_bytes: int = 64 * 1024
+    lifecycle_rate_limit_max_requests: int = 60
+    lifecycle_rate_limit_window_seconds: int = 60
+    admin_rate_limit_max_requests: int = 120
+    admin_rate_limit_window_seconds: int = 60
     update_set_apply: bool = False
     update_set_user_name: str | None = None
 
@@ -154,6 +160,26 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
             values.get("JEDI_LIFECYCLE_WEBHOOK_MAX_SKEW_SECONDS"),
             default=300,
         ),
+        lifecycle_webhook_max_body_bytes=_int_value(
+            values.get("JEDI_LIFECYCLE_WEBHOOK_MAX_BODY_BYTES"),
+            default=64 * 1024,
+        ),
+        lifecycle_rate_limit_max_requests=_int_value(
+            values.get("JEDI_LIFECYCLE_RATE_LIMIT_MAX_REQUESTS"),
+            default=60,
+        ),
+        lifecycle_rate_limit_window_seconds=_int_value(
+            values.get("JEDI_LIFECYCLE_RATE_LIMIT_WINDOW_SECONDS"),
+            default=60,
+        ),
+        admin_rate_limit_max_requests=_int_value(
+            values.get("JEDI_ADMIN_RATE_LIMIT_MAX_REQUESTS"),
+            default=120,
+        ),
+        admin_rate_limit_window_seconds=_int_value(
+            values.get("JEDI_ADMIN_RATE_LIMIT_WINDOW_SECONDS"),
+            default=60,
+        ),
         update_set_apply=_truthy(values.get("JEDI_UPDATE_SET_APPLY")),
         update_set_user_name=_optional_str(values.get("JEDI_UPDATE_SET_USER_NAME")),
     )
@@ -199,8 +225,18 @@ def create_runtime_api(
     *,
     settings: RuntimeSettings,
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
+    lifecycle_rate_limiter: InMemoryRateLimiter | None = None,
+    admin_rate_limiter: InMemoryRateLimiter | None = None,
 ) -> FastAPI:
     validate_runtime_settings(settings)
+    lifecycle_limiter = lifecycle_rate_limiter or _rate_limiter(
+        max_requests=settings.lifecycle_rate_limit_max_requests,
+        window_seconds=settings.lifecycle_rate_limit_window_seconds,
+    )
+    admin_limiter = admin_rate_limiter or _rate_limiter(
+        max_requests=settings.admin_rate_limit_max_requests,
+        window_seconds=settings.admin_rate_limit_window_seconds,
+    )
     store = store_factory(settings.database_url)
     app = create_lifecycle_api(
         store=store,
@@ -208,6 +244,8 @@ def create_runtime_api(
         webhook_secret=settings.lifecycle_webhook_secret,
         runtime_environment=settings.runtime_environment,
         webhook_max_skew_seconds=settings.lifecycle_webhook_max_skew_seconds,
+        max_request_body_bytes=settings.lifecycle_webhook_max_body_bytes,
+        rate_limiter=lifecycle_limiter,
     )
 
     @app.get("/artifacts/{artifact_id}")
@@ -215,6 +253,7 @@ def create_runtime_api(
         artifact_id: int,
         authorization: str | None = Header(default=None),
     ) -> dict[str, Any]:
+        _require_admin_rate_limit(admin_rate_limiter=admin_limiter, key="artifacts")
         _require_admin_token(settings=settings, authorization=authorization)
         try:
             artifact = store.get_artifact_blob(artifact_id)
@@ -230,6 +269,7 @@ def create_runtime_api(
         job_id: str,
         authorization: str | None = Header(default=None),
     ) -> dict[str, Any]:
+        _require_admin_rate_limit(admin_rate_limiter=admin_limiter, key="job-artifacts")
         _require_admin_token(settings=settings, authorization=authorization)
         return {
             "job_id": job_id,
@@ -243,6 +283,7 @@ def create_runtime_api(
         authorization: str | None = Header(default=None),
         limit: int = 50,
     ) -> dict[str, Any]:
+        _require_admin_rate_limit(admin_rate_limiter=admin_limiter, key="lifecycle-events")
         _require_admin_token(settings=settings, authorization=authorization)
         safe_limit = _bounded_limit(limit)
         return {
@@ -257,6 +298,7 @@ def create_runtime_api(
         authorization: str | None = Header(default=None),
         limit: int = 50,
     ) -> dict[str, Any]:
+        _require_admin_rate_limit(admin_rate_limiter=admin_limiter, key="jobs")
         _require_admin_token(settings=settings, authorization=authorization)
         safe_limit = _bounded_limit(limit)
         return {
@@ -318,6 +360,22 @@ def _require_admin_token(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="admin bearer token rejected",
+        )
+
+
+def _require_admin_rate_limit(
+    *,
+    admin_rate_limiter: InMemoryRateLimiter | None,
+    key: str,
+) -> None:
+    if admin_rate_limiter is None:
+        return
+    decision = admin_rate_limiter.check(key)
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate limit exceeded",
+            headers={"Retry-After": str(decision.retry_after_seconds)},
         )
 
 
@@ -792,6 +850,12 @@ def process_one_runtime_fulfillment(
 
 def _runtime_environment(settings: RuntimeSettings) -> str:
     return settings.runtime_environment.strip().lower()
+
+
+def _rate_limiter(*, max_requests: int, window_seconds: int) -> InMemoryRateLimiter | None:
+    if max_requests < 1 or window_seconds < 1:
+        return None
+    return InMemoryRateLimiter(max_requests=max_requests, window_seconds=window_seconds)
 
 
 def _servicenow_client_from_settings(

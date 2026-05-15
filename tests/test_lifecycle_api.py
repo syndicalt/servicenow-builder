@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from jedi_devproject.lifecycle_api import create_lifecycle_api
 from jedi_devproject.lifecycle_events import LifecycleStateChangeEvent
 from jedi_devproject.operational_store import FulfillmentJobRecord, LifecycleEventRecord
+from jedi_devproject.rate_limit import InMemoryRateLimiter
 
 
 class FakeOperationalStore:
@@ -236,6 +237,49 @@ def test_lifecycle_webhook_records_ready_event_and_enqueues_fulfillment() -> Non
     assert [event.event_id for event in store.recorded_events] == ["evt-20260513-001"]
     assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
     assert store.closed_story_jobs == []
+
+
+def test_lifecycle_webhook_rejects_oversized_payload_before_recording() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(create_lifecycle_api(store=store, max_request_body_bytes=32))
+
+    response = client.post(
+        "/lifecycle/events",
+        content=json.dumps(_ready_event_payload()).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "lifecycle webhook payload is too large"
+    assert store.recorded_events == []
+    assert store.enqueued_jobs == []
+
+
+def test_lifecycle_webhook_rate_limits_repeated_requests_before_recording() -> None:
+    now = [1000.0]
+    store = FakeOperationalStore()
+    limiter = InMemoryRateLimiter(
+        max_requests=2,
+        window_seconds=60,
+        clock=lambda: now[0],
+    )
+    client = TestClient(create_lifecycle_api(store=store, rate_limiter=limiter))
+
+    assert client.post("/lifecycle/events", json=_ready_event_payload()).status_code == 202
+    payload_two = _ready_event_payload()
+    payload_two["event_id"] = "evt-20260513-002"
+    assert client.post("/lifecycle/events", json=payload_two).status_code == 202
+    payload_three = _ready_event_payload()
+    payload_three["event_id"] = "evt-20260513-003"
+
+    response = client.post("/lifecycle/events", json=payload_three)
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "rate limit exceeded"
+    assert [event.event_id for event in store.recorded_events] == [
+        "evt-20260513-001",
+        "evt-20260513-002",
+    ]
 
 
 def test_lifecycle_webhook_hmac_auth_requires_signature_before_recording() -> None:
