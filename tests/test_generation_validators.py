@@ -8,6 +8,7 @@ from jedi_devproject.flow_designer_generation import (
     flow_xml_shape_repository,
     plan_flow_graph_builder,
     validate_flow_graph_diff_candidate,
+    validate_flow_xml_shape_evidence,
 )
 from jedi_devproject.models import CandidateChange
 from jedi_devproject.script_include_generation import script_include_customer_updates
@@ -323,6 +324,78 @@ def test_flow_xml_shape_repository_rejects_unknown_shape_lookup() -> None:
 
     with pytest.raises(KeyError, match="Flow XML shape not found"):
         repository.shape("sys_hub_spoke_instance")
+
+
+def test_flow_xml_shape_evidence_validator_accepts_review_sample() -> None:
+    evidence = validate_flow_xml_shape_evidence(
+        table="sys_hub_action_instance",
+        xml_payload=(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<record_update>'
+            '<sys_hub_action_instance action="INSERT_OR_UPDATE">'
+            "<sys_id>action-sys-id</sys_id>"
+            "<sys_update_name>sys_hub_action_instance_action-sys-id</sys_update_name>"
+            "<flow>flow-sys-id</flow>"
+            "<action_type>set_field_value</action_type>"
+            "<display_text>Set Assignment group</display_text>"
+            "<order>100</order>"
+            "</sys_hub_action_instance>"
+            "</record_update>"
+        ),
+    )
+
+    assert evidence.table == "sys_hub_action_instance"
+    assert evidence.repository_version == "flow-xml-shapes-v1"
+    assert evidence.record_element == "sys_hub_action_instance"
+    assert evidence.required_fields_present == [
+        "sys_id",
+        "sys_update_name",
+        "flow",
+        "action_type",
+        "display_text",
+        "order",
+    ]
+    assert evidence.forbidden_fields_absent is True
+    assert evidence.runtime_generation_enabled is False
+    assert evidence.retrieved_update_set_handoff_enabled is False
+
+
+def test_flow_xml_shape_evidence_validator_rejects_missing_required_field() -> None:
+    with pytest.raises(ValueError, match="Flow XML shape evidence missing required field: flow"):
+        validate_flow_xml_shape_evidence(
+            table="sys_hub_action_instance",
+            xml_payload=(
+                "<record_update>"
+                '<sys_hub_action_instance action="INSERT_OR_UPDATE">'
+                "<sys_id>action-sys-id</sys_id>"
+                "<sys_update_name>sys_hub_action_instance_action-sys-id</sys_update_name>"
+                "<action_type>set_field_value</action_type>"
+                "<display_text>Set Assignment group</display_text>"
+                "<order>100</order>"
+                "</sys_hub_action_instance>"
+                "</record_update>"
+            ),
+        )
+
+
+def test_flow_xml_shape_evidence_validator_rejects_forbidden_field() -> None:
+    with pytest.raises(ValueError, match="Flow XML shape evidence contains forbidden field"):
+        validate_flow_xml_shape_evidence(
+            table="sys_hub_flow",
+            xml_payload=(
+                "<record_update>"
+                '<sys_hub_flow action="INSERT_OR_UPDATE">'
+                "<sys_id>flow-sys-id</sys_id>"
+                "<sys_update_name>sys_hub_flow_flow-sys-id</sys_update_name>"
+                "<name>Incident Triage</name>"
+                "<active>true</active>"
+                "<status>published</status>"
+                "<latest_snapshot>snapshot-sys-id</latest_snapshot>"
+                "<sys_updated_by>admin</sys_updated_by>"
+                "</sys_hub_flow>"
+                "</record_update>"
+            ),
+        )
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:

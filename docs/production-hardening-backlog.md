@@ -46,6 +46,7 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 25 | Sprint 126 | Flow graph diff contract validation | Flow mutation needs a structured model output contract before any builder can create customer updates. | Add validation-only `sys_hub_flow_graph_diff` support for narrow `add_action` and `update_condition` diffs, reject raw XML and unretrieved node references, and keep retrieved Update Set handoff disabled for Flow Designer. |
 | 26 | Sprint 127 | Flow builder preflight design | A future Flow builder must prove graph freshness and required XML-shape evidence before creating customer updates. | Add design-only builder preflight planning, verify retrieved graph hash, reject premature customer updates, keep runtime generation disabled, and keep retrieved Update Set handoff disabled. |
 | 27 | Sprint 128 | Flow XML shape repository | A future Flow builder needs explicit reviewed XML shape metadata before it can emit customer updates. | Add `flow-xml-shapes-v1` metadata for `sys_hub_flow`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2`, connect it to builder preflight, and keep Flow XML generation disabled. |
+| 28 | Sprint 129 | Flow XML shape evidence validation | A future Flow builder needs to prove retrieved XML review samples match the repository contract before customer updates can be emitted. | Add validation-only Flow XML evidence checks for root, action, required fields, and forbidden fields; expose `xml_shape_evidence_validator_available`; keep Flow XML generation and retrieved Update Set handoff disabled. |
 
 ## Review Gates
 
@@ -108,5 +109,6 @@ Review for:
 25. Sprint 126: Flow graph diff contract validation.
 26. Sprint 127: Flow builder preflight design.
 27. Sprint 128: Flow XML shape repository.
+28. Sprint 129: Flow XML shape evidence validation.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

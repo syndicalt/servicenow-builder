@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Literal
+from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -123,6 +124,20 @@ class FlowXmlShapeRepository(BaseModel):
         raise KeyError(f"Flow XML shape not found: {table}")
 
 
+class FlowXmlShapeEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    table: str
+    repository_version: Literal["flow-xml-shapes-v1"]
+    root_element: Literal["record_update"]
+    record_element: str
+    action: Literal["INSERT_OR_UPDATE"]
+    required_fields_present: list[str]
+    forbidden_fields_absent: bool
+    runtime_generation_enabled: bool
+    retrieved_update_set_handoff_enabled: bool
+
+
 def validate_flow_graph_diff_candidate(
     *,
     changes: list[CandidateChange],
@@ -184,6 +199,7 @@ def plan_flow_graph_builder(
         ],
         required_builder_evidence=[
             "xml_shape_repository_available",
+            "xml_shape_evidence_validator_available",
             "customer_update_name_strategy_defined",
             "flow_snapshot_update_strategy_defined",
             "rollback_customer_update_strategy_defined",
@@ -191,6 +207,43 @@ def plan_flow_graph_builder(
         ],
         xml_shape_repository_version=repository.version,
         xml_shape_tables=[shape.table for shape in repository.shapes],
+    )
+
+
+def validate_flow_xml_shape_evidence(*, table: str, xml_payload: str) -> FlowXmlShapeEvidence:
+    repository = flow_xml_shape_repository()
+    shape = repository.shape(table)
+    try:
+        root = ElementTree.fromstring(xml_payload)
+    except ElementTree.ParseError as exc:
+        raise ValueError("Flow XML shape evidence is not valid XML") from exc
+    if root.tag != shape.root_element:
+        raise ValueError(f"Flow XML shape evidence root must be {shape.root_element}")
+    record = root.find(shape.record_element)
+    if record is None:
+        raise ValueError(f"Flow XML shape evidence missing record element: {shape.record_element}")
+    if record.attrib.get("action") != shape.action:
+        raise ValueError(f"Flow XML shape evidence action must be {shape.action}")
+    child_tags = {child.tag for child in record}
+    required_fields_present: list[str] = []
+    for field_name in shape.required_fields:
+        field = record.find(field_name)
+        if field is None or (field.text is None or field.text.strip() == ""):
+            raise ValueError(f"Flow XML shape evidence missing required field: {field_name}")
+        required_fields_present.append(field_name)
+    for field_name in shape.forbidden_fields:
+        if field_name in child_tags:
+            raise ValueError(f"Flow XML shape evidence contains forbidden field: {field_name}")
+    return FlowXmlShapeEvidence(
+        table=shape.table,
+        repository_version=repository.version,
+        root_element=shape.root_element,
+        record_element=shape.record_element,
+        action=shape.action,
+        required_fields_present=required_fields_present,
+        forbidden_fields_absent=True,
+        runtime_generation_enabled=repository.runtime_generation_enabled,
+        retrieved_update_set_handoff_enabled=repository.retrieved_update_set_handoff_enabled,
     )
 
 

@@ -359,6 +359,8 @@ Sprint 127 adds Flow Designer builder preflight planning. The preflight verifies
 
 Sprint 128 adds the Flow XML shape repository `flow-xml-shapes-v1`. The repository contains review metadata only for `sys_hub_flow`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2` customer-update shapes. It records the `record_update` root, `INSERT_OR_UPDATE` action, required fields, forbidden fields, and shape-specific review notes. There is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
 
+Sprint 129 adds the Flow XML shape evidence validator `validate_flow_xml_shape_evidence`. Operators and future researchers can use it to validate retrieved review samples against `flow-xml-shapes-v1` before any builder work is considered. The validator rejects malformed XML, wrong root or action values, missing required field evidence, and forbidden field evidence. It adds `xml_shape_evidence_validator_available` to the preflight evidence list, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

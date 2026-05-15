@@ -22,6 +22,8 @@ Sprint 127 adds Flow Designer builder preflight planning. The preflight verifies
 
 Sprint 128 adds the Flow XML shape repository `flow-xml-shapes-v1`. The repository documents approved customer-update shapes for `sys_hub_flow`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2`. These shapes are review metadata only; there is still no Flow XML builder and no retrieved Update Set handoff.
 
+Sprint 129 adds the Flow XML shape evidence validator `validate_flow_xml_shape_evidence`. The validator parses retrieved review samples and verifies the expected `record_update` root, `INSERT_OR_UPDATE` action, required fields, and forbidden field absence against `flow-xml-shapes-v1`. This is still no Flow XML builder and no retrieved Update Set handoff; it only proves whether collected XML evidence matches the repository contract.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -77,6 +79,7 @@ The builder converts validated structured graph output into retrieved Update Set
 The builder preflight requires these evidence items before implementation can move beyond design:
 
 - `xml_shape_repository_available`.
+- `xml_shape_evidence_validator_available`.
 - `customer_update_name_strategy_defined`.
 - `flow_snapshot_update_strategy_defined`.
 - `rollback_customer_update_strategy_defined`.
@@ -90,6 +93,16 @@ The Flow XML shape repository records:
 - required fields needed before a customer update can be emitted.
 - forbidden fields that should not be generated.
 - review notes explaining shape-specific risks.
+
+The Flow XML shape evidence validator records:
+
+- repository version used for validation.
+- target table and record element.
+- required fields present in the review sample.
+- fail-closed errors for missing required fields.
+- fail-closed errors for forbidden fields.
+- `runtime_generation_enabled=false`.
+- `retrieved_update_set_handoff_enabled=false`.
 
 ## Deterministic Validators
 
