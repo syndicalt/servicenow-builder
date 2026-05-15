@@ -79,9 +79,10 @@ def _script_include_intent(change: CandidateChange) -> ScriptIncludeIntent:
         raise ValueError("Script Include handoff supports insert only")
     fields = dict(change.fields)
     script = str(fields.get("script") or fields.get("script_body") or "")
+    name = str(fields.get("name") or fields.get("script_include_name") or "")
     return ScriptIncludeIntent(
-        name=str(fields.get("name") or fields.get("script_include_name") or ""),
-        api_name=str(fields.get("api_name") or ""),
+        name=name,
+        api_name=str(fields.get("api_name") or f"global.{name}"),
         scope=str(fields.get("scope") or "global"),
         client_callable=_bool_value(fields.get("client_callable")),
         active=_bool_value(fields.get("active"), default=True),

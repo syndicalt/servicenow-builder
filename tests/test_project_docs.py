@@ -2510,4 +2510,6 @@ def test_sprint_one_forty_seven_change_log_documents_script_include_hardening() 
     assert "`script_includes`" in change_log
     assert "`form_layout`" in change_log
     assert "`script_include_generate`" in change_log
+    assert "`api_name`" in change_log
+    assert "`global.<Script Include name>`" in change_log
     assert "Sprint 147: Script Include structured story hardening" in backlog

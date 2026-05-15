@@ -1406,8 +1406,7 @@ def test_model_candidate_handler_generates_structured_script_include_from_uat_st
                     "operation": "insert",
                     "fields": {
                         "name": "JediUatIncidentTextUtils",
-                        "api_name": "global.JediUatIncidentTextUtils",
-                        "scope": "global",
+                        "access": "public",
                         "client_callable": False,
                         "active": True,
                         "description": "Utility helpers for Incident text normalization.",
@@ -1459,6 +1458,22 @@ def test_model_candidate_handler_generates_structured_script_include_from_uat_st
     assert candidate is not None
     assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
     assert candidate["changes"][0]["table"] == "sys_script_include"
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/174",
+                sha256="9" * 64,
+                artifact_id=174,
+            )
+        ]
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "<api_name>global.JediUatIncidentTextUtils</api_name>" in imported_xml
+    assert "sys_script_include_jediuatincidenttextutils" in imported_xml
 
 
 def test_model_candidate_handler_scopes_incomplete_structured_script_include_context() -> None:

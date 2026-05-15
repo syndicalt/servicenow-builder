@@ -715,6 +715,31 @@ def test_script_include_validator_infers_public_methods_from_script() -> None:
     assert "normalizeText" in updates[0]["payload"]
 
 
+def test_script_include_validator_infers_global_api_name_when_model_omits_it() -> None:
+    updates = script_include_customer_updates(
+        changes=[
+            _script_include_change(
+                name="JediUatIncidentTextUtils",
+                api_name="",
+                scope="",
+                public_methods=[],
+                script=(
+                    "var JediUatIncidentTextUtils = Class.create();\n"
+                    "JediUatIncidentTextUtils.prototype = {\n"
+                    "    initialize: function() {},\n"
+                    "    normalizeText: function(value) { return String(value || '').trim(); },\n"
+                    "    type: 'JediUatIncidentTextUtils'\n"
+                    "};"
+                ),
+            )
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    assert updates[0]["target_name"] == "JediUatIncidentTextUtils"
+    assert "<api_name>global.JediUatIncidentTextUtils</api_name>" in updates[0]["payload"]
+
+
 def test_client_script_validator_rejects_undeclared_clear_value_write() -> None:
     change = _client_script_change(
         script=(
