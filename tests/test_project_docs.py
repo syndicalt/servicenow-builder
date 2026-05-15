@@ -505,6 +505,17 @@ def test_sprint_one_hundred_four_change_log_documents_signed_servicenow_emitter(
     assert "Kept the secret value out" in change_log
 
 
+def test_sprint_one_hundred_five_change_log_documents_hmac_cutover() -> None:
+    change_log = Path("docs/sprints/sprint-105-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 105 Change Log" in change_log
+    assert "x_jedi.lifecycle.webhook.secret" in change_log
+    assert "JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=hmac_sha256" in change_log
+    assert "unsigned `POST /lifecycle/events` returned `401`" in change_log
+    assert "signed `sha256-base64` `POST /lifecycle/events` returned `202`" in change_log
+    assert "it is not recorded" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
