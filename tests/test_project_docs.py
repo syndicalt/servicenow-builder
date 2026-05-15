@@ -2499,3 +2499,15 @@ def test_sprint_one_forty_six_change_log_documents_dictionary_form_intent_aliase
     assert "`Placement position:`" in change_log
     assert "`dictionary_field_create`" in change_log
     assert "Sprint 146: Dictionary/form typed intent alias hardening" in backlog
+
+
+def test_sprint_one_forty_seven_change_log_documents_script_include_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-147-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "STRY0010023" in change_log
+    assert "`Fields written / affected: none`" in change_log
+    assert "`script_includes`" in change_log
+    assert "`form_layout`" in change_log
+    assert "`script_include_generate`" in change_log
+    assert "Sprint 147: Script Include structured story hardening" in backlog

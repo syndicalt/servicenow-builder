@@ -208,11 +208,20 @@ def _surface_context_for_story(
         target_table=target_table,
         story_text=story_text,
         public_doc_queries=_public_doc_queries(story_text),
-        required_surfaces_override=cast(
-            list[SurfaceName] | None,
-            assessment.required_instance_context or None,
-        ),
+        required_surfaces_override=_required_surfaces_for_assessment(assessment),
     )
+
+
+def _required_surfaces_for_assessment(assessment: Any) -> list[SurfaceName] | None:
+    if assessment.required_instance_context:
+        return cast(list[SurfaceName], assessment.required_instance_context)
+    automation_intent = assessment.automation_intent
+    if not isinstance(automation_intent, dict):
+        return None
+    required_context = automation_intent.get("required_instance_context")
+    if not isinstance(required_context, list):
+        return None
+    return cast(list[SurfaceName], [str(surface) for surface in required_context])
 
 
 CODE_SURFACE_MAP: dict[Capability, tuple[SurfaceName, str]] = {

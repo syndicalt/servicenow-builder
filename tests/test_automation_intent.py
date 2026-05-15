@@ -180,6 +180,49 @@ def test_extracts_structured_script_include_intent() -> None:
     assert intent.missing_details == []
 
 
+def test_extracts_script_include_intent_with_combined_fields_written_line() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010023",
+            short_description="JEDI UAT: Add Incident text normalization Script Include",
+            description=(
+                "Target artifact type: Script Include\n"
+                "Target table: global\n"
+                "Artifact name: JediUatIncidentTextUtils\n"
+                "API name: global.JediUatIncidentTextUtils\n"
+                "Scope: global\n"
+                "Client callable: false\n"
+                "Public methods: normalizeText(value)\n"
+                "Expected server-side behavior: normalizeText returns an empty string "
+                "for null or undefined input and returns the trimmed string value for "
+                "other input.\n"
+                "Tables read: none\n"
+                "Tables written: none\n"
+                "Fields read: none\n"
+                "Fields written / affected: none\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not use GlideRecord, outbound calls, credentials, "
+                "security changes, caller creation, or client callable behavior.\n"
+                "Rollback expectation: Delete the generated Script Include through the "
+                "retrieved Update Set review process."
+            ),
+        )
+    )
+
+    assert intent.intent_type is AutomationIntentType.SCRIPT_INCLUDE
+    assert intent.capability is Capability.SCRIPT_INCLUDE_GENERATE
+    assert intent.artifact_name == "JediUatIncidentTextUtils"
+    assert intent.target_table == "global"
+    assert intent.script_include_scope == "global"
+    assert intent.client_callable is False
+    assert intent.tables_read == []
+    assert intent.tables_written == []
+    assert intent.fields_read == []
+    assert intent.fields_written == []
+    assert intent.required_instance_context == ["script_includes"]
+    assert intent.missing_details == []
+
+
 def test_extracts_structured_dictionary_form_intent() -> None:
     intent = extract_automation_intent(
         _story(

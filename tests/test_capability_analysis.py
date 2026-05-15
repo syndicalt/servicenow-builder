@@ -486,6 +486,43 @@ def test_complete_script_include_story_is_eligible_for_automated_generation() ->
     assert assessment.reasons == ["supported utility script include generation request"]
 
 
+def test_structured_script_include_story_accepts_combined_fields_written_line() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010023",
+            short_description="JEDI UAT: Add Incident text normalization Script Include",
+            description=(
+                "Target artifact type: Script Include\n"
+                "Target table: global\n"
+                "Artifact name: JediUatIncidentTextUtils\n"
+                "API name: global.JediUatIncidentTextUtils\n"
+                "Scope: global\n"
+                "Client callable: false\n"
+                "Public methods: normalizeText(value)\n"
+                "Expected server-side behavior: normalizeText returns an empty string "
+                "for null or undefined input and returns the trimmed string value for "
+                "other input.\n"
+                "Tables read: none\n"
+                "Tables written: none\n"
+                "Fields read: none\n"
+                "Fields written / affected: none\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not use GlideRecord, outbound calls, credentials, "
+                "security changes, caller creation, or client callable behavior."
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.SCRIPT_INCLUDE_GENERATE}
+    assert assessment.target_table == "global"
+    assert assessment.required_instance_context == ["script_includes"]
+    assert assessment.missing_details == []
+    assert assessment.unsupported_capabilities == set()
+
+
 def test_script_include_story_with_fields_read_and_performs_is_not_dictionary_form() -> None:
     assessment = analyze_story_capabilities(
         _story(

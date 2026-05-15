@@ -1361,6 +1361,155 @@ def test_model_candidate_handler_generates_script_include_update_set_handoff() -
     assert updated_fields["u_ai_status"] == "Ready for Testing"
 
 
+def test_model_candidate_handler_generates_structured_script_include_from_uat_story() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010023",
+            short_description="JEDI UAT: Add Incident text normalization Script Include",
+            description=(
+                "Target artifact type: Script Include\n"
+                "Target table: global\n"
+                "Artifact name: JediUatIncidentTextUtils\n"
+                "API name: global.JediUatIncidentTextUtils\n"
+                "Scope: global\n"
+                "Client callable: false\n"
+                "Public methods: normalizeText(value)\n"
+                "Expected server-side behavior: normalizeText returns an empty string "
+                "for null or undefined input and returns the trimmed string value for "
+                "other input.\n"
+                "Tables read: none\n"
+                "Tables written: none\n"
+                "Fields read: none\n"
+                "Fields written / affected: none\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not use GlideRecord, outbound calls, credentials, "
+                "security changes, caller creation, or client callable behavior.\n"
+                "Rollback expectation: Delete the generated Script Include through the "
+                "retrieved Update Set review process."
+            ),
+            acceptance_criteria=(
+                "A Script Include named JediUatIncidentTextUtils is created in the "
+                "global scope. It exposes normalizeText(value) and performs no table writes."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_script_include",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "JediUatIncidentTextUtils",
+                        "api_name": "global.JediUatIncidentTextUtils",
+                        "scope": "global",
+                        "client_callable": False,
+                        "active": True,
+                        "description": "Utility helpers for Incident text normalization.",
+                        "script": (
+                            "var JediUatIncidentTextUtils = Class.create();\n"
+                            "JediUatIncidentTextUtils.prototype = {\n"
+                            "    initialize: function() {},\n"
+                            "    normalizeText: function(value) {\n"
+                            "        if (value === null || typeof value === 'undefined') {\n"
+                            "            return '';\n"
+                            "        }\n"
+                            "        return String(value).trim();\n"
+                            "    },\n"
+                            "    type: 'JediUatIncidentTextUtils'\n"
+                            "};"
+                        ),
+                        "public_methods": ["normalizeText(value)"],
+                        "tables_read": [],
+                        "tables_written": [],
+                        "fields_read": [],
+                        "fields_written": [],
+                    },
+                }
+            ],
+            "test_plan": ["Call normalizeText(' test ') and confirm test."],
+            "rollback_notes": ["Delete the generated Script Include."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010023"}))
+
+    payload = provider.payloads[0]
+    assert payload["controls"]["capability_assessment"]["capabilities"] == [
+        "script_include_generate"
+    ]
+    assert payload["instance_context_bundle"]["required_surfaces"] == ["script_includes"]
+    assert payload["controls"]["normalized_intent"]["missing_details"] == []
+    candidate = result.artifacts[2].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["table"] == "sys_script_include"
+
+
+def test_model_candidate_handler_scopes_incomplete_structured_script_include_context() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010993",
+            short_description="JEDI UAT: Incomplete Incident Script Include",
+            description=(
+                "Target artifact type: Script Include\n"
+                "Target table: global\n"
+                "Artifact name: JediIncompleteTextUtils\n"
+                "Scope: global\n"
+                "Client callable: false\n"
+                "Expected server-side behavior: normalizeText trims text.\n"
+                "Tables read: none\n"
+                "Tables written: none\n"
+                "Fields read: none"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010993"}))
+
+    assert provider.payloads == []
+    context_bundle = result.artifacts[0].payload_json
+    candidate = result.artifacts[2].payload_json
+    assert context_bundle is not None
+    assert context_bundle["required_surfaces"] == ["script_includes"]
+    assert candidate is not None
+    assert "missing detail: fields written" in candidate["eligibility_reasons"]
+    assert "context_insufficient:form_sections" not in candidate["eligibility_reasons"]
+    assert "context_insufficient:form_layout" not in candidate["eligibility_reasons"]
+
+
 def test_model_candidate_handler_generates_ui_policy_update_set_handoff() -> None:
     client = FakeModelClient(
         story=Story(

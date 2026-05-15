@@ -338,7 +338,10 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
                 ("tables read", "tables_read" in fields),
                 ("tables written", "tables_written" in fields),
                 ("fields read", "fields_read" in fields),
-                ("fields written", "fields_written" in fields),
+                (
+                    "fields written",
+                    "fields_written" in fields or "fields_written_affected" in fields,
+                ),
             ]
             if not present
         ]
