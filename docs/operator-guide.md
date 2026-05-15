@@ -255,6 +255,8 @@ Before model generation, the worker investigates the target ServiceNow surface. 
 
 The worker uses read-only Table API retrieval for live instance surfaces and does not call public documentation sites directly at runtime. Public documentation context must come through curated or approved RAG sources with citations. If required context cannot be retrieved, the implementation packet records `context_sufficiency.status=insufficient`, the provider is not called, and the story receives human-review or clarification feedback rather than a guessed implementation.
 
+Each surface context includes a confidence score and citation records with source table, query, and retrieved record count. Surface artifacts intentionally minimize executable or sensitive material: script bodies and conditions are replaced with redaction markers, ServiceNow sys_ids are not preserved in the model-facing bundle, and integration endpoint query strings are redacted. When context blocks model execution, the ServiceNow work note names the missing surface context directly.
+
 ## Capability-Based Automation Gate
 
 The capability-based automation gate is not table-based. In this gate, table names are metadata for risk, discovery, and validation; they are not allowlist gates by themselves.

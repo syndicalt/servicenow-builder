@@ -606,6 +606,35 @@ def test_model_fulfillment_writes_needs_clarification_feedback() -> None:
     assert "target table" in feedback_fields["work_notes"]
 
 
+def test_model_fulfillment_work_note_names_missing_surface_context() -> None:
+    candidate = cast(
+        Any,
+        type(
+            "Candidate",
+            (),
+            {
+                "eligibility_reasons": ["context_insufficient:flows"],
+                "status": CandidateStatus.MANUAL_BUILD,
+            },
+        )(),
+    )
+
+    fields = cast(
+        dict[str, str],
+        __import__(
+            "jedi_devproject.model_fulfillment",
+            fromlist=["_manual_feedback_fields"],
+        )._manual_feedback_fields(
+            story_number="STRY0010106",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/99",
+        ),
+    )
+
+    assert fields["u_ai_status"] == "Human Review Required"
+    assert "Missing ServiceNow context: flows" in fields["work_notes"]
+
+
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(
     tmp_path: Path,
 ) -> None:

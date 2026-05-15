@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal, Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -104,6 +105,8 @@ class ServiceNowSurfaceContext(BaseModel):
     required: bool
     records: list[ServiceNowSurfaceRecord] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    citations: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ServiceNowSurfaceContextBundle(BaseModel):
@@ -126,6 +129,12 @@ class ServiceNowSurfaceContextBundle(BaseModel):
             if context.surface == surface:
                 return len(context.records)
         return 0
+
+    def surface(self, surface: SurfaceName) -> ServiceNowSurfaceContext:
+        for context in self.surfaces:
+            if context.surface == surface:
+                return context
+        raise KeyError(f"surface context not found: {surface}")
 
 
 def discover_dictionary_form_context(
@@ -246,6 +255,14 @@ def discover_servicenow_surface_context(
                 for field in table_context.fields
             ],
             evidence=[f"sys_dictionary:{target_table}"],
+            confidence=1.0 if table_context.fields else 0.0,
+            citations=[
+                {
+                    "source_table": "sys_dictionary",
+                    "query": f"name={target_table}",
+                    "record_count": str(len(table_context.fields)),
+                }
+            ],
         ),
         ServiceNowSurfaceContext(
             surface="form_layout",
@@ -262,6 +279,14 @@ def discover_servicenow_surface_context(
                 for section in table_context.form_sections
             ],
             evidence=[f"sys_ui_section:{target_table}"],
+            confidence=1.0 if table_context.form_sections else 0.0,
+            citations=[
+                {
+                    "source_table": "sys_ui_section",
+                    "query": f"name={target_table}",
+                    "record_count": str(len(table_context.form_sections)),
+                }
+            ],
         ),
         _table_surface(
             client=client,
@@ -344,6 +369,15 @@ def discover_servicenow_surface_context(
                 for query in public_doc_queries
             ],
             evidence=[f"public_docs:{query}" for query in public_doc_queries],
+            confidence=0.8 if public_doc_queries else 0.0,
+            citations=[
+                {
+                    "source_table": "curated_rag",
+                    "query": query,
+                    "record_count": "1",
+                }
+                for query in public_doc_queries
+            ],
         ),
     ]
     missing_required_surfaces = [
@@ -415,6 +449,14 @@ def _table_surface(
             for record in records
         ],
         evidence=[evidence],
+        confidence=0.95 if records else 0.0,
+        citations=[
+            {
+                "source_table": source_table,
+                "query": _query_string(lookup),
+                "record_count": str(len(records)),
+            }
+        ],
     )
 
 
@@ -450,6 +492,8 @@ def _record_summary(record: dict[str, Any]) -> str:
     for field_name in ["short_description", "description", "type", "when", "rest_endpoint"]:
         value = str(record.get(field_name) or "").strip()
         if value:
+            if field_name == "rest_endpoint":
+                return _redact_url(value)
             return value
     return ""
 
@@ -460,7 +504,29 @@ def _record_metadata(
     exclude: set[str],
 ) -> dict[str, str]:
     return {
-        key: _display_or_value(value)
+        key: _minimize_metadata_value(key=key, value=value)
         for key, value in record.items()
         if key not in exclude and key != "sys_id"
     }
+
+
+def _query_string(lookup: dict[str, str]) -> str:
+    return "^".join(f"{key}={value}" for key, value in lookup.items())
+
+
+def _minimize_metadata_value(*, key: str, value: Any) -> str:
+    if key in {"script", "condition", "operation_script"}:
+        return "[redacted_script_body]"
+    text = _display_or_value(value)
+    if key in {"rest_endpoint", "endpoint", "url"}:
+        return _redact_url(text)
+    return text
+
+
+def _redact_url(value: str) -> str:
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return "[redacted_url]"
+    query = "[redacted_query]" if parts.query else ""
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))

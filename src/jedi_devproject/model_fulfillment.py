@@ -244,9 +244,21 @@ def _manual_feedback_fields(
             f"Automated implementation candidate for {story_number} did not create a "
             "retrieved Update Set. "
             f"Candidate artifact: {candidate_artifact_ref}. "
+            f"{_missing_context_note(candidate)}"
             f"Reasons: {reasons}."
         ),
     }
+
+
+def _missing_context_note(candidate: UpdateSetCandidate) -> str:
+    missing = [
+        reason.removeprefix("context_insufficient:")
+        for reason in candidate.eligibility_reasons
+        if reason.startswith("context_insufficient:")
+    ]
+    if not missing:
+        return ""
+    return f"Missing ServiceNow context: {', '.join(missing)}. "
 
 
 def _candidate_reasons(candidate: UpdateSetCandidate) -> str:

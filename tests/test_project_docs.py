@@ -539,6 +539,26 @@ def test_sprint_one_hundred_six_change_log_documents_surface_investigator() -> N
     assert "does not perform live public internet calls" in change_log
 
 
+def test_operator_guide_documents_surface_evidence_quality_controls() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "confidence score" in guide
+    assert "source table, query, and retrieved record count" in guide
+    assert "script bodies and conditions are replaced with redaction markers" in guide
+    assert "endpoint query strings are redacted" in guide
+    assert "work note names the missing surface context directly" in guide
+
+
+def test_sprint_one_hundred_seven_change_log_documents_evidence_quality() -> None:
+    change_log = Path("docs/sprints/sprint-107-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 107 Change Log" in change_log
+    assert "confidence scores" in change_log
+    assert "source table, query, and retrieved record count" in change_log
+    assert "Redacted script-like fields" in change_log
+    assert "Missing ServiceNow context: flows" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
