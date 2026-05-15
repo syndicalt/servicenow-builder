@@ -369,6 +369,54 @@ def test_complete_client_script_story_is_eligible_for_automated_generation() -> 
     assert assessment.reasons == ["supported table-local client script generation request"]
 
 
+def test_structured_client_script_story_allows_newline_fields_and_no_writes() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010022",
+            short_description="JEDI UAT: Warn when Software Incident has no CI",
+            description=(
+                "Target artifact type: Client Script\n"
+                "Target table: incident\n"
+                "Artifact name: JEDI UAT Software CI Reminder\n"
+                "Client script type: onChange\n"
+                "Target field: category\n"
+                "Condition: category changes to software and cmdb_ci is empty\n"
+                "Actions: Show an informational message reminding the fulfiller "
+                "to select the affected Configuration item.\n"
+                "Fields read: category, cmdb_ci\n"
+                "Fields written / affected: none\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not use GlideAjax, document APIs, window "
+                "APIs, browser storage, external calls, credentials, form submit, "
+                "or unrelated field writes.\n"
+                "Acceptance criteria: See Acceptance Criteria field.\n"
+                "Rollback expectation: Deactivate or delete the generated Client "
+                "Script through the retrieved Update Set review process."
+            ),
+            acceptance_criteria=(
+                "<p>- An active onChange Client Script named JEDI UAT Software "
+                "CI Reminder is created for incident. - The Client Script is "
+                "attached to the category field. - When category changes to "
+                "software and cmdb_ci is empty, an informational message is "
+                "shown. - The Client Script does not submit the form, call the "
+                "server, or write unrelated fields. - The script reads category "
+                "and cmdb_ci only. - Delivery is a retrieved Update Set ready "
+                "for ServiceNow preview and commit.</p>"
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.CLIENT_SCRIPT_GENERATE}
+    assert assessment.missing_details == []
+    assert assessment.required_instance_context == ["table_schema", "client_scripts"]
+    assert assessment.automation_intent is not None
+    assert assessment.automation_intent["intent_type"] == "client_script"
+    assert assessment.automation_intent["fields_read"] == ["category", "cmdb_ci"]
+    assert assessment.automation_intent["fields_written"] == []
+
+
 def test_client_script_story_routes_to_context_analysis() -> None:
     assessment = analyze_story_capabilities(
         _story(
@@ -570,3 +618,75 @@ def test_structured_ui_policy_story_allows_disabled_scripts_and_forbidden_bounda
     assert assessment.capabilities == {Capability.UI_POLICY_GENERATE}
     assert assessment.missing_details == []
     assert assessment.required_instance_context == ["table_schema", "form_layout", "ui_policies"]
+    assert assessment.automation_intent is not None
+    assert assessment.automation_intent["intent_type"] == "ui_policy"
+    assert assessment.automation_intent["run_scripts"] is False
+
+
+def test_structured_ui_policy_with_enabled_scripts_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010996",
+            short_description="JEDI UAT: Scripted UI Policy",
+            description=(
+                "Target artifact type: UI Policy\n"
+                "Target table: incident\n"
+                "Condition: category is software\n"
+                "Actions: Make assignment_group mandatory.\n"
+                "Fields read: category\n"
+                "Fields written / affected: assignment_group\n"
+                "Reverse if false: true\n"
+                "Run scripts: true"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert "ui policy generation includes forbidden behavior: run scripts" in assessment.reasons
+
+
+def test_structured_flow_story_routes_to_unsupported_capability() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010995",
+            short_description="JEDI UAT: Update Flow",
+            description=(
+                "Target artifact type: Flow\n"
+                "Target table: incident\n"
+                "Condition: category is software\n"
+                "Actions: Add an approval step."
+            ),
+            acceptance_criteria="Flow is updated.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.UNSUPPORTED_CAPABILITY
+    assert assessment.unsupported_capabilities == {Capability.FLOW_MODIFY}
+    assert assessment.automation_intent is not None
+
+
+def test_structured_dictionary_form_story_uses_field_form_intent() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010994",
+            short_description="JEDI UAT: Add review source",
+            description=(
+                "Target artifact type: Dictionary Form\n"
+                "Target table: incident\n"
+                "Field name: u_review_source\n"
+                "Field type: string\n"
+                "Max length: 120\n"
+                "Placement: below description"
+            ),
+            acceptance_criteria="Field is on the form.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.intent is not None
+    assert assessment.intent.field_label == "Review Source"
+    assert assessment.intent.placement_anchor == "description"

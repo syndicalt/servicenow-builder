@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import re
 
+from jedi_devproject.automation_intent import (
+    AutomationIntent,
+    AutomationIntentType,
+    extract_automation_intent,
+)
 from jedi_devproject.capabilities import (
     Capability,
     FieldFormIntent,
@@ -35,6 +40,14 @@ def analyze_story_capabilities(
     *,
     supported_capabilities: set[Capability] = SUPPORTED_BASELINE_CAPABILITIES,
 ) -> StoryCapabilityAssessment:
+    automation_intent = extract_automation_intent(story)
+    if automation_intent.is_structured:
+        return _assess_automation_intent(
+            story=story,
+            automation_intent=automation_intent,
+            supported_capabilities=supported_capabilities,
+        )
+
     text = _story_text(story)
     positive_text = _positive_requirement_text(text)
     requested = _requested_capabilities(positive_text)
@@ -281,6 +294,192 @@ def analyze_story_capabilities(
     )
 
 
+AUTOMATED_INTENT_REASONS = {
+    Capability.BUSINESS_RULE_GENERATE: "supported table-local business rule generation request",
+    Capability.CLIENT_SCRIPT_GENERATE: "supported table-local client script generation request",
+    Capability.SCRIPT_INCLUDE_GENERATE: "supported utility script include generation request",
+    Capability.UI_POLICY_GENERATE: "supported declarative ui policy generation request",
+    Capability.DICTIONARY_FIELD_CREATE: "supported low-complexity dictionary/form request",
+}
+
+
+def _assess_automation_intent(
+    *,
+    story: Story,
+    automation_intent: AutomationIntent,
+    supported_capabilities: set[Capability],
+) -> StoryCapabilityAssessment:
+    requested = _capabilities_for_automation_intent(automation_intent)
+    unsupported = requested - supported_capabilities
+    field_form_intent = _field_form_intent_from_automation_intent(story, automation_intent)
+    target_table = (
+        field_form_intent.target_table
+        if field_form_intent is not None
+        else automation_intent.target_table
+    )
+    reasons: list[str] = []
+
+    if story.story_points > FULL_MATURITY_MAX_AUTOMATED_POINTS:
+        reasons.append(
+            "story points exceed full-maturity max: "
+            f"{story.story_points:.1f} > {FULL_MATURITY_MAX_AUTOMATED_POINTS}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=automation_intent.missing_details,
+            unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    if story.story_points > CURRENT_AUTOMATION_MAX_POINTS:
+        reasons.append(
+            "story points exceed current automation max: "
+            f"{story.story_points:.1f} > {CURRENT_AUTOMATION_MAX_POINTS}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=automation_intent.missing_details,
+            unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    forbidden_details = _automation_intent_forbidden_details(automation_intent)
+    if forbidden_details:
+        reasons.append(
+            f"{automation_intent.intent_type.value.replace('_', ' ')} generation "
+            f"includes forbidden behavior: {', '.join(forbidden_details)}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=automation_intent.missing_details,
+            unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    if unsupported:
+        reasons.append("request includes unsupported pipeline capabilities")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.UNSUPPORTED_CAPABILITY,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=automation_intent.missing_details,
+            unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    if automation_intent.missing_details:
+        reasons.append("story is missing required automation details")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=automation_intent.missing_details,
+            unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    reasons.append(
+        AUTOMATED_INTENT_REASONS.get(
+            automation_intent.capability,
+            "supported structured automation request",
+        )
+    )
+    return _assessment(
+        story=story,
+        outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+        requested=requested,
+        supported=supported_capabilities,
+        intent=field_form_intent,
+        target_table=target_table,
+        reasons=reasons,
+        missing_details=[],
+        unsupported=set(),
+        required_instance_context=automation_intent.required_instance_context,
+        automation_intent=automation_intent,
+    )
+
+
+def _capabilities_for_automation_intent(automation_intent: AutomationIntent) -> set[Capability]:
+    if automation_intent.intent_type is AutomationIntentType.DICTIONARY_FORM:
+        return {
+            Capability.DICTIONARY_FIELD_CREATE,
+            Capability.FIELD_LABEL_CREATE,
+            Capability.FORM_LAYOUT_PLACE_FIELD,
+        }
+    return {automation_intent.capability}
+
+
+def _automation_intent_forbidden_details(automation_intent: AutomationIntent) -> list[str]:
+    details: list[str] = []
+    if (
+        automation_intent.intent_type is AutomationIntentType.UI_POLICY
+        and automation_intent.run_scripts is True
+    ):
+        details.append("run scripts")
+    if (
+        automation_intent.intent_type is AutomationIntentType.SCRIPT_INCLUDE
+        and automation_intent.client_callable is True
+    ):
+        details.append("client callable Script Includes")
+    return details
+
+
+def _field_form_intent_from_automation_intent(
+    story: Story,
+    automation_intent: AutomationIntent,
+) -> FieldFormIntent | None:
+    if automation_intent.intent_type is not AutomationIntentType.DICTIONARY_FORM:
+        return None
+    if automation_intent.target_table is None or automation_intent.field_type is None:
+        return None
+    if automation_intent.field_label is None and automation_intent.field_name is None:
+        return None
+    field_label = automation_intent.field_label
+    if field_label is None and automation_intent.field_name is not None:
+        field_label = automation_intent.field_name.replace("u_", "").replace("_", " ").title()
+    if field_label is None:
+        return None
+    return FieldFormIntent(
+        target_table=automation_intent.target_table,
+        field_label=field_label,
+        field_name=automation_intent.field_name,
+        field_type=automation_intent.field_type,
+        reference_table=automation_intent.reference_table,
+        reference_qualifier=automation_intent.reference_qualifier,
+        max_length=automation_intent.max_length,
+        placement_anchor=automation_intent.placement_anchor,
+        placement_position=automation_intent.placement_position or "end",
+        mandatory=False,
+        default_value=str(story.additional_context.get("default_value", "")),
+    )
+
+
 def _assessment(
     *,
     story: Story,
@@ -293,6 +492,7 @@ def _assessment(
     missing_details: list[str],
     unsupported: set[Capability],
     required_instance_context: list[str] | None = None,
+    automation_intent: AutomationIntent | None = None,
 ) -> StoryCapabilityAssessment:
     risk_target_table = target_table or "unknown"
     field_name = intent.field_name if intent is not None else None
@@ -316,6 +516,9 @@ def _assessment(
         reasons=reasons,
         missing_details=missing_details,
         unsupported_capabilities=unsupported,
+        automation_intent=(
+            automation_intent.model_dump(mode="json") if automation_intent is not None else None
+        ),
         risk_score=risk_score,
         confidence=confidence,
     )
@@ -479,12 +682,19 @@ def _missing_client_script_generation_details(text: str) -> list[str]:
         ("client script type", any(token in text for token in ["onchange", "onload", "onsubmit"])),
         ("explicit condition", "condition:" in text or "when " in text),
         ("expected behavior", "expected behavior:" in text or "show " in text or "set " in text),
-        ("fields read", "fields read:" in text),
-        ("fields written", "fields written:" in text),
+        ("fields read", _has_field_detail(text, "read")),
+        ("fields written", _has_field_detail(text, "written")),
     ]
     if "onchange" in text and _client_script_target_field(text) is None:
         checks.append(("target field", False))
     return [label for label, present in checks if not present]
+
+
+def _has_field_detail(text: str, action: str) -> bool:
+    return bool(
+        re.search(rf"\bfields?\s+{action}\b", text)
+        or re.search(rf"\bscript\s+{action}s?\b", text)
+    )
 
 
 def _client_script_forbidden_details(text: str) -> list[str]:

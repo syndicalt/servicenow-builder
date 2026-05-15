@@ -51,7 +51,7 @@ NEGATIVE_BOUNDARY_MARKER = re.compile(
 
 def positive_requirement_text(text: str) -> str:
     normalized = text.lower()
-    clauses = re.split(r"(?<=[.;\n])\s+", normalized)
+    clauses = re.split(r"(?:[.;]\s+|\n+)", normalized)
     return " ".join(
         clause
         for clause in clauses

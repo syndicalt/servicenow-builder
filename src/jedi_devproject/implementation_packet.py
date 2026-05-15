@@ -155,7 +155,13 @@ def build_implementation_packet(
         allowed_operations=sorted(policy.operations),
         capability_assessment=assessment.model_dump(mode="json"),
         normalized_intent=(
-            assessment.intent.model_dump(mode="json") if assessment.intent is not None else None
+            assessment.automation_intent
+            if assessment.automation_intent is not None
+            else (
+                assessment.intent.model_dump(mode="json")
+                if assessment.intent is not None
+                else None
+            )
         ),
         instance_context=(
             discovery_context.model_dump(mode="json") if discovery_context is not None else None

@@ -317,6 +317,34 @@ def test_surface_context_ignores_forbidden_boundaries_as_requested_surfaces() ->
     assert "flow_graph" not in bundle.missing_required_surfaces
 
 
+def test_surface_context_does_not_require_cmdb_discovery_for_cmdb_ci_field_reads() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text=(
+            "Target artifact type: Client Script\n"
+            "Target table: incident\n"
+            "Client script type: onChange\n"
+            "Target field: category\n"
+            "Condition: category changes to software and cmdb_ci is empty\n"
+            "Actions: Show an informational message reminding the fulfiller to "
+            "select the affected Configuration item.\n"
+            "Fields read: category, cmdb_ci\n"
+            "Fields written / affected: none\n"
+            "Forbidden behavior: Do not use GlideAjax, document APIs, window "
+            "APIs, browser storage, external calls, credentials, form submit, "
+            "or unrelated field writes."
+        ),
+        public_doc_queries=[],
+    )
+
+    assert bundle.context_sufficient is True
+    assert bundle.required_surfaces == ["table_schema", "form_layout", "client_scripts"]
+    assert "cmdb_discovery_maps" not in bundle.missing_required_surfaces
+
+
 def test_required_flow_graph_context_collects_graph_records_with_citations() -> None:
     client = FakeDiscoveryClient()
 

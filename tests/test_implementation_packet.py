@@ -562,6 +562,75 @@ def test_model_payload_compacts_surface_context_to_required_surfaces() -> None:
     assert packet.to_model_payload()["instance_context"] is None
 
 
+def test_packet_uses_typed_intent_for_structured_client_script_story() -> None:
+    story = _story().model_copy(
+        update={
+            "number": "STRY0010022",
+            "short_description": "JEDI UAT: Warn when Software Incident has no CI",
+            "description": (
+                "Target artifact type: Client Script\n"
+                "Target table: incident\n"
+                "Artifact name: JEDI UAT Software CI Reminder\n"
+                "Client script type: onChange\n"
+                "Target field: category\n"
+                "Condition: category changes to software and cmdb_ci is empty\n"
+                "Actions: Show an informational message reminding the fulfiller "
+                "to select the affected Configuration item.\n"
+                "Fields read: category, cmdb_ci\n"
+                "Fields written / affected: none\n"
+                "Forbidden behavior: Do not use GlideAjax, document APIs, window "
+                "APIs, browser storage, external calls, credentials, form submit, "
+                "or unrelated field writes."
+            ),
+            "acceptance_criteria": "Delivery is a retrieved Update Set.",
+            "affected_tables": [],
+        }
+    )
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(element="category", column_label="Category", internal_type="choice"),
+            DiscoveredField(
+                element="cmdb_ci",
+                column_label="Configuration item",
+                internal_type="reference",
+            ),
+        ],
+        form_sections=[],
+        evidence=["sys_dictionary:incident"],
+    )
+    bundle = ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "client_scripts"],
+        table_context=table_context,
+        surfaces=[],
+        missing_required_surfaces=[],
+        evidence=["sys_dictionary:incident", "sys_script_client:incident"],
+    )
+
+    packet = build_implementation_packet(
+        story=story,
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=table_context,
+        surface_context_bundle=bundle,
+    )
+
+    assert packet.normalized_intent is not None
+    assert packet.normalized_intent["intent_type"] == "client_script"
+    assert packet.normalized_intent["fields_read"] == ["category", "cmdb_ci"]
+    assert packet.normalized_intent["fields_written"] == []
+    assert packet.capability_assessment["required_instance_context"] == [
+        "table_schema",
+        "client_scripts",
+    ]
+    assert "cmdb_discovery_maps" not in packet.context_sufficiency["missing_context"]
+
+
 def test_build_implementation_packet_marks_missing_instance_context_for_retrieval() -> None:
     packet = build_implementation_packet(
         story=_story(),

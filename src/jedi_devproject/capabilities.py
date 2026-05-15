@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -105,6 +106,7 @@ class StoryCapabilityAssessment(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     missing_details: list[str] = Field(default_factory=list)
     unsupported_capabilities: set[Capability] = Field(default_factory=set)
+    automation_intent: dict[str, Any] | None = None
     risk_score: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
 

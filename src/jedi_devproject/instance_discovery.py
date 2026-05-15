@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
@@ -408,18 +409,40 @@ def _required_surfaces(story_text: str) -> list[SurfaceName]:
     lowered = positive_requirement_text(story_text)
     surfaces: list[SurfaceName] = ["table_schema", "form_layout"]
     keyword_map: list[tuple[SurfaceName, tuple[str, ...]]] = [
-        ("business_rules", ("business rule", "server script")),
-        ("client_scripts", ("client script", "onchange", "onsubmit", "onload")),
-        ("ui_policies", ("ui policy", "ui policies", "visible", "mandatory", "read-only")),
-        ("flows", ("flow", "workflow", "flow designer")),
-        ("flow_graph", ("flow", "workflow", "flow designer")),
-        ("script_includes", ("script include", "utility script")),
-        ("cmdb_discovery_maps", ("discovery", "cmdb", "discovery map")),
-        ("integration_surfaces", ("integration", "rest message", "api")),
-        ("public_docs", ("documentation", "public documentation", "public docs", "docs")),
+        ("business_rules", (r"\bbusiness\s+rules?\b", r"\bserver\s+scripts?\b")),
+        (
+            "client_scripts",
+            (r"\bclient\s+scripts?\b", r"\bonchange\b", r"\bonsubmit\b", r"\bonload\b"),
+        ),
+        (
+            "ui_policies",
+            (
+                r"\bui\s+polic(?:y|ies)\b",
+                r"\bvisible\b",
+                r"\bmandatory\b",
+                r"\bread-only\b",
+            ),
+        ),
+        ("flows", (r"\bflows?\b", r"\bworkflows?\b", r"\bflow\s+designer\b")),
+        ("flow_graph", (r"\bflows?\b", r"\bworkflows?\b", r"\bflow\s+designer\b")),
+        ("script_includes", (r"\bscript\s+includes?\b", r"\butility\s+script\b")),
+        (
+            "cmdb_discovery_maps",
+            (r"\bdiscovery(?:\s+map)?s?\b", r"\bcmdb\b"),
+        ),
+        ("integration_surfaces", (r"\bintegrations?\b", r"\brest\s+message\b", r"\bapi\b")),
+        (
+            "public_docs",
+            (
+                r"\bdocumentation\b",
+                r"\bpublic\s+documentation\b",
+                r"\bpublic\s+docs\b",
+                r"\bdocs\b",
+            ),
+        ),
     ]
-    for surface, keywords in keyword_map:
-        if any(keyword in lowered for keyword in keywords) and surface not in surfaces:
+    for surface, patterns in keyword_map:
+        if any(re.search(pattern, lowered) for pattern in patterns) and surface not in surfaces:
             surfaces.append(surface)
     return surfaces
 

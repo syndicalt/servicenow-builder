@@ -2468,3 +2468,22 @@ def test_sprint_one_forty_four_change_log_documents_structured_ui_policy_gate() 
     assert "`ui_policy_generate`" in change_log
     assert "missing action table" in change_log
     assert "Sprint 144: Structured UI Policy gate hardening" in backlog
+
+
+def test_sprint_one_forty_five_change_log_documents_typed_intent_architecture() -> None:
+    change_log = Path("docs/sprints/sprint-145-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+    spec = Path(
+        "docs/superpowers/specs/2026-05-15-typed-intent-architecture-design.md"
+    ).read_text(encoding="utf-8")
+    plan = Path(
+        "docs/superpowers/plans/2026-05-15-typed-intent-architecture.md"
+    ).read_text(encoding="utf-8")
+
+    assert "STRY0010022" in change_log
+    assert "AutomationIntent" in change_log
+    assert "`normalized_intent`" in change_log
+    assert "`cmdb_discovery_maps`" in change_log
+    assert "Sprint 145: Typed intent architecture" in backlog
+    assert "typed `AutomationIntent`" in spec
+    assert "Implementation Plan" in plan
