@@ -148,3 +148,39 @@ def test_high_point_story_routes_to_manual_developer_build() -> None:
 
     assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
     assert "story points exceed max: 8.0 > 3" in assessment.reasons
+
+
+def test_business_rule_story_routes_to_context_analysis() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010112",
+            short_description="Analyze Incident Business Rule for priority stamping",
+            description=(
+                "Analyze whether the incident table needs a before update Business Rule "
+                "to set u_priority_stamp when priority changes."
+            ),
+            acceptance_criteria=(
+                "The automation should inspect existing Incident Business Rules and "
+                "report whether generation is supported."
+            ),
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.CONTEXT_ANALYSIS
+    assert Capability.BUSINESS_RULE_ANALYZE in assessment.capabilities
+    assert assessment.target_table == "incident"
+    assert assessment.required_instance_context == ["table_schema", "business_rules"]
+    assert "business rule generation is not enabled yet" in assessment.reasons
+
+
+def test_business_rule_story_without_target_table_needs_clarification() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            short_description="Analyze a Business Rule",
+            description="Check whether a before update Business Rule is needed.",
+            acceptance_criteria="The analysis names the current rules.",
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
+    assert "target table" in assessment.missing_details

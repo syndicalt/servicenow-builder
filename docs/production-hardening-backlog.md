@@ -29,7 +29,8 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 8 | Sprint 109 | Observability and audit event quality | Postgres has events and jobs, but production operations need consistent correlation and safe diagnostics. | Lifecycle events, job events, artifact refs, ServiceNow work notes, and admin views share correlation ids. Error messages are redacted and actionable. |
 | 9 | Sprint 110 | Rate limiting and abuse controls | Public API exposure needs request volume controls even when authenticated. | Lifecycle and admin endpoints have bounded request sizes, bounded list limits, and documented rate/abuse behavior. |
 | 10 | Sprint 111 | Capability backlog design | Generic dictionary/form placement is the only baseline build capability. The next capability should be selected deliberately. | ADR names the extension contract; ADR 0006 names the extension contract, `CapabilityProfile` requirements, required validators, unsupported cases, UAT story shape, and Business Rule analysis first before implementation begins. |
-| 11 | Sprint 112 | Business Rule analysis capability | Business Rules are the right next capability candidate, but generation should not start until the app can retrieve and classify the live `sys_script` surface. | context-only first implementation retrieves relevant Business Rule context, classifies candidate stories, names missing inputs and unsupported cases, and adds no new mutation surface. |
+| 11 | Sprint 112 | Business Rule analysis capability | Business Rules are the right next capability candidate, but generation should not start until the app can retrieve and classify the live `sys_script` surface. | Done: context-only first implementation retrieves relevant Business Rule context, classifies candidate stories, names missing inputs and unsupported cases, stores `business-rule-analysis-v1`, and adds no new mutation surface. |
+| 12 | Sprint 113 | Business Rule generation profile design | Business Rule generation should not be implemented until the mutation profile, validators, XML evidence, and UAT story shape are explicit. | ADR/spec update defines supported Business Rule generation subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, and UAT story. |
 
 ## Review Gates
 
@@ -76,5 +77,6 @@ Review for:
 9. Sprint 110: Rate limiting and abuse controls.
 10. Sprint 111: Capability backlog design.
 11. Sprint 112: Business Rule analysis capability.
+12. Sprint 113: Business Rule generation profile design.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

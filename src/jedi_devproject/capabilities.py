@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class Capability(StrEnum):
+    BUSINESS_RULE_ANALYZE = "business_rule_analyze"
     DICTIONARY_FIELD_CREATE = "dictionary_field_create"
     FIELD_LABEL_CREATE = "field_label_create"
     FORM_LAYOUT_PLACE_FIELD = "form_layout_place_field"
@@ -22,6 +23,7 @@ class Capability(StrEnum):
 
 class SuitabilityOutcome(StrEnum):
     AUTOMATED_BUILD = "automated_build"
+    CONTEXT_ANALYSIS = "context_analysis"
     NEEDS_CLARIFICATION = "needs_clarification"
     UNSUPPORTED_CAPABILITY = "unsupported_capability"
     MANUAL_DEVELOPER_BUILD = "manual_developer_build"
@@ -67,6 +69,19 @@ class FieldFormIntent(BaseModel):
         return self
 
 
+class CapabilityProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capability: Capability
+    status: str
+    supported_artifacts: list[str]
+    required_instance_context: list[str]
+    deterministic_validators: list[str]
+    unsupported_cases: list[str]
+    uat_story_shape: list[str]
+    creates_update_set: bool = False
+
+
 class StoryCapabilityAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -75,6 +90,8 @@ class StoryCapabilityAssessment(BaseModel):
     capabilities: set[Capability]
     supported_capabilities: set[Capability]
     intent: FieldFormIntent | None = None
+    target_table: str | None = None
+    required_instance_context: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     missing_details: list[str] = Field(default_factory=list)
     unsupported_capabilities: set[Capability] = Field(default_factory=set)
@@ -88,6 +105,42 @@ class StoryCapabilityAssessment(BaseModel):
     @property
     def unsupported_capability_names(self) -> list[str]:
         return sorted(capability.value for capability in self.unsupported_capabilities)
+
+
+CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
+    Capability.BUSINESS_RULE_ANALYZE: CapabilityProfile(
+        capability=Capability.BUSINESS_RULE_ANALYZE,
+        status="context_only",
+        supported_artifacts=["sys_script"],
+        required_instance_context=["table_schema", "business_rules"],
+        deterministic_validators=[
+            "target_table_present",
+            "sys_script_context_retrieved",
+            "script_bodies_redacted",
+        ],
+        unsupported_cases=[
+            "business rule generation",
+            "delete rules",
+            "scheduled jobs",
+            "embedded credentials",
+            "outbound REST calls",
+            "cross-table data migration",
+        ],
+        uat_story_shape=[
+            "target table",
+            "trigger timing",
+            "trigger operations",
+            "condition",
+            "expected action",
+            "test evidence",
+        ],
+        creates_update_set=False,
+    )
+}
+
+
+def capability_profile(capability: Capability) -> CapabilityProfile:
+    return CAPABILITY_REGISTRY[capability]
 
 
 def _normalize_field_name(value: str) -> str:

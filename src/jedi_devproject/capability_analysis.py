@@ -7,11 +7,13 @@ from jedi_devproject.capabilities import (
     FieldFormIntent,
     StoryCapabilityAssessment,
     SuitabilityOutcome,
+    capability_profile,
 )
 from jedi_devproject.models import Story
 from jedi_devproject.risk import RiskInput, calculate_risk_score
 
 SUPPORTED_BASELINE_CAPABILITIES = {
+    Capability.BUSINESS_RULE_ANALYZE,
     Capability.DICTIONARY_FIELD_CREATE,
     Capability.FIELD_LABEL_CREATE,
     Capability.FORM_LAYOUT_PLACE_FIELD,
@@ -30,6 +32,7 @@ def analyze_story_capabilities(
     missing_details = _missing_details(text)
     unsupported = requested - supported_capabilities
     intent = _field_form_intent(story, text) if _is_dictionary_form_request(text) else None
+    target_table = intent.target_table if intent is not None else _target_table(text)
     reasons: list[str] = []
 
     if story.story_points > MAX_AUTOMATED_POINTS:
@@ -42,6 +45,7 @@ def analyze_story_capabilities(
             requested=requested,
             supported=supported_capabilities,
             intent=intent,
+            target_table=target_table,
             reasons=reasons,
             missing_details=missing_details,
             unsupported=unsupported,
@@ -55,6 +59,7 @@ def analyze_story_capabilities(
             requested=requested,
             supported=supported_capabilities,
             intent=intent,
+            target_table=target_table,
             reasons=reasons,
             missing_details=missing_details,
             unsupported=unsupported,
@@ -68,9 +73,31 @@ def analyze_story_capabilities(
             requested=requested,
             supported=supported_capabilities,
             intent=intent,
+            target_table=target_table,
             reasons=reasons,
             missing_details=missing_details,
             unsupported=unsupported,
+        )
+
+    if Capability.BUSINESS_RULE_ANALYZE in requested and not _is_dictionary_form_request(text):
+        profile = capability_profile(Capability.BUSINESS_RULE_ANALYZE)
+        reasons.extend(
+            [
+                "Business Rule analysis first",
+                "business rule generation is not enabled yet",
+            ]
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.CONTEXT_ANALYSIS,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
         )
 
     reasons.append("supported low-complexity dictionary/form request")
@@ -80,6 +107,7 @@ def analyze_story_capabilities(
         requested=requested,
         supported=supported_capabilities,
         intent=intent,
+        target_table=target_table,
         reasons=reasons,
         missing_details=[],
         unsupported=set(),
@@ -93,27 +121,31 @@ def _assessment(
     requested: set[Capability],
     supported: set[Capability],
     intent: FieldFormIntent | None,
+    target_table: str | None,
     reasons: list[str],
     missing_details: list[str],
     unsupported: set[Capability],
+    required_instance_context: list[str] | None = None,
 ) -> StoryCapabilityAssessment:
-    target_table = intent.target_table if intent is not None else "unknown"
+    risk_target_table = target_table or "unknown"
     field_name = intent.field_name if intent is not None else None
     risk_score = calculate_risk_score(
         RiskInput(
             story_type="dictionary_form" if intent is not None else "unknown",
             affected_tables=sorted(capability.value for capability in requested),
-            target_table=target_table,
+            target_table=risk_target_table,
             field_name=field_name,
         )
     )
-    confidence = 0.82 if outcome is SuitabilityOutcome.AUTOMATED_BUILD else 0.5
+    confidence = 0.82 if outcome is SuitabilityOutcome.AUTOMATED_BUILD else 0.65
     return StoryCapabilityAssessment(
         story_number=story.number,
         outcome=outcome,
         capabilities=requested,
         supported_capabilities=supported,
         intent=intent,
+        target_table=target_table,
+        required_instance_context=required_instance_context or [],
         reasons=reasons,
         missing_details=missing_details,
         unsupported_capabilities=unsupported,
@@ -144,8 +176,8 @@ def _requested_capabilities(text: str) -> set[Capability]:
         capabilities.add(Capability.ACL_MODIFY)
     if "workflow" in text or "flow designer" in text:
         capabilities.add(Capability.FLOW_MODIFY)
-    if "business rule" in text:
-        capabilities.add(Capability.BUSINESS_RULE_CREATE)
+    if "business rule" in text or "server script" in text:
+        capabilities.add(Capability.BUSINESS_RULE_ANALYZE)
     if "script include" in text:
         capabilities.add(Capability.SCRIPT_INCLUDE_MODIFY)
     if "migrat" in text:
@@ -169,7 +201,13 @@ def _missing_details(text: str) -> list[str]:
         missing.append("field label or field name")
     if _is_dictionary_form_request(text) and _field_type(text) is None:
         missing.append("field type")
+    if _is_business_rule_request(text) and _target_table(text) is None:
+        missing.append("target table")
     return missing
+
+
+def _is_business_rule_request(text: str) -> bool:
+    return "business rule" in text or "server script" in text
 
 
 def _is_dictionary_form_request(text: str) -> bool:

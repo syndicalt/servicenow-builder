@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict
 
+from jedi_devproject.capabilities import Capability, SuitabilityOutcome
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.enrichment import enrich_story
 from jedi_devproject.fulfillment_worker import (
@@ -17,6 +18,7 @@ from jedi_devproject.implementation_packet import (
 )
 from jedi_devproject.instance_discovery import (
     ServiceNowSurfaceContextBundle,
+    SurfaceName,
     discover_servicenow_surface_context,
 )
 from jedi_devproject.models import CandidateStatus, ProviderPolicy, UpdateSetCandidate
@@ -102,6 +104,10 @@ def model_candidate_fulfillment_handler(
             policy=config.policy,
             provider=config.provider,
         )
+        business_rule_analysis = _business_rule_analysis_artifact(
+            packet=packet,
+            surface_context_bundle=surface_context_bundle,
+        )
 
         return FulfillmentExecutionResult(
             message=f"Implementation candidate generated for {job.story_number}",
@@ -115,6 +121,17 @@ def model_candidate_fulfillment_handler(
                         )
                     ]
                     if surface_context_bundle is not None
+                    else []
+                ),
+                *(
+                    [
+                        FulfillmentArtifactRef(
+                            artifact_kind="business_rule_analysis",
+                            schema_version="business-rule-analysis-v1",
+                            payload_json=business_rule_analysis,
+                        )
+                    ]
+                    if business_rule_analysis is not None
                     else []
                 ),
                 FulfillmentArtifactRef(
@@ -149,7 +166,10 @@ def _surface_context_for_story(
     story: Any,
 ) -> ServiceNowSurfaceContextBundle | None:
     assessment = analyze_story_capabilities(story)
-    if assessment.intent is None:
+    target_table = (
+        assessment.intent.target_table if assessment.intent is not None else assessment.target_table
+    )
+    if target_table is None:
         return None
     story_text = " ".join(
         str(value)
@@ -162,10 +182,54 @@ def _surface_context_for_story(
     )
     return discover_servicenow_surface_context(
         client=client,
-        target_table=assessment.intent.target_table,
+        target_table=target_table,
         story_text=story_text,
         public_doc_queries=_public_doc_queries(story_text),
+        required_surfaces_override=cast(
+            list[SurfaceName] | None,
+            assessment.required_instance_context or None,
+        ),
     )
+
+
+def _business_rule_analysis_artifact(
+    *,
+    packet: Any,
+    surface_context_bundle: ServiceNowSurfaceContextBundle | None,
+) -> dict[str, Any] | None:
+    if packet.safety_decision != SuitabilityOutcome.CONTEXT_ANALYSIS.value:
+        return None
+    if Capability.BUSINESS_RULE_ANALYZE.value not in packet.capability_assessment.get(
+        "capabilities", []
+    ):
+        return None
+    business_rules = None
+    if surface_context_bundle is not None:
+        business_rules = surface_context_bundle.surface("business_rules")
+    records = business_rules.records if business_rules is not None else []
+    return {
+        "schema_version": "business-rule-analysis-v1",
+        "story_number": packet.story.number,
+        "target_table": (
+            surface_context_bundle.target_table if surface_context_bundle is not None else "unknown"
+        ),
+        "existing_rule_count": len(records),
+        "existing_rules": [
+            {
+                "name": record.name,
+                "active": record.active,
+                "summary": record.summary,
+                "metadata": record.metadata,
+            }
+            for record in records
+        ],
+        "supported_generation": False,
+        "unsupported_cases": ["business_rule_generation_not_enabled"],
+        "required_instance_context": packet.capability_assessment.get(
+            "required_instance_context", []
+        ),
+        "context_sufficiency": packet.context_sufficiency,
+    }
 
 
 def _public_doc_queries(story_text: str) -> list[str]:
@@ -238,10 +302,15 @@ def _manual_feedback_fields(
         status = "Needs Clarification"
     else:
         status = "Human Review Required"
+    lead = (
+        f"Business Rule analysis completed for {story_number}; it did not create a "
+        if "business_rule_analysis:first" in candidate.eligibility_reasons
+        else f"Automated implementation candidate for {story_number} did not create a "
+    )
     return {
         "u_ai_status": status,
         "work_notes": (
-            f"Automated implementation candidate for {story_number} did not create a "
+            f"{lead}"
             "retrieved Update Set. "
             f"Candidate artifact: {candidate_artifact_ref}. "
             f"{_missing_context_note(candidate)}"

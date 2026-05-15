@@ -129,7 +129,18 @@ class FakeModelClient:
         if table == "sys_security_acl":
             return []
         if table == "sys_script":
-            return []
+            return [
+                {
+                    "sys_id": "business-rule-sys-id",
+                    "name": "Incident Priority Watch",
+                    "active": "true",
+                    "when": "before",
+                    "action_insert": "false",
+                    "action_update": "true",
+                    "filter_condition": "priority changes",
+                    "script": "current.work_notes = 'secret-value';",
+                }
+            ]
         if table == "sys_script_client":
             return []
         if table == "sys_ui_policy":
@@ -558,6 +569,102 @@ def test_model_candidate_handler_blocks_model_when_required_surface_context_miss
     assert result.artifacts[2].payload_json is not None
     assert result.artifacts[2].payload_json["status"] == CandidateStatus.MANUAL_BUILD.value
     assert "context_insufficient:flows" in result.artifacts[2].payload_json["eligibility_reasons"]
+
+
+def test_model_candidate_handler_runs_business_rule_analysis_without_model_or_update_set() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010112",
+            short_description="Analyze Incident Business Rule for priority stamping",
+            description=(
+                "Analyze whether the incident table needs a before update Business Rule "
+                "to set u_priority_stamp when priority changes."
+            ),
+            acceptance_criteria=(
+                "Existing Incident Business Rules are retrieved and generation is not "
+                "attempted until the capability is approved."
+            ),
+            story_points=2,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010112"}))
+
+    assert provider.payloads == []
+    assert client.imports == []
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "business_rule_analysis",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    context_bundle = result.artifacts[0].payload_json
+    analysis = result.artifacts[1].payload_json
+    candidate = result.artifacts[3].payload_json
+    assert context_bundle is not None
+    assert analysis is not None
+    assert candidate is not None
+    assert context_bundle["target_table"] == "incident"
+    assert context_bundle["required_surfaces"] == ["table_schema", "business_rules"]
+    assert context_bundle["surfaces"][2]["source_table"] == "sys_script"
+    assert "business-rule-sys-id" not in str(context_bundle)
+    assert "secret-value" not in str(context_bundle)
+    assert analysis["target_table"] == "incident"
+    assert analysis["existing_rule_count"] == 1
+    assert analysis["supported_generation"] is False
+    assert "business_rule_generation_not_enabled" in analysis["unsupported_cases"]
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert "business_rule_analysis:first" in candidate["eligibility_reasons"]
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="instance_context_bundle",
+                path="db://artifact_blobs/100",
+                sha256="1" * 64,
+                artifact_id=100,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="business_rule_analysis",
+                path="db://artifact_blobs/101",
+                sha256="2" * 64,
+                artifact_id=101,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_packet",
+                path="db://artifact_blobs/102",
+                sha256="3" * 64,
+                artifact_id=102,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/103",
+                sha256="4" * 64,
+                artifact_id=103,
+            ),
+        ]
+    )
+
+    feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert feedback_fields["u_ai_status"] == "Human Review Required"
+    assert "Business Rule analysis completed" in feedback_fields["work_notes"]
+    assert "db://artifact_blobs/103" in feedback_fields["work_notes"]
 
 
 def test_model_fulfillment_writes_needs_clarification_feedback() -> None:

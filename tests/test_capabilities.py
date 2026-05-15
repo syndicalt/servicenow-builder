@@ -1,8 +1,10 @@
 from jedi_devproject.capabilities import (
     Capability,
+    CapabilityProfile,
     FieldFormIntent,
     StoryCapabilityAssessment,
     SuitabilityOutcome,
+    capability_profile,
 )
 
 
@@ -70,3 +72,15 @@ def test_assessment_reports_unsupported_capability() -> None:
 
     assert not assessment.is_automated
     assert assessment.unsupported_capability_names == ["flow_modify"]
+
+
+def test_business_rule_analysis_profile_is_context_only() -> None:
+    profile = capability_profile(Capability.BUSINESS_RULE_ANALYZE)
+
+    assert isinstance(profile, CapabilityProfile)
+    assert profile.capability is Capability.BUSINESS_RULE_ANALYZE
+    assert profile.status == "context_only"
+    assert profile.required_instance_context == ["table_schema", "business_rules"]
+    assert "sys_script" in profile.supported_artifacts
+    assert "business rule generation" in profile.unsupported_cases
+    assert profile.creates_update_set is False

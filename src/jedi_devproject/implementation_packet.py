@@ -327,18 +327,27 @@ def _manual_review_candidate(
     packet: ImplementationPacket,
 ) -> UpdateSetCandidate:
     context_plan = plan_context_escalation(packet.context_sufficiency)
+    eligibility_reasons = [*packet.safety_reasons, *context_plan.reasons]
+    reviewer_notes = ["Model invocation skipped by deterministic safety or context gate."]
+    if packet.safety_decision == SuitabilityOutcome.CONTEXT_ANALYSIS.value:
+        eligibility_reasons.insert(0, "business_rule_analysis:first")
+        reviewer_notes = [
+            "Business Rule analysis completed without generation.",
+            (
+                "Business Rule generation is not enabled until a mutation profile "
+                "and validators are approved."
+            ),
+        ]
     candidate = UpdateSetCandidate(
         story_number=packet.story.number,
         name=f"UPD_{packet.story.number}_Manual_Build",
         eligibility_decision=_candidate_decision(packet.safety_decision),
-        eligibility_reasons=[*packet.safety_reasons, *context_plan.reasons],
+        eligibility_reasons=eligibility_reasons,
         confidence=0.0,
         risk_score=1.0,
         status=CandidateStatus.MANUAL_BUILD,
         retrieval_citations=packet.retrieval_citations,
-        reviewer_notes=[
-            "Model invocation skipped by deterministic safety or context gate.",
-        ],
+        reviewer_notes=reviewer_notes,
     )
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
@@ -375,6 +384,7 @@ def _candidate_decision(value: str) -> Literal["eligible", "manual_review", "rej
     if value in {
         "manual_review",
         SuitabilityOutcome.NEEDS_CLARIFICATION.value,
+        SuitabilityOutcome.CONTEXT_ANALYSIS.value,
         SuitabilityOutcome.UNSUPPORTED_CAPABILITY.value,
         SuitabilityOutcome.MANUAL_DEVELOPER_BUILD.value,
     }:

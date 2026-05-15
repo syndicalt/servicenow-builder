@@ -339,6 +339,14 @@ Business Rule analysis first is the next supported implementation step. Sprint 1
 
 Flow Designer remains context-only. Flow Designer context-only review can retrieve and summarize relevant flow records, but generated flow mutation is unsupported until a separate profile defines graph retrieval, output shape, validators, and retrieved Update Set evidence.
 
+### Business Rule Analysis Capability
+
+The `business_rule_analyze` capability is context-only. It exists to inspect stories that appear to need Business Rule work and retrieve the current `sys_script` surface for the target table before any generation capability is approved.
+
+When selected, the runtime retrieves the target table schema and Business Rule records, redacts script-like fields, stores an `instance_context_bundle`, and stores a `business-rule-analysis-v1` artifact. The analysis names the target table, existing rule count, unsupported cases, and context sufficiency. It does not call the model and does not create a retrieved Update Set.
+
+The story receives human-review feedback through the normal work-note path. Business Rule generation remains unsupported until a separate mutation profile defines output schema, deterministic validators, retrieved Update Set XML evidence, and UAT expectations.
+
 ## CI/CD Update Set API Capability
 
 Use `check-cicd-update-set-capability` to verify that the target ServiceNow instance exposes the Yokohama+ CI/CD Update Set API before designing promotion around it:

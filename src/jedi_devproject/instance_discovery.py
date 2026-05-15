@@ -236,9 +236,10 @@ def discover_servicenow_surface_context(
     target_table: str,
     story_text: str,
     public_doc_queries: list[str],
+    required_surfaces_override: list[SurfaceName] | None = None,
 ) -> ServiceNowSurfaceContextBundle:
     table_context = discover_dictionary_form_context(client=client, target_table=target_table)
-    required_surfaces = _required_surfaces(story_text)
+    required_surfaces = required_surfaces_override or _required_surfaces(story_text)
     surfaces = [
         ServiceNowSurfaceContext(
             surface="table_schema",
