@@ -11,3 +11,8 @@
 
 - `pytest tests/test_implementation_packet.py::test_catalog_candidate_reconciles_variables_from_normalized_intent -q`
 - `pytest tests/test_implementation_packet.py tests/test_catalog_item_generation.py tests/test_update_set_handoff.py tests/test_model_fulfillment.py -q`
+- `ruff check .`
+- `mypy src tests`
+- `pytest --cov=src/jedi_devproject --cov-report=term-missing`
+- Result: `794 passed`, total coverage `90.23%`.
+- UAT rerun: `STRY0010025` moved to `Ready for testing`, created retrieved Update Set `JEDI STRY0010025 - AI Candidate`, and produced six customer updates for the catalog item, three variables, catalog category relation, and Employee Center connected-content relation.
