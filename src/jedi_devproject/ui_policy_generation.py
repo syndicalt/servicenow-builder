@@ -146,7 +146,12 @@ def _ui_policy_intent(changes: list[CandidateChange]) -> UiPolicyIntent:
     )
     target_table = str(policy_fields.get("table") or policy_fields.get("target_table") or "")
     actions = [
-        _ui_policy_action_intent(change, policy_name=policy_name) for change in action_changes
+        _ui_policy_action_intent(
+            change,
+            policy_name=policy_name,
+            policy_target_table=target_table,
+        )
+        for change in action_changes
     ]
     return UiPolicyIntent(
         target_table=target_table,
@@ -169,6 +174,7 @@ def _ui_policy_action_intent(
     change: CandidateChange,
     *,
     policy_name: str,
+    policy_target_table: str,
 ) -> UiPolicyActionIntent:
     if change.operation != "insert":
         raise ValueError("UI Policy handoff supports action insert only")
@@ -178,7 +184,7 @@ def _ui_policy_action_intent(
         disabled_value = fields.get("read_only", disabled_value)
     return UiPolicyActionIntent(
         policy_name=str(fields.get("policy_name") or fields.get("ui_policy_name") or policy_name),
-        target_table=str(fields.get("table") or fields.get("target_table") or ""),
+        target_table=str(fields.get("table") or fields.get("target_table") or policy_target_table),
         field=str(fields.get("field") or fields.get("field_name") or ""),
         mandatory=_tristate(fields.get("mandatory")),
         visible=_tristate(fields.get("visible")),

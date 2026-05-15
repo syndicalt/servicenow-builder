@@ -839,6 +839,18 @@ def test_ui_policy_validator_rejects_action_policy_name_mismatch() -> None:
         )
 
 
+def test_ui_policy_validator_defaults_action_table_from_policy_table() -> None:
+    updates = ui_policy_customer_updates(
+        changes=[
+            _ui_policy_change(table="incident"),
+            _ui_policy_action_change(table=""),
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    assert "<table>incident</table>" in str(updates[1]["payload"])
+
+
 def test_ui_policy_validator_rejects_invalid_action_tristate() -> None:
     with pytest.raises(ValueError, match="UI Policy action values must be true, false, or ignore"):
         ui_policy_customer_updates(

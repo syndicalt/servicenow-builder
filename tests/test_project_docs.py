@@ -2466,4 +2466,5 @@ def test_sprint_one_forty_four_change_log_documents_structured_ui_policy_gate() 
     assert "shared requirement-text parsing" in change_log
     assert "`flow_graph`" in change_log
     assert "`ui_policy_generate`" in change_log
+    assert "missing action table" in change_log
     assert "Sprint 144: Structured UI Policy gate hardening" in backlog
