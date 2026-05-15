@@ -141,6 +141,9 @@ def _validate_field_writes(*, script: str, fields_written: list[str]) -> None:
     written_fields = set(
         re.findall(r"\bg_form\.setValue\(\s*['\"]([a-zA-Z0-9_]+)['\"]", script)
     )
+    written_fields.update(
+        re.findall(r"\bg_form\.clearValue\(\s*['\"]([a-zA-Z0-9_]+)['\"]", script)
+    )
     undeclared = sorted(written_fields - declared)
     if undeclared:
         raise ValueError(f"Client Script writes undeclared field: {undeclared[0]}")

@@ -37,9 +37,15 @@ class ScriptIncludeIntent(BaseModel):
     def validate_script_include_boundary(self) -> ScriptIncludeIntent:
         if self.client_callable:
             raise ValueError("client callable Script Includes are not supported")
+        if self.scope.strip().lower() != "global":
+            raise ValueError("Script Include scope must be global until scoped XML is supported")
         _validate_identifier(self.name)
-        if not self.api_name.endswith(f".{self.name}"):
-            raise ValueError("Script Include api_name must end with the Script Include name")
+        if self.api_name != f"global.{self.name}":
+            raise ValueError("Script Include api_name must be global.<Script Include name>")
+        if not [method.strip() for method in self.public_methods if method.strip()]:
+            raise ValueError("Script Include public_methods must name at least one method")
+        if self.tables_written or self.fields_written:
+            raise ValueError("Script Include writes are not supported in the current profile")
         _validate_script_safety(script=self.script, name=self.name)
         return self
 

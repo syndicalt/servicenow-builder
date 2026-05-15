@@ -142,7 +142,13 @@ def _validate_field_writes(*, script: str, fields_written: list[str]) -> None:
     declared = {field.strip() for field in fields_written if field.strip()}
     if not declared:
         raise ValueError("Business Rule fields_written must name at least one field")
-    written_fields = set(re.findall(r"\bcurrent\.([a-zA-Z0-9_]+)\s*=", script))
+    written_fields = set(re.findall(r"\bcurrent\.([a-zA-Z0-9_]+)\s*=(?!=)", script))
+    written_fields.update(
+        re.findall(r"\bcurrent\.setValue\(\s*['\"]([a-zA-Z0-9_]+)['\"]", script)
+    )
+    written_fields.update(
+        re.findall(r"\bcurrent\[\s*['\"]([a-zA-Z0-9_]+)['\"]\s*\]\s*=(?!=)", script)
+    )
     undeclared = sorted(written_fields - declared)
     if undeclared:
         raise ValueError(f"Business Rule writes undeclared field: {undeclared[0]}")

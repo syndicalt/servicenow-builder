@@ -1001,6 +1001,16 @@ def test_sprint_one_hundred_twenty_change_log_documents_script_include_generatio
     assert "forbidden Script Include" in change_log
 
 
+def test_sprint_121_change_log_documents_generation_validator_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-121-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 121 Change Log" in change_log
+    assert "generation validator hardening" in change_log
+    assert "current.setValue" in change_log
+    assert "g_form.clearValue" in change_log
+    assert "global-only Script Include" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
