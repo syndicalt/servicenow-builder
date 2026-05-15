@@ -333,9 +333,43 @@ def _positive_requirement_text(text: str) -> str:
     positive_clauses = [
         clause
         for clause in clauses
-        if not clause.strip().startswith(("do not ", "don't ", "no "))
+        if not _is_negative_clause(clause)
     ]
     return " ".join(positive_clauses)
+
+
+NEGATED_FORBIDDEN_TOKENS = [
+    "acl",
+    "async",
+    "credential",
+    "cross-table",
+    "delete",
+    "display",
+    "dom",
+    "endpoint",
+    "external",
+    "glideajax",
+    "gliderecord",
+    "globals",
+    "http://",
+    "https://",
+    "integration",
+    "migration",
+    "outbound",
+    "password",
+    "rest",
+    "secret",
+    "soap",
+    "token",
+]
+
+
+def _is_negative_clause(clause: str) -> bool:
+    cleaned = clause.strip().lstrip("-* ").lower()
+    if cleaned.startswith(("do not ", "don't ", "no ")):
+        return True
+    has_negation = bool(re.search(r"\b(?:must|should|shall|does|do|use)?\s*not\b", cleaned))
+    return has_negation and any(token in cleaned for token in NEGATED_FORBIDDEN_TOKENS)
 
 
 def _requested_capabilities(text: str) -> set[Capability]:
@@ -421,10 +455,31 @@ def _missing_business_rule_generation_details(text: str) -> list[str]:
         ("trigger operations", "insert" in text or "update" in text),
         ("explicit condition", "condition:" in text or "when " in text),
         ("expected behavior", "expected behavior:" in text or "set " in text),
-        ("fields read", "fields read:" in text),
-        ("fields written", "fields written:" in text),
+        ("fields read", _has_business_rule_fields_read_detail(text)),
+        ("fields written", _has_business_rule_fields_written_detail(text)),
     ]
     return [label for label, present in checks if not present]
+
+
+def _has_business_rule_fields_read_detail(text: str) -> bool:
+    return "fields read:" in text or (
+        ("condition:" in text or "when " in text)
+        and any(field in text for field in _mentioned_service_now_fields(text))
+    )
+
+
+def _has_business_rule_fields_written_detail(text: str) -> bool:
+    return (
+        "fields written:" in text
+        or re.search(r"\bwrites? only [a-zA-Z0-9_]+", text) is not None
+        or re.search(r"\bset field [a-zA-Z0-9_]+", text) is not None
+        or re.search(r"\bset [a-zA-Z0-9_]+ to\b", text) is not None
+    )
+
+
+def _mentioned_service_now_fields(text: str) -> set[str]:
+    field_pattern = r"\b[a-z][a-z0-9]*_[a-z0-9_]+\b|\bcategory\b|\bstate\b|\bpriority\b"
+    return set(re.findall(field_pattern, text))
 
 
 def _business_rule_forbidden_details(text: str) -> list[str]:

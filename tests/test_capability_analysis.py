@@ -188,6 +188,34 @@ def test_business_rule_negative_safety_constraints_do_not_block_generation() -> 
     assert "business rule generation includes forbidden behavior" not in assessment.reasons
 
 
+def test_business_rule_generation_infers_read_write_details() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            short_description="JEDI UAT: Default inquiry Incident short description",
+            description=(
+                "Create a before Business Rule on incident named JEDI UAT Default "
+                "Inquiry Short Description. It must run on insert and update. "
+                "When category is inquiry and short_description is empty, set "
+                "field short_description to Inquiry needs triage. The rule must "
+                "not use GlideRecord, outbound calls, credentials, async or "
+                "display timing, deletes, or cross-table writes."
+            ),
+            acceptance_criteria=(
+                "- The Business Rule only applies when category is inquiry and "
+                "short_description is empty.\n"
+                "- The Business Rule writes only short_description.\n"
+                "- The script uses the current record, not GlideRecord or globals."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.missing_details == []
+    assert assessment.unsupported_capabilities == set()
+    assert "business rule generation includes forbidden behavior" not in assessment.reasons
+
+
 def test_client_script_negative_safety_constraints_do_not_block_generation() -> None:
     assessment = analyze_story_capabilities(
         _story(

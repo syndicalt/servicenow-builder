@@ -2432,3 +2432,14 @@ def test_sprint_one_forty_one_change_log_documents_parser_hardening() -> None:
         encoding="utf-8"
     )
     assert "Sprint 141: Supported artifact UAT parser hardening" in backlog
+
+
+def test_sprint_one_forty_two_change_log_documents_business_rule_gate_inference() -> None:
+    change_log = Path("docs/sprints/sprint-142-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "STRY0010021" in change_log
+    assert "`Fields read:`" in change_log
+    assert "`set field ...`" in change_log
+    assert "not cross-table writes" in change_log
+    assert "Sprint 142: Business Rule gate inference hardening" in backlog
