@@ -622,6 +622,28 @@ def test_business_rule_validator_infers_operation_flags_from_rationale_when_miss
     assert "<action_update>true</action_update>" in payload
 
 
+def test_business_rule_validator_normalizes_action_and_conditions_aliases() -> None:
+    updates = business_rule_customer_updates(
+        changes=[
+            _business_rule_change(
+                action_insert=False,
+                action_update=False,
+                action="insert or update",
+                filter_condition="",
+                conditions="current.category == 'inquiry' && gs.nil(current.short_description)",
+                script="current.short_description = 'Inquiry needs triage';",
+                fields_written=[],
+            )
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    payload = updates[0]["payload"]
+    assert "<action_insert>true</action_insert>" in payload
+    assert "<action_update>true</action_update>" in payload
+    assert "current.category == &#x27;inquiry&#x27; &amp;&amp; gs.nil" in payload
+
+
 def test_script_include_validator_infers_public_methods_from_script() -> None:
     updates = script_include_customer_updates(
         changes=[

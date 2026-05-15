@@ -78,7 +78,11 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
     script = str(
         fields.get("script") or fields.get("action_script") or fields.get("script_body") or ""
     )
-    operation_text = f"{fields.get('rationale') or ''} {change.rationale or ''}"
+    operation_text = (
+        f"{fields.get('action') or ''} "
+        f"{fields.get('rationale') or ''} "
+        f"{change.rationale or ''}"
+    )
     return BusinessRuleIntent(
         target_table=str(fields.get("collection") or fields.get("table") or ""),
         rule_name=str(fields.get("name") or ""),
@@ -95,7 +99,12 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
             or _bool_value(fields.get("operation_update"))
             or _operation_mentions(operation_text, "update")
         ),
-        filter_condition=str(fields.get("filter_condition") or fields.get("condition") or ""),
+        filter_condition=str(
+            fields.get("filter_condition")
+            or fields.get("condition")
+            or fields.get("conditions")
+            or ""
+        ),
         script=script,
         fields_read=_string_list(fields.get("fields_read")),
         fields_written=(
