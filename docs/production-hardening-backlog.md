@@ -136,5 +136,6 @@ Review for:
 42. Sprint 143: Business Rule script metadata separation.
 43. Sprint 144: Structured UI Policy gate hardening.
 44. Sprint 145: Typed intent architecture.
+45. Sprint 146: Dictionary/form typed intent alias hardening.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

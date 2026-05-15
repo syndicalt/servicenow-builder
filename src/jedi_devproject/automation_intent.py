@@ -74,6 +74,22 @@ ARTIFACT_TYPE_ALIASES: dict[str, tuple[AutomationIntentType, Capability]] = {
         AutomationIntentType.DICTIONARY_FORM,
         Capability.DICTIONARY_FIELD_CREATE,
     ),
+    "dictionary field": (
+        AutomationIntentType.DICTIONARY_FORM,
+        Capability.DICTIONARY_FIELD_CREATE,
+    ),
+    "dictionary field and form placement": (
+        AutomationIntentType.DICTIONARY_FORM,
+        Capability.DICTIONARY_FIELD_CREATE,
+    ),
+    "field and form placement": (
+        AutomationIntentType.DICTIONARY_FORM,
+        Capability.DICTIONARY_FIELD_CREATE,
+    ),
+    "form field": (
+        AutomationIntentType.DICTIONARY_FORM,
+        Capability.DICTIONARY_FIELD_CREATE,
+    ),
     "field": (
         AutomationIntentType.DICTIONARY_FORM,
         Capability.DICTIONARY_FIELD_CREATE,
@@ -118,6 +134,8 @@ STRUCTURED_KEY_ALIASES = {
     "max length": "max_length",
     "length": "max_length",
     "placement": "placement",
+    "placement anchor": "placement_anchor",
+    "placement position": "placement_position",
     "condition": "condition",
     "actions": "expected_behavior",
     "expected behavior": "expected_behavior",
@@ -191,8 +209,12 @@ def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
         reference_table=_clean_field_name(fields.get("reference_table")),
         reference_qualifier=_clean_text(fields.get("reference_qualifier")),
         max_length=_optional_int(fields.get("max_length")),
-        placement_anchor=_placement_anchor(fields.get("placement")),
-        placement_position=_placement_position(fields.get("placement")),
+        placement_anchor=_placement_anchor(
+            fields.get("placement_anchor") or fields.get("placement")
+        ),
+        placement_position=_placement_position(
+            fields.get("placement_position") or fields.get("placement")
+        ),
         forbidden_behavior=_forbidden_behavior(fields.get("forbidden_behavior")),
         provided_fields=sorted(fields),
         required_instance_context=_required_context(capability),
@@ -409,16 +431,23 @@ def _placement_anchor(raw_value: str | None) -> str | None:
     cleaned = _clean_text(raw_value)
     if cleaned is None:
         return None
+    lowered = cleaned.lower()
+    if lowered.startswith(("after ", "before ", "below ", "above ")):
+        cleaned = re.sub(r"^(?:after|before|below|above)\s+", "", cleaned, flags=re.IGNORECASE)
     match = re.search(r"(?:below|above)\s+([a-zA-Z0-9_ ]+)", cleaned)
     if match:
         return _clean_field_name(match.group(1).replace(" field", ""))
-    return None
+    return _clean_field_name(cleaned.replace(" field", ""))
 
 
 def _placement_position(raw_value: str | None) -> str | None:
     cleaned = _clean_text(raw_value)
     if cleaned is None:
         return None
+    if "after" in cleaned.lower():
+        return "below"
+    if "before" in cleaned.lower():
+        return "above"
     if "above" in cleaned.lower():
         return "above"
     if "below" in cleaned.lower():

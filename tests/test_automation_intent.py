@@ -208,6 +208,48 @@ def test_extracts_structured_dictionary_form_intent() -> None:
     assert intent.missing_details == []
 
 
+def test_extracts_dictionary_field_and_form_placement_intent() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010020",
+            short_description="JEDI UAT: Add vendor reference to Problem form",
+            description=(
+                "Target artifact type: Dictionary field and form placement\n"
+                "Target table: problem\n"
+                "Field name: u_vendor_reference\n"
+                "Field label: Vendor Reference\n"
+                "Field type: reference\n"
+                "Reference table: core_company\n"
+                "Reference qualifier: vendor=true\n"
+                "Form view: Default view\n"
+                "Placement anchor: Description\n"
+                "Placement position: after Description\n"
+                "Actions: Create the field and place it on the default Problem form.\n"
+                "Fields read: description\n"
+                "Fields written / affected: u_vendor_reference\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not create ACLs, flows, Business Rules, "
+                "Client Scripts, data migration, integrations, or cross-table automation.\n"
+                "Rollback expectation: Remove the dictionary field and the form "
+                "layout element through the retrieved Update Set review process."
+            ),
+        )
+    )
+
+    assert intent.intent_type is AutomationIntentType.DICTIONARY_FORM
+    assert intent.capability is Capability.DICTIONARY_FIELD_CREATE
+    assert intent.target_table == "problem"
+    assert intent.field_name == "u_vendor_reference"
+    assert intent.field_label == "Vendor Reference"
+    assert intent.field_type == "reference"
+    assert intent.reference_table == "core_company"
+    assert intent.reference_qualifier == "vendor=true"
+    assert intent.placement_anchor == "description"
+    assert intent.placement_position == "below"
+    assert intent.required_instance_context == ["table_schema", "form_layout"]
+    assert intent.missing_details == []
+
+
 def test_unknown_or_unsupported_structured_intents_are_typed_without_context() -> None:
     unknown = extract_automation_intent(
         _story(

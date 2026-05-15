@@ -2487,3 +2487,15 @@ def test_sprint_one_forty_five_change_log_documents_typed_intent_architecture() 
     assert "Sprint 145: Typed intent architecture" in backlog
     assert "typed `AutomationIntent`" in spec
     assert "Implementation Plan" in plan
+
+
+def test_sprint_one_forty_six_change_log_documents_dictionary_form_intent_aliases() -> None:
+    change_log = Path("docs/sprints/sprint-146-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "STRY0010020" in change_log
+    assert "Dictionary field and form placement" in change_log
+    assert "`Placement anchor:`" in change_log
+    assert "`Placement position:`" in change_log
+    assert "`dictionary_field_create`" in change_log
+    assert "Sprint 146: Dictionary/form typed intent alias hardening" in backlog

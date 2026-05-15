@@ -690,3 +690,46 @@ def test_structured_dictionary_form_story_uses_field_form_intent() -> None:
     assert assessment.intent is not None
     assert assessment.intent.field_label == "Review Source"
     assert assessment.intent.placement_anchor == "description"
+
+
+def test_structured_dictionary_field_and_form_placement_story_is_automated() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010020",
+            short_description="JEDI UAT: Add vendor reference to Problem form",
+            description=(
+                "Target artifact type: Dictionary field and form placement\n"
+                "Target table: problem\n"
+                "Field name: u_vendor_reference\n"
+                "Field label: Vendor Reference\n"
+                "Field type: reference\n"
+                "Reference table: core_company\n"
+                "Reference qualifier: vendor=true\n"
+                "Form view: Default view\n"
+                "Placement anchor: Description\n"
+                "Placement position: after Description\n"
+                "Actions: Create the field and place it on the default Problem form.\n"
+                "Fields read: description\n"
+                "Fields written / affected: u_vendor_reference\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not create ACLs, flows, Business Rules, "
+                "Client Scripts, data migration, integrations, or cross-table automation."
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {
+        Capability.DICTIONARY_FIELD_CREATE,
+        Capability.FIELD_LABEL_CREATE,
+        Capability.FORM_LAYOUT_PLACE_FIELD,
+    }
+    assert assessment.intent is not None
+    assert assessment.intent.target_table == "problem"
+    assert assessment.intent.field_name == "u_vendor_reference"
+    assert assessment.intent.reference_table == "core_company"
+    assert assessment.intent.reference_qualifier == "vendor=true"
+    assert assessment.intent.placement_anchor == "description"
+    assert assessment.intent.placement_position == "below"
