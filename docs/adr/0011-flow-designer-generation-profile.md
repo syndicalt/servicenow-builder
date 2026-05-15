@@ -18,6 +18,8 @@ Sprint 125 adds read-only `flow_graph` retrieval as prerequisite context. This i
 
 Sprint 126 adds a validation-only `sys_hub_flow_graph_diff` contract. This contract lets the system validate a future provider's structured graph diff before any retrieved Update Set builder exists. It does not route Flow Designer output into handoff.
 
+Sprint 127 adds Flow Designer builder preflight planning. The preflight verifies `retrieved_graph_hash_matches_existing_graph_hash` and emits the builder evidence still required before customer updates can be produced. The current blocked reason is `Flow Designer builder is design-only`; runtime generation remains disabled.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -69,6 +71,14 @@ The validation-only pseudo-table is `sys_hub_flow_graph_diff`. Its currently all
 - `update_condition`.
 
 The builder converts validated structured graph output into retrieved Update Set XML. The provider must not provide raw `sys_update_xml` as the authoritative artifact.
+
+The builder preflight requires these evidence items before implementation can move beyond design:
+
+- `xml_shape_repository_available`.
+- `customer_update_name_strategy_defined`.
+- `flow_snapshot_update_strategy_defined`.
+- `rollback_customer_update_strategy_defined`.
+- `servicenow_preview_commit_review_required`.
 
 ## Deterministic Validators
 

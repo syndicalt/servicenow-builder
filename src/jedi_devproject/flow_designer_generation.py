@@ -76,6 +76,22 @@ class FlowGraphDiffIntent(BaseModel):
         return self
 
 
+class FlowGraphBuilderPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capability: Literal["flow_modify"]
+    flow_name: str
+    target_table: str
+    operation_count: int
+    runtime_generation_enabled: bool
+    retrieved_update_set_handoff_enabled: bool
+    graph_hash_verified: bool
+    blocked_reason: str
+    required_customer_update_tables: list[str]
+    preflight_checks: list[str]
+    required_builder_evidence: list[str]
+
+
 def validate_flow_graph_diff_candidate(
     *,
     changes: list[CandidateChange],
@@ -96,6 +112,52 @@ def validate_flow_graph_diff_candidate(
         raise
     _validate_retrieved_nodes(intent=intent, retrieved_node_ids=retrieved_node_ids)
     return intent
+
+
+def plan_flow_graph_builder(
+    *,
+    changes: list[CandidateChange],
+    retrieved_node_ids: set[str],
+    retrieved_graph_hash: str,
+) -> FlowGraphBuilderPlan:
+    intent = validate_flow_graph_diff_candidate(
+        changes=changes,
+        retrieved_node_ids=retrieved_node_ids,
+    )
+    if intent.customer_update_records:
+        raise ValueError("Flow builder design does not accept customer updates")
+    if intent.existing_graph_hash != retrieved_graph_hash:
+        raise ValueError("retrieved graph hash does not match Flow graph diff")
+    return FlowGraphBuilderPlan(
+        capability=intent.capability,
+        flow_name=intent.flow_name,
+        target_table=intent.target_table,
+        operation_count=len(intent.requested_graph_diff),
+        runtime_generation_enabled=False,
+        retrieved_update_set_handoff_enabled=False,
+        graph_hash_verified=True,
+        blocked_reason="Flow Designer builder is design-only",
+        required_customer_update_tables=[
+            "sys_hub_flow",
+            "sys_hub_action_instance",
+            "sys_hub_flow_logic_instance_v2",
+        ],
+        preflight_checks=[
+            "retrieved_graph_hash_matches_existing_graph_hash",
+            "diff_references_only_retrieved_nodes",
+            "diff_operation_is_add_action_or_update_condition",
+            "runtime_history_tables_excluded",
+            "forbidden_flow_tokens_absent",
+            "retrieved_update_set_handoff_disabled",
+        ],
+        required_builder_evidence=[
+            "xml_shape_repository_available",
+            "customer_update_name_strategy_defined",
+            "flow_snapshot_update_strategy_defined",
+            "rollback_customer_update_strategy_defined",
+            "servicenow_preview_commit_review_required",
+        ],
+    )
 
 
 def _validate_retrieved_nodes(

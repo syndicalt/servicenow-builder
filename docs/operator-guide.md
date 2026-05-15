@@ -355,6 +355,8 @@ Required `flow_graph` retrieval fails closed when the target flow list is missin
 
 Sprint 126 adds validation-only graph diff support for the pseudo-table `sys_hub_flow_graph_diff`. The only currently allowed diff operations are `add_action` and `update_condition`. The validator rejects raw XML, raw `sys_update_xml`, unretrieved node references, scripts, custom actions, spokes, credentials, tokens, subflows, approvals, and broad graph rewrites. No runtime generation is enabled and `sys_hub_flow_graph_diff` is not accepted by retrieved Update Set handoff.
 
+Sprint 127 adds Flow Designer builder preflight planning. The preflight verifies `retrieved_graph_hash_matches_existing_graph_hash`, keeps `runtime_generation_enabled=false`, keeps retrieved Update Set handoff disabled, and reports `Flow Designer builder is design-only`; runtime generation remains disabled. Required evidence before implementation can proceed includes `xml_shape_repository_available`, customer update naming, flow snapshot update strategy, rollback customer update strategy, and ServiceNow preview/commit review.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

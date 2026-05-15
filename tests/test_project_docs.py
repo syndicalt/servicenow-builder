@@ -1169,12 +1169,38 @@ def test_sprint_126_change_log_documents_flow_graph_diff_contract() -> None:
     assert "retrieved Update Set handoff" in change_log
 
 
+def test_flow_designer_docs_document_builder_preflight_design_only() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in [guide, adr]:
+        assert "Flow Designer builder preflight" in text
+        assert "retrieved_graph_hash_matches_existing_graph_hash" in text
+        assert "xml_shape_repository_available" in text
+        assert "Flow Designer builder is design-only" in text
+        assert "runtime generation remains disabled" in text
+
+
+def test_sprint_127_change_log_documents_flow_builder_design() -> None:
+    change_log = Path("docs/sprints/sprint-127-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 127 Change Log" in change_log
+    assert "Flow builder preflight design" in change_log
+    assert "runtime generation remains disabled" in change_log
+    assert "retrieved_graph_hash_matches_existing_graph_hash" in change_log
+    assert "xml_shape_repository_available" in change_log
+    assert "retrieved Update Set handoff remains disabled" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
     assert "Sprint 124 | Flow Designer generation profile design" in backlog
     assert "Sprint 125 | Flow graph retrieval hardening" in backlog
     assert "Sprint 126 | Flow graph diff contract validation" in backlog
+    assert "Sprint 127 | Flow builder preflight design" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

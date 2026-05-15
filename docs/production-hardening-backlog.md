@@ -44,6 +44,7 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 23 | Sprint 124 | Flow Designer generation profile design | Flow Designer is graph-oriented and cannot safely be treated as a single-record generator. | ADR 0011 defines `flow_modify`, supported subset, forbidden cases, graph output schema, deterministic validators, Update Set XML evidence requirements, UAT story shape, and confirms No runtime generation is enabled. |
 | 24 | Sprint 125 | Flow graph retrieval hardening | Flow mutation must not begin until the app can retrieve and validate a complete current flow graph. | Flow context includes retrieved trigger, action, logic, input, and output records with citations, excludes runtime history tables, and fails closed when the graph is incomplete. |
 | 25 | Sprint 126 | Flow graph diff contract validation | Flow mutation needs a structured model output contract before any builder can create customer updates. | Add validation-only `sys_hub_flow_graph_diff` support for narrow `add_action` and `update_condition` diffs, reject raw XML and unretrieved node references, and keep retrieved Update Set handoff disabled for Flow Designer. |
+| 26 | Sprint 127 | Flow builder preflight design | A future Flow builder must prove graph freshness and required XML-shape evidence before creating customer updates. | Add design-only builder preflight planning, verify retrieved graph hash, reject premature customer updates, keep runtime generation disabled, and keep retrieved Update Set handoff disabled. |
 
 ## Review Gates
 
@@ -104,5 +105,6 @@ Review for:
 23. Sprint 124: Flow Designer generation profile design.
 24. Sprint 125: Flow graph retrieval hardening.
 25. Sprint 126: Flow graph diff contract validation.
+26. Sprint 127: Flow builder preflight design.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

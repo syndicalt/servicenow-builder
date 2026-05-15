@@ -4,7 +4,10 @@ import pytest
 
 from jedi_devproject.business_rule_generation import business_rule_customer_updates
 from jedi_devproject.client_script_generation import client_script_customer_updates
-from jedi_devproject.flow_designer_generation import validate_flow_graph_diff_candidate
+from jedi_devproject.flow_designer_generation import (
+    plan_flow_graph_builder,
+    validate_flow_graph_diff_candidate,
+)
 from jedi_devproject.models import CandidateChange
 from jedi_devproject.script_include_generation import script_include_customer_updates
 from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
@@ -238,6 +241,55 @@ def test_flow_graph_diff_validator_rejects_forbidden_flow_tokens() -> None:
                 )
             ],
             retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+
+def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None:
+    plan = plan_flow_graph_builder(
+        changes=[_flow_graph_diff_change()],
+        retrieved_node_ids=_retrieved_flow_nodes(),
+        retrieved_graph_hash="a" * 64,
+    )
+
+    assert plan.capability == "flow_modify"
+    assert plan.flow_name == "Incident Triage"
+    assert plan.runtime_generation_enabled is False
+    assert plan.retrieved_update_set_handoff_enabled is False
+    assert plan.graph_hash_verified is True
+    assert plan.blocked_reason == "Flow Designer builder is design-only"
+    assert plan.required_customer_update_tables == [
+        "sys_hub_flow",
+        "sys_hub_action_instance",
+        "sys_hub_flow_logic_instance_v2",
+    ]
+    assert "retrieved_graph_hash_matches_existing_graph_hash" in plan.preflight_checks
+    assert "xml_shape_repository_available" in plan.required_builder_evidence
+
+
+def test_flow_graph_builder_plan_rejects_stale_graph_hash() -> None:
+    with pytest.raises(ValueError, match="retrieved graph hash does not match"):
+        plan_flow_graph_builder(
+            changes=[_flow_graph_diff_change()],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+            retrieved_graph_hash="b" * 64,
+        )
+
+
+def test_flow_graph_builder_plan_rejects_premature_customer_update_records() -> None:
+    with pytest.raises(ValueError, match="Flow builder design does not accept customer updates"):
+        plan_flow_graph_builder(
+            changes=[
+                _flow_graph_diff_change(
+                    customer_update_records=[
+                        {
+                            "name": "sys_hub_action_instance_generated",
+                            "target_table": "sys_hub_action_instance",
+                        }
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+            retrieved_graph_hash="a" * 64,
         )
 
 
