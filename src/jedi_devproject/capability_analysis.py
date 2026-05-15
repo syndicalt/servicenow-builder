@@ -620,11 +620,12 @@ def _is_dictionary_form_request(text: str) -> bool:
     if (
         _is_business_rule_request(text)
         or _is_client_script_request(text)
+        or "script include" in text
         or "ui policy" in text
         or "ui policies" in text
     ):
         return False
-    return ("field" in text or "column" in text) and "form" in text
+    return ("field" in text or "column" in text) and re.search(r"\bform\b", text) is not None
 
 
 def _field_form_intent(story: Story, text: str) -> FieldFormIntent | None:

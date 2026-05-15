@@ -410,6 +410,37 @@ def test_complete_script_include_story_is_eligible_for_automated_generation() ->
     assert assessment.reasons == ["supported utility script include generation request"]
 
 
+def test_script_include_story_with_fields_read_and_performs_is_not_dictionary_form() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010017",
+            short_description="UAT: Create global text normalization Script Include",
+            description=(
+                "Create a Script Include named JediUatStringUtil. Scope: global. "
+                "Client callable: false. Expected server-side behavior: expose a "
+                "public method normalizeText(value) that returns an empty string when "
+                "value is nil and otherwise returns the trimmed lowercase string value. "
+                "Tables read: none. Tables written: none. Fields read: none. "
+                "Fields written: none. Do not use GlideRecord, outbound calls, "
+                "credentials, security changes, or caller creation."
+            ),
+            acceptance_criteria=(
+                "- A global Script Include named JediUatStringUtil is created.\n"
+                "- api_name is global.JediUatStringUtil.\n"
+                "- It is not client callable.\n"
+                "- It exposes normalizeText(value) as a public method.\n"
+                "- It performs no table writes and uses no outbound calls.\n"
+                "- Delivery is a retrieved Update Set ready for ServiceNow preview and commit."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.SCRIPT_INCLUDE_GENERATE}
+    assert assessment.required_instance_context == ["script_includes"]
+
+
 def test_complete_ui_policy_story_is_eligible_for_automated_generation() -> None:
     assessment = analyze_story_capabilities(
         _story(
