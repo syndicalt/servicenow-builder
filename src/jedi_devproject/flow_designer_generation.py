@@ -93,6 +93,7 @@ class FlowGraphBuilderPlan(BaseModel):
     required_builder_evidence: list[str]
     xml_shape_repository_version: str
     xml_shape_tables: list[str]
+    customer_update_strategy_version: str
 
 
 class FlowXmlShape(BaseModel):
@@ -138,6 +139,24 @@ class FlowXmlShapeEvidence(BaseModel):
     retrieved_update_set_handoff_enabled: bool
 
 
+class FlowCustomerUpdateStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["flow-customer-update-strategy-v1"]
+    naming_pattern: Literal["table_sys_id"]
+    runtime_generation_enabled: bool
+    retrieved_update_set_handoff_enabled: bool
+    rollback_strategy_by_operation: dict[FlowGraphDiffOperation, str]
+    evidence: list[str]
+
+    def customer_update_name(self, table: str, sys_id: str) -> str:
+        flow_xml_shape_repository().shape(table)
+        cleaned_sys_id = sys_id.strip()
+        if not re.fullmatch(r"[a-fA-F0-9]{32}", cleaned_sys_id):
+            raise ValueError("Flow customer update sys_id must be 32 hex characters")
+        return f"{table}_{cleaned_sys_id.lower()}"
+
+
 def validate_flow_graph_diff_candidate(
     *,
     changes: list[CandidateChange],
@@ -175,6 +194,7 @@ def plan_flow_graph_builder(
     if intent.existing_graph_hash != retrieved_graph_hash:
         raise ValueError("retrieved graph hash does not match Flow graph diff")
     repository = flow_xml_shape_repository()
+    strategy = flow_customer_update_strategy()
     return FlowGraphBuilderPlan(
         capability=intent.capability,
         flow_name=intent.flow_name,
@@ -207,6 +227,7 @@ def plan_flow_graph_builder(
         ],
         xml_shape_repository_version=repository.version,
         xml_shape_tables=[shape.table for shape in repository.shapes],
+        customer_update_strategy_version=strategy.version,
     )
 
 
@@ -244,6 +265,31 @@ def validate_flow_xml_shape_evidence(*, table: str, xml_payload: str) -> FlowXml
         forbidden_fields_absent=True,
         runtime_generation_enabled=repository.runtime_generation_enabled,
         retrieved_update_set_handoff_enabled=repository.retrieved_update_set_handoff_enabled,
+    )
+
+
+def flow_customer_update_strategy() -> FlowCustomerUpdateStrategy:
+    return FlowCustomerUpdateStrategy(
+        version="flow-customer-update-strategy-v1",
+        naming_pattern="table_sys_id",
+        runtime_generation_enabled=False,
+        retrieved_update_set_handoff_enabled=False,
+        rollback_strategy_by_operation={
+            "add_action": (
+                "Rollback removes the generated sys_hub_action_instance customer update and "
+                "restores the previously retrieved graph ordering evidence."
+            ),
+            "update_condition": (
+                "Rollback restores the previous sys_hub_flow_logic_instance_v2 condition value "
+                "from retrieved graph evidence."
+            ),
+        },
+        evidence=[
+            "customer_update_name_strategy_defined",
+            "rollback_customer_update_strategy_defined",
+            "runtime_generation_disabled",
+            "retrieved_update_set_handoff_disabled",
+        ],
     )
 
 

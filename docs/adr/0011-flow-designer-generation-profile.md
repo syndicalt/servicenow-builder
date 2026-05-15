@@ -24,6 +24,8 @@ Sprint 128 adds the Flow XML shape repository `flow-xml-shapes-v1`. The reposito
 
 Sprint 129 adds the Flow XML shape evidence validator `validate_flow_xml_shape_evidence`. The validator parses retrieved review samples and verifies the expected `record_update` root, `INSERT_OR_UPDATE` action, required fields, and forbidden field absence against `flow-xml-shapes-v1`. This is still no Flow XML builder and no retrieved Update Set handoff; it only proves whether collected XML evidence matches the repository contract.
 
+Sprint 130 adds the Flow customer update strategy `flow-customer-update-strategy-v1`. The strategy defines the `table_sys_id` customer update naming convention for approved Flow tables and names rollback strategy coverage for the narrow `add_action` and `update_condition` diff operations. This is still no Flow XML builder and no retrieved Update Set handoff; it only proves that customer update names and rollback strategy are explicit before builder work starts.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -101,6 +103,16 @@ The Flow XML shape evidence validator records:
 - required fields present in the review sample.
 - fail-closed errors for missing required fields.
 - fail-closed errors for forbidden fields.
+- `runtime_generation_enabled=false`.
+- `retrieved_update_set_handoff_enabled=false`.
+
+The Flow customer update strategy records:
+
+- strategy version `flow-customer-update-strategy-v1`.
+- naming pattern `table_sys_id`.
+- approved Flow tables from `flow-xml-shapes-v1`.
+- rollback strategy text for `add_action`.
+- rollback strategy text for `update_condition`.
 - `runtime_generation_enabled=false`.
 - `retrieved_update_set_handoff_enabled=false`.
 

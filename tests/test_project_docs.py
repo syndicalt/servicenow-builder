@@ -1246,6 +1246,31 @@ def test_sprint_129_change_log_documents_flow_xml_shape_evidence_validation() ->
     assert "no Flow XML builder" in change_log
 
 
+def test_flow_designer_docs_document_customer_update_strategy() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in [guide, adr]:
+        assert "flow-customer-update-strategy-v1" in text
+        assert "Flow customer update strategy" in text
+        assert "table_sys_id" in text
+        assert "rollback strategy" in text
+        assert "still no Flow XML builder" in text
+
+
+def test_sprint_130_change_log_documents_flow_customer_update_strategy() -> None:
+    change_log = Path("docs/sprints/sprint-130-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 130 Change Log" in change_log
+    assert "Flow customer update strategy" in change_log
+    assert "flow-customer-update-strategy-v1" in change_log
+    assert "table_sys_id" in change_log
+    assert "rollback_customer_update_strategy_defined" in change_log
+    assert "no Flow XML builder" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
@@ -1255,6 +1280,7 @@ def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> 
     assert "Sprint 127 | Flow builder preflight design" in backlog
     assert "Sprint 128 | Flow XML shape repository" in backlog
     assert "Sprint 129 | Flow XML shape evidence validation" in backlog
+    assert "Sprint 130 | Flow customer update strategy" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

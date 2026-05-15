@@ -5,6 +5,7 @@ import pytest
 from jedi_devproject.business_rule_generation import business_rule_customer_updates
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.flow_designer_generation import (
+    flow_customer_update_strategy,
     flow_xml_shape_repository,
     plan_flow_graph_builder,
     validate_flow_graph_diff_candidate,
@@ -272,6 +273,8 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
         "sys_hub_action_instance",
         "sys_hub_flow_logic_instance_v2",
     ]
+    assert plan.customer_update_strategy_version == "flow-customer-update-strategy-v1"
+    assert "rollback_customer_update_strategy_defined" in plan.required_builder_evidence
 
 
 def test_flow_graph_builder_plan_rejects_stale_graph_hash() -> None:
@@ -396,6 +399,36 @@ def test_flow_xml_shape_evidence_validator_rejects_forbidden_field() -> None:
                 "</record_update>"
             ),
         )
+
+
+def test_flow_customer_update_strategy_names_approved_flow_updates() -> None:
+    strategy = flow_customer_update_strategy()
+    sys_id = "a" * 32
+
+    assert strategy.version == "flow-customer-update-strategy-v1"
+    assert strategy.runtime_generation_enabled is False
+    assert strategy.retrieved_update_set_handoff_enabled is False
+    assert strategy.customer_update_name("sys_hub_action_instance", sys_id) == (
+        "sys_hub_action_instance_" + sys_id
+    )
+    assert "add_action" in strategy.rollback_strategy_by_operation
+    assert "update_condition" in strategy.rollback_strategy_by_operation
+    assert "customer_update_name_strategy_defined" in strategy.evidence
+    assert "rollback_customer_update_strategy_defined" in strategy.evidence
+
+
+def test_flow_customer_update_strategy_rejects_unapproved_table() -> None:
+    strategy = flow_customer_update_strategy()
+
+    with pytest.raises(KeyError, match="Flow XML shape not found"):
+        strategy.customer_update_name("sys_hub_spoke_instance", "a" * 32)
+
+
+def test_flow_customer_update_strategy_rejects_unstable_sys_id() -> None:
+    strategy = flow_customer_update_strategy()
+
+    with pytest.raises(ValueError, match="Flow customer update sys_id must be 32 hex characters"):
+        strategy.customer_update_name("sys_hub_action_instance", "generated-action-node")
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:

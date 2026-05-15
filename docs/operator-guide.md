@@ -361,6 +361,8 @@ Sprint 128 adds the Flow XML shape repository `flow-xml-shapes-v1`. The reposito
 
 Sprint 129 adds the Flow XML shape evidence validator `validate_flow_xml_shape_evidence`. Operators and future researchers can use it to validate retrieved review samples against `flow-xml-shapes-v1` before any builder work is considered. The validator rejects malformed XML, wrong root or action values, missing required field evidence, and forbidden field evidence. It adds `xml_shape_evidence_validator_available` to the preflight evidence list, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
 
+Sprint 130 adds the Flow customer update strategy `flow-customer-update-strategy-v1`. The strategy uses the existing ServiceNow-style `table_sys_id` update name convention for approved Flow tables, rejects unapproved Flow tables, rejects unstable non-hex sys_ids, and records rollback strategy coverage for `add_action` and `update_condition`. This gives the future builder a reviewable naming and rollback strategy, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability
