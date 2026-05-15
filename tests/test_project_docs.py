@@ -2404,3 +2404,14 @@ def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> N
     assert "u_antics" in change_log
     assert "capability-based" in change_log
     assert "generic dictionary field creation plus form placement" in change_log
+
+
+def test_sprint_one_forty_change_log_documents_sys_id_lifecycle_lookup() -> None:
+    change_log = Path("docs/sprints/sprint-140-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "duplicate `rm_story.number` values" in change_log
+    assert "story_sys_id" in change_log
+    assert "current.getUniqueValue()" in change_log
+    assert "Failure writeback" in change_log
+    assert "Sprint 140: Sys_id-backed lifecycle lookup" in backlog

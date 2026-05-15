@@ -884,7 +884,11 @@ def _servicenow_failure_notifier(
     def notify(job: FulfillmentJobRecord, error_message: str) -> None:
         fulfillment_job = FulfillmentJobRecord.model_validate(job)
         stories = client.fetch_stories(
-            sysparm_query=f"number={fulfillment_job.story_number}",
+            sysparm_query=(
+                f"sys_id={fulfillment_job.story_sys_id}"
+                if fulfillment_job.story_sys_id
+                else f"number={fulfillment_job.story_number}"
+            ),
             limit=1,
         )
         if not stories:

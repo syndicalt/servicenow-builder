@@ -37,7 +37,27 @@ def test_draft_to_ready_event_plans_evaluation_and_claim_state() -> None:
     assert plan.reasons == []
 
 
-def test_lifecycle_event_rejects_unknown_servicenow_identifiers() -> None:
+def test_lifecycle_event_accepts_story_sys_id_for_authoritative_lookup() -> None:
+    event = LifecycleStateChangeEvent.model_validate(
+        {
+            "event_id": "evt-20260513-001",
+            "event_type": "story_state_changed",
+            "source": "servicenow-business-rule",
+            "table": "rm_story",
+            "story_number": "STRY0010013",
+            "story_sys_id": "rm-story-sys-id",
+            "previous_state": "Draft",
+            "current_state": "Ready",
+            "occurred_at": "2026-05-13T15:45:00Z",
+            "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
+            "emitted_by": "jedi-devproject-lifecycle-integration",
+        }
+    )
+
+    assert event.story_sys_id == "rm-story-sys-id"
+
+
+def test_lifecycle_event_still_rejects_unknown_payload_fields() -> None:
     with pytest.raises(ValidationError) as exc:
         LifecycleStateChangeEvent.model_validate(
             {
@@ -51,7 +71,7 @@ def test_lifecycle_event_rejects_unknown_servicenow_identifiers() -> None:
                 "occurred_at": "2026-05-13T15:45:00Z",
                 "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
                 "emitted_by": "jedi-devproject-lifecycle-integration",
-                "story_sys_id": "must-not-cross-this-boundary",
+                "story_url": "https://dev205693.service-now.com/rm_story.do",
             }
         )
 

@@ -84,7 +84,7 @@ def model_candidate_fulfillment_handler(
     config: ModelCandidateFulfillmentConfig,
 ) -> FulfillmentHandler:
     def handle(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
-        stories = client.fetch_stories(sysparm_query=f"number={job.story_number}", limit=1)
+        stories = client.fetch_stories(sysparm_query=_story_lookup_query(job), limit=1)
         if not stories:
             raise RuntimeError(f"story not found: {job.story_number}")
 
@@ -175,6 +175,12 @@ def model_candidate_fulfillment_handler(
         )
 
     return handle
+
+
+def _story_lookup_query(job: FulfillmentJobRecord) -> str:
+    if job.story_sys_id:
+        return f"sys_id={job.story_sys_id}"
+    return f"number={job.story_number}"
 
 
 def _surface_context_for_story(

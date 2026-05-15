@@ -377,6 +377,7 @@ def build_lifecycle_business_rule_spec(
         source: 'servicenow-business-rule',
         table: 'rm_story',
         story_number: current.number.toString(),
+        story_sys_id: current.getUniqueValue(),
         previous_state: previousStateLabel,
         current_state: currentStateLabel,
         occurred_at: new GlideDateTime().getValue(),

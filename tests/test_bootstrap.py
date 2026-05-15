@@ -302,8 +302,7 @@ def test_lifecycle_business_rule_spec_emits_ready_and_complete_events() -> None:
     assert "currentStateLabel = 'Draft'" in spec.script
     assert "https://sidecar.example.gov/lifecycle/events" not in spec.script
     assert "current.number.toString()" in spec.script
-    assert "current.sys_id" not in spec.script
-    assert "story_sys_id" not in spec.model_dump_json()
+    assert "story_sys_id: current.getUniqueValue()" in spec.script
 
 
 def test_lifecycle_webhook_bootstrap_spec_includes_rest_message_and_business_rule() -> None:
@@ -322,7 +321,7 @@ def test_lifecycle_webhook_bootstrap_spec_includes_rest_message_and_business_rul
     assert "new sn_ws.RESTMessageV2(" in spec.business_rule.script
     assert "'Jedi DevProject Lifecycle Event API'" in spec.business_rule.script
     assert "'post_event'" in spec.business_rule.script
-    assert "story_sys_id" not in spec.model_dump_json()
+    assert "story_sys_id: current.getUniqueValue()" in spec.business_rule.script
 
 
 def test_lifecycle_webhook_bootstrap_spec_can_emit_hmac_signed_requests() -> None:
@@ -390,7 +389,7 @@ def test_lifecycle_webhook_servicenow_record_plan_has_explicit_tables() -> None:
     assert plan[2]["fields"]["when"] == "after"
     assert plan[2]["fields"]["action_update"] is True
     assert "story_state_changed" in str(plan[2]["fields"]["script"])
-    assert "story_sys_id" not in str(plan)
+    assert "story_sys_id: current.getUniqueValue()" in str(plan[2]["fields"]["script"])
 
 
 def test_apply_lifecycle_webhook_records_requires_confirmation() -> None:

@@ -65,6 +65,7 @@ class WritebackExecutionRequest(BaseModel):
 
 class BuildClaimExecutionRequest(BaseModel):
     story_number: str
+    story_sys_id: str | None = None
     lifecycle_event_id: str
     candidate_artifact_url: str | None = None
     from_state: str
@@ -397,7 +398,11 @@ def execute_build_claim(
     request: BuildClaimExecutionRequest,
 ) -> WritebackExecutionResult:
     stories = client.fetch_stories(
-        sysparm_query=f"number={request.story_number}",
+        sysparm_query=(
+            f"sys_id={request.story_sys_id}"
+            if request.story_sys_id
+            else f"number={request.story_number}"
+        ),
         limit=1,
     )
     if not stories:

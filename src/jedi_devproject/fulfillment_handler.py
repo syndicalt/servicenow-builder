@@ -44,6 +44,7 @@ def build_claim_fulfillment_handler(
             client,
             BuildClaimExecutionRequest(
                 story_number=job.story_number,
+                story_sys_id=job.story_sys_id,
                 lifecycle_event_id=job.event_id,
                 candidate_artifact_url=config.candidate_artifact_url,
                 from_state=config.from_state,

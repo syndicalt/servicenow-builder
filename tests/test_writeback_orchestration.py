@@ -32,6 +32,7 @@ class FakeWritebackClient:
         self.ai_status = ai_status
         self.build_reference = build_reference
         self.candidate_artifact = candidate_artifact
+        self.fetch_story_queries: list[str | None] = []
         self.dictionary_fields = [
             StoryDictionaryField(
                 element="state",
@@ -65,6 +66,7 @@ class FakeWritebackClient:
         *,
         limit: int = 100,
     ) -> list[Story]:
+        self.fetch_story_queries.append(sysparm_query)
         return [
             Story(
                 sys_id="story-sys-id",
@@ -189,6 +191,32 @@ def test_execute_build_claim_applies_and_writes_claim_audit(
     assert fields["state"] == "Work in Progress"
     assert fields["u_ai_status"] == "Build In Progress"
     assert "Automated build started" in str(fields["work_notes"])
+
+
+def test_execute_build_claim_prefers_story_sys_id_for_fresh_story_lookup(
+    tmp_path: Path,
+) -> None:
+    client = FakeWritebackClient(story_state="Ready")
+
+    result = execute_build_claim(
+        client,
+        BuildClaimExecutionRequest(
+            story_number="STRY0010013",
+            story_sys_id="correct-story-sys-id",
+            lifecycle_event_id="evt-20260513-001",
+            candidate_artifact_url=None,
+            from_state="Ready",
+            apply=True,
+            confirm_story_number="STRY0010013",
+            actor_type=ActorType.SERVICE,
+            actor_id="svc-jedi-orchestrator",
+            execution_id="claim-20260513-001",
+            audit_root=tmp_path,
+        ),
+    )
+
+    assert result.allowed is True
+    assert client.fetch_story_queries[0] == "sys_id=correct-story-sys-id"
 
 
 def test_execute_build_claim_fails_closed_when_fresh_story_is_not_ready(

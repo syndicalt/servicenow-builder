@@ -1908,7 +1908,7 @@ def test_cli_process_lifecycle_event_writes_story_ready_plan(
     assert payload["plan"]["lifecycle_action"] == "evaluate_story"
     assert payload["plan"]["claim_state"] == "Work in Progress"
     assert payload["plan"]["idempotency_key"] == "evt-20260513-001"
-    assert "story_sys_id" not in json.dumps(payload)
+    assert payload["event"]["story_sys_id"] is None
 
 
 def test_cli_process_lifecycle_event_fails_closed_for_invalid_event(
@@ -1929,7 +1929,7 @@ def test_cli_process_lifecycle_event_fails_closed_for_invalid_event(
                 "occurred_at": "2026-05-13T15:45:00Z",
                 "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
                 "emitted_by": "jedi-devproject-lifecycle-integration",
-                "story_sys_id": "must-not-cross-this-boundary",
+                "story_url": "https://dev205693.service-now.com/rm_story.do",
             }
         ),
         encoding="utf-8",
@@ -3086,7 +3086,7 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
     assert payload["hmac_secret_property_name"] == "x_jedi.lifecycle.webhook.secret"
     assert "X-JEDI-Webhook-Signature" in payload["business_rule"]["script"]
     assert "sha256-base64=" in payload["business_rule"]["script"]
-    assert "story_sys_id" not in json.dumps(payload)
+    assert "story_sys_id: current.getUniqueValue()" in payload["business_rule"]["script"]
 
 
 def test_cli_plan_update_set_importer_writes_reviewable_spec(

@@ -601,6 +601,102 @@ def test_model_candidate_handler_builds_incident_candidate_after_instance_discov
     assert result.after_artifacts_persisted is not None
 
 
+def test_model_candidate_handler_fetches_story_by_sys_id_when_job_has_sys_id() -> None:
+    class DuplicateNumberClient(FakeModelClient):
+        def fetch_stories(
+            self,
+            sysparm_query: str | None = None,
+            *,
+            limit: int = 100,
+        ) -> list[Story]:
+            self.fetches.append({"table": "rm_story", "lookup": {"query": sysparm_query}})
+            if sysparm_query == "sys_id=correct-story-sys-id":
+                return [
+                    Story(
+                        sys_id="correct-story-sys-id",
+                        number="STRY0010013",
+                        short_description="Create Incident duplicate-safe Client Script",
+                        description=(
+                            "Create an onChange Client Script on the Incident table for "
+                            "the category field. Condition: category changes to software. "
+                            "Expected behavior: show an info message. Fields read: category. "
+                            "Fields written: none."
+                        ),
+                        acceptance_criteria="Changing category to software shows the message.",
+                        story_points=3,
+                        priority=4,
+                        state="Work in Progress",
+                        data_classification=DataClassification.PUBLIC,
+                    )
+                ]
+            if sysparm_query == "number=STRY0010013":
+                return [
+                    Story(
+                        sys_id="wrong-story-sys-id",
+                        number="STRY0010013",
+                        short_description="Old unrelated story",
+                        description="Old unrelated story that should not be selected.",
+                        story_points=3,
+                        priority=4,
+                        state="Work in Progress",
+                        data_classification=DataClassification.PUBLIC,
+                    )
+                ]
+            return []
+
+    client = DuplicateNumberClient()
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_script_client",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "JEDI Duplicate Safe Client Script",
+                        "table": "incident",
+                        "type": "onChange",
+                        "field": "category",
+                        "script": (
+                            "function onChange(control, oldValue, newValue, isLoading) {"
+                            "g_form.addInfoMessage('ok');}"
+                        ),
+                        "fields_read": ["category"],
+                        "fields_written": [],
+                    },
+                }
+            ],
+            "test_plan": ["Change category to Software."],
+            "rollback_notes": ["Delete the generated Client Script."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(
+        _job().model_copy(
+            update={
+                "story_number": "STRY0010013",
+                "story_sys_id": "correct-story-sys-id",
+            }
+        )
+    )
+
+    assert result.artifacts[-1].payload_json is not None
+    assert result.artifacts[-1].payload_json["changes"][0]["fields"]["name"] == (
+        "JEDI Duplicate Safe Client Script"
+    )
+    assert client.fetches[0]["lookup"] == {"query": "sys_id=correct-story-sys-id"}
+    assert all(fetch["lookup"] != {"query": "number=STRY0010013"} for fetch in client.fetches)
+
+
 def test_model_candidate_handler_blocks_model_when_required_surface_context_missing() -> None:
     class MissingFlowClient(FakeModelClient):
         def fetch_table_records(

@@ -74,6 +74,7 @@ def _lifecycle_event(
     *,
     event_id: str = "evt-001",
     story_number: str = "STRY0010013",
+    story_sys_id: str | None = None,
 ) -> LifecycleStateChangeEvent:
     return LifecycleStateChangeEvent(
         event_id=event_id,
@@ -81,6 +82,7 @@ def _lifecycle_event(
         source="servicenow",
         table="rm_story",
         story_number=story_number,
+        story_sys_id=story_sys_id,
         previous_state="Draft",
         current_state="Ready",
         occurred_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
@@ -101,6 +103,7 @@ def _job_row(*, status: str = "queued", attempt_count: int = 0) -> dict[str, obj
         "locked_by": "worker-local-1" if status == "running" else None,
         "locked_at": datetime(2026, 5, 13, 15, 1, tzinfo=UTC) if status == "running" else None,
         "last_error": None,
+        "story_sys_id": "rm-story-sys-id",
         "correlation_id": "corr-evt-job",
     }
 
@@ -231,8 +234,10 @@ def test_enqueue_fulfillment_job_uses_postgres_idempotency_and_job_event() -> No
     assert "UNION ALL" in joined_sql
     assert "NOT EXISTS (SELECT 1 FROM inserted_job)" in joined_sql
     assert "INSERT INTO job_events" in joined_sql
+    assert "payload_json->>'story_sys_id' AS story_sys_id" in joined_sql
     assert "lifecycle_events.payload_json->>'correlation_id'" in joined_sql
     assert job == FulfillmentJobRecord.model_validate(_job_row())
+    assert job.story_sys_id == "rm-story-sys-id"
     assert job.correlation_id == "corr-evt-job"
     assert connection.transaction_count == 1
 

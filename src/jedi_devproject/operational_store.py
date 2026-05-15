@@ -64,6 +64,7 @@ class FulfillmentJobRecord(BaseModel):
     job_id: str
     event_id: str
     story_number: str
+    story_sys_id: str | None = None
     status: str
     attempt_count: int
     created_at: datetime
@@ -262,6 +263,7 @@ class PostgresOperationalStore:
                        selected_job.created_at, selected_job.updated_at,
                        selected_job.locked_by, selected_job.locked_at,
                        selected_job.last_error,
+                       lifecycle_events.payload_json->>'story_sys_id' AS story_sys_id,
                        lifecycle_events.payload_json->>'correlation_id' AS correlation_id
                 FROM selected_job
                 JOIN lifecycle_events
@@ -325,6 +327,7 @@ class PostgresOperationalStore:
                        updated_job.created_at, updated_job.updated_at,
                        updated_job.locked_by, updated_job.locked_at,
                        updated_job.last_error,
+                       lifecycle_events.payload_json->>'story_sys_id' AS story_sys_id,
                        lifecycle_events.payload_json->>'correlation_id' AS correlation_id
                 FROM updated_job
                 JOIN lifecycle_events
@@ -351,6 +354,7 @@ class PostgresOperationalStore:
                    fulfillment_jobs.attempt_count, fulfillment_jobs.created_at,
                    fulfillment_jobs.updated_at, fulfillment_jobs.locked_by,
                    fulfillment_jobs.locked_at, fulfillment_jobs.last_error,
+                   lifecycle_events.payload_json->>'story_sys_id' AS story_sys_id,
                    lifecycle_events.payload_json->>'correlation_id' AS correlation_id
             FROM fulfillment_jobs
             JOIN lifecycle_events
@@ -638,6 +642,7 @@ class PostgresOperationalStore:
                    fulfillment_jobs.attempt_count, fulfillment_jobs.created_at,
                    fulfillment_jobs.updated_at, fulfillment_jobs.locked_by,
                    fulfillment_jobs.locked_at, fulfillment_jobs.last_error,
+                   lifecycle_events.payload_json->>'story_sys_id' AS story_sys_id,
                    lifecycle_events.payload_json->>'correlation_id' AS correlation_id
             FROM fulfillment_jobs
             JOIN lifecycle_events

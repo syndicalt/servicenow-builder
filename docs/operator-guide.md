@@ -572,9 +572,13 @@ Required fields:
 - `correlation_id`
 - `emitted_by`
 
+Recommended field:
+
+- `story_sys_id` for authoritative ServiceNow record lookup
+
 For the MVP, only `event_type=story_state_changed`, `table=rm_story`, `previous_state=Draft`, and `current_state=Ready` plans evaluation. The sidecar plan is `evaluate_story` with a later claim target of `Work in Progress`. A `Ready for Testing` to `Complete` transition plans `close_story` and is treated as a UAT closeout signal only. A `Ready for Testing` to `Ready` transition plans `rework_requested`; it means the candidate was rejected but the story remains valid for rework. A `Ready for Testing` to `Draft` transition plans `story_rejected`; it means the story itself was rejected or reset. That claim must still perform a fresh ServiceNow story read and allowlisted state-transition check before any mutation.
 
-The event boundary rejects unknown fields, including ServiceNow `story_sys_id`. Story number, idempotency key, correlation id, source, and emitted identity are enough for orchestration correlation without passing internal ServiceNow record identifiers through the external boundary.
+The lifecycle event should include `story_sys_id` when emitted by ServiceNow. Story number is not guaranteed to be unique in every development or restored instance, so workers use `story_sys_id` as the authoritative lookup key when present and fall back to story number only for legacy events. Admin responses and public summaries still use story number and correlation ids; they do not need to expose ServiceNow internal record ids.
 
 Bootstrap should eventually install or document the ServiceNow-side pieces needed for this contract: a Business Rule or Flow that detects `Draft` to `Ready`, a Scripted REST API or outbound REST Message path for event delivery, and the integration identity used in `emitted_by`. That bootstrap work must be explicit and reviewed; this contract alone does not create ServiceNow scripts.
 
@@ -604,7 +608,7 @@ When `--hmac-secret-property-name` is supplied, the generated Business Rule read
 
 The Business Rule references the named REST Message instead of setting the endpoint directly. This keeps the endpoint URL out of the Business Rule script, lets ServiceNow own authentication configuration, and gives reviewers a clean separation between trigger logic and transport configuration.
 
-The generated Business Rule emits `story_state_changed` when the state changes from the supplied Draft value to the supplied Ready value. If `--ready-for-testing-state-value` and `--complete-state-value` are supplied, it also emits Ready for Testing transitions to Complete, Ready, and Draft. The generated payload uses story number and correlation ids, not `story_sys_id`. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
+The generated Business Rule emits `story_state_changed` when the state changes from the supplied Draft value to the supplied Ready value. If `--ready-for-testing-state-value` and `--complete-state-value` are supplied, it also emits Ready for Testing transitions to Complete, Ready, and Draft. The generated payload includes story number, `story_sys_id`, and correlation ids; the sidecar uses `story_sys_id` for worker lookup and story number for human-readable correlation. This command does not install the Business Rule, create a Flow, or mutate ServiceNow.
 
 The artifact also includes `servicenow_records`, a deterministic plan for the ServiceNow tables that later apply code must create or update:
 
@@ -818,7 +822,7 @@ Successful builds also require:
 - `reviewed_update_set_xml_path`
 - `test_evidence_path`
 
-The contract rejects unknown fields, including ServiceNow `story_sys_id`. The sidecar should use story number and artifact references at this boundary.
+The contract rejects unknown fields, including ServiceNow `story_sys_id`. The external build contract is downstream of lifecycle intake and should use story number and artifact references rather than internal ServiceNow record ids.
 
 Use `writeback_job_from_build_result()` to produce the structured writeback job shape for Ready for Testing planning. Use `reviewed_delivery_jobs_from_build_result()` to produce reviewed delivery handoff jobs for the Update Set XML and test evidence bundle.
 

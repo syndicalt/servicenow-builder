@@ -245,11 +245,13 @@ def _job(
     *,
     event_id: str = "evt-001",
     story_number: str = "STRY0010013",
+    story_sys_id: str | None = None,
 ) -> FulfillmentJobRecord:
     return FulfillmentJobRecord(
         job_id=f"job-{event_id}",
         event_id=event_id,
         story_number=story_number,
+        story_sys_id=story_sys_id,
         status="running",
         attempt_count=1,
         created_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
@@ -1822,7 +1824,7 @@ def test_process_one_runtime_fulfillment_returns_idle_without_servicenow_calls(
 def test_process_one_runtime_fulfillment_writes_work_note_when_handler_fails(
     tmp_path: Path,
 ) -> None:
-    store = FakeRuntimeStore(claimed_job=_job())
+    store = FakeRuntimeStore(claimed_job=_job(story_sys_id="correct-story-sys-id"))
     transport = RecordingTransport(
         [
             HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
@@ -1891,6 +1893,7 @@ def test_process_one_runtime_fulfillment_writes_work_note_when_handler_fails(
         "GET",
         "PATCH",
     ]
+    assert transport.requests[1].params["sysparm_query"] == "sys_id=correct-story-sys-id"
     assert transport.requests[-2].url.endswith("/api/now/table/sys_choice")
     assert transport.requests[-1].body["work_notes"] == (
         "Automated fulfillment failed for lifecycle event evt-001. "

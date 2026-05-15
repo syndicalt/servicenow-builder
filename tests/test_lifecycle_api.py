@@ -592,17 +592,19 @@ def test_lifecycle_webhook_records_unsupported_transition_without_enqueueing() -
     assert store.enqueued_jobs == []
 
 
-def test_lifecycle_webhook_rejects_forbidden_servicenow_identifiers() -> None:
+def test_lifecycle_webhook_accepts_story_sys_id_without_exposing_it_in_response() -> None:
     store = FakeOperationalStore()
     client = TestClient(create_lifecycle_api(store=store))
     payload = _ready_event_payload()
-    payload["story_sys_id"] = "must-not-cross-this-boundary"
+    payload["story_sys_id"] = "rm-story-sys-id"
 
     response = client.post("/lifecycle/events", json=payload)
 
-    assert response.status_code == 422
-    assert store.recorded_events == []
-    assert store.enqueued_jobs == []
+    assert response.status_code == 202
+    assert response.json()["job_id"] == "job-evt-20260513-001"
+    assert "story_sys_id" not in response.json()
+    assert [event.story_sys_id for event in store.recorded_events] == ["rm-story-sys-id"]
+    assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
 
 
 def test_health_endpoint_does_not_touch_operational_store() -> None:

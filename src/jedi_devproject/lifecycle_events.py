@@ -18,6 +18,7 @@ class LifecycleStateChangeEvent(BaseModel):
     source: str
     table: str
     story_number: str
+    story_sys_id: str | None = None
     previous_state: str
     current_state: str
     occurred_at: datetime
@@ -29,13 +30,16 @@ class LifecycleStateChangeEvent(BaseModel):
         "source",
         "table",
         "story_number",
+        "story_sys_id",
         "previous_state",
         "current_state",
         "correlation_id",
         "emitted_by",
     )
     @classmethod
-    def require_non_empty_text(cls, value: str) -> str:
+    def require_non_empty_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         if value.strip() == "":
             raise ValueError("must not be empty")
         return value
