@@ -102,7 +102,12 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
     assert fields_schema["type"] == "array"
     assert fields_schema["items"]["additionalProperties"] is False
     assert change_schema["properties"]["sys_id"] == {"type": "null"}
-    assert "JSON" in request.body["input"][0]["content"]
+    system_prompt = request.body["input"][0]["content"]
+    assert "JSON" in system_prompt
+    assert "Business Rule" in system_prompt
+    assert "current.<field>" in system_prompt
+    assert "fields_written" in system_prompt
+    assert "no changes" in system_prompt
     assert "openai-key" not in repr(request.body)
 
 

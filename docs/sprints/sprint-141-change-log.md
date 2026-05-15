@@ -24,3 +24,9 @@
 - Live UAT proved dictionary `read_only=true` prevents the worker from persisting `u_ai_status` and retrieved Update Set handoff metadata through the Table API.
 - Bootstrap now creates AI operational fields with dictionary `read_only=false` and remediates existing read-only AI operational fields back to writable.
 - Human read-only behavior must be enforced outside the dictionary flag with form policy, UI policy, ACLs, or role-scoped controls that still allow the integration identity to write.
+
+## Provider prompt hardening
+
+- Live Business Rule UAT also exposed an invalid model candidate that wrote `globals.short_description` instead of using the ServiceNow `current` record.
+- The OpenAI provider system prompt now tells Business Rule generation to write only through `current.<field>` or `current.setValue(...)`, include `fields_written`, and return no changes when it cannot satisfy that contract.
+- The deterministic Business Rule validator still rejects invalid scripts; the prompt hardening reduces avoidable invalid candidates without weakening the fail-closed validator.

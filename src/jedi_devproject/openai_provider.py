@@ -47,7 +47,14 @@ class OpenAIResponsesProvider:
                             "content": (
                                 "Return only JSON matching the supplied schema. "
                                 "If uncertain, return no changes and explain review "
-                                "steps in the test plan."
+                                "steps in the test plan. "
+                                "For ServiceNow Business Rule sys_script changes, "
+                                "scripts must write fields only through current.<field> "
+                                "or current.setValue('<field>', value), must not use "
+                                "globals or other implicit objects for record writes, "
+                                "and must include fields_written naming every field "
+                                "the script writes. If you cannot satisfy that Business "
+                                "Rule contract, return no changes."
                             ),
                         },
                         {
