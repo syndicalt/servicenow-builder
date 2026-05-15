@@ -662,6 +662,35 @@ def test_business_rule_validator_normalizes_action_and_conditions_aliases() -> N
     assert "current.category == &#x27;inquiry&#x27; &amp;&amp; gs.nil" in payload
 
 
+def test_business_rule_validator_normalizes_filter_alias() -> None:
+    updates = business_rule_customer_updates(
+        changes=[
+            _business_rule_change(
+                action_insert=False,
+                action_update=False,
+                action="insert, update",
+                filter_condition="",
+                filter="current.category == 'inquiry' && !current.short_description",
+                script=(
+                    "if (current.category == 'inquiry' && !current.short_description) {\n"
+                    "    current.short_description = 'Inquiry needs triage';\n"
+                    "}"
+                ),
+                fields_written=[],
+            )
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    payload = updates[0]["payload"]
+    assert "<action_insert>true</action_insert>" in payload
+    assert "<action_update>true</action_update>" in payload
+    assert (
+        "current.category == &#x27;inquiry&#x27; &amp;&amp; !current.short_description"
+        in payload
+    )
+
+
 def test_script_include_validator_infers_public_methods_from_script() -> None:
     updates = script_include_customer_updates(
         changes=[

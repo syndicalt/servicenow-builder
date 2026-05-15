@@ -290,6 +290,33 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     )
 
 
+def test_surface_context_ignores_forbidden_boundaries_as_requested_surfaces() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text=(
+            "Target artifact type: UI Policy\n"
+            "Target table: incident\n"
+            "Condition: category is software\n"
+            "Actions: Make assignment_group mandatory and visible.\n"
+            "Fields read: category\n"
+            "Fields written / affected: assignment_group\n"
+            "Reverse if false: true\n"
+            "Run scripts: false\n"
+            "Forbidden behavior: Do not use Client Script, Business Rule, "
+            "Script Include, Flow, ACL, integration calls, credentials, or "
+            "cross-table behavior."
+        ),
+        public_doc_queries=[],
+    )
+
+    assert bundle.context_sufficient is True
+    assert bundle.required_surfaces == ["table_schema", "form_layout", "ui_policies"]
+    assert "flow_graph" not in bundle.missing_required_surfaces
+
+
 def test_required_flow_graph_context_collects_graph_records_with_citations() -> None:
     client = FakeDiscoveryClient()
 

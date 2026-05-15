@@ -103,6 +103,7 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
             fields.get("filter_condition")
             or fields.get("condition")
             or fields.get("conditions")
+            or fields.get("filter")
             or ""
         ),
         script=script,

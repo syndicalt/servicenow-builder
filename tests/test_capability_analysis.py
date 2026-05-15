@@ -495,3 +495,78 @@ def test_complete_ui_policy_story_is_eligible_for_automated_generation() -> None
     assert assessment.intent is None
     assert assessment.required_instance_context == ["table_schema", "form_layout", "ui_policies"]
     assert assessment.reasons == ["supported declarative ui policy generation request"]
+
+
+def test_ui_policy_story_ignores_negative_client_script_instruction() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010024",
+            short_description="JEDI UAT: Require Assignment group for Software Incidents",
+            description=(
+                "Create a UI Policy on incident named JEDI UAT Software Assignment "
+                "Required. When category is software, Assignment group must be "
+                "mandatory and visible. When the condition is false, the policy "
+                "must reverse so Assignment group returns to normal behavior. This "
+                "must be implemented as a declarative UI Policy and UI Policy "
+                "Action, not as a Client Script."
+            ),
+            acceptance_criteria=(
+                "- An active UI Policy named JEDI UAT Software Assignment Required "
+                "is created for incident.\n"
+                "- The UI Policy condition is category is software.\n"
+                "- Reverse if false is enabled.\n"
+                "- A UI Policy Action makes assignment_group mandatory and visible.\n"
+                "- The solution does not use Client Script or server-side script.\n"
+                "- Delivery is a retrieved Update Set ready for ServiceNow preview "
+                "and commit."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.missing_details == []
+    assert Capability.CLIENT_SCRIPT_GENERATE not in assessment.capabilities
+    assert "ui policy generation includes forbidden behavior" not in assessment.reasons
+
+
+def test_structured_ui_policy_story_allows_disabled_scripts_and_forbidden_boundaries() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010024",
+            short_description="JEDI UAT: Require Assignment group for Software Incidents",
+            description=(
+                "Target artifact type: UI Policy\n"
+                "Target table: incident\n"
+                "Artifact name: JEDI UAT Software Assignment Required\n"
+                "Condition: category is software\n"
+                "Actions: Make assignment_group mandatory and visible.\n"
+                "Fields read: category\n"
+                "Fields written / affected: assignment_group\n"
+                "Reverse behavior: Reverse if false is enabled.\n"
+                "Reverse if false: true\n"
+                "Run scripts: false\n"
+                "Forbidden behavior: Do not use Client Script, Business Rule, "
+                "Script Include, Flow, ACL, integration calls, credentials, or "
+                "cross-table behavior.\n"
+                "Acceptance criteria: See Acceptance Criteria field.\n"
+                "Rollback expectation: Delete the generated UI Policy and UI "
+                "Policy Action through the retrieved Update Set review process."
+            ),
+            acceptance_criteria=(
+                "<p>- An active UI Policy named JEDI UAT Software Assignment "
+                "Required is created for incident. - The UI Policy condition is "
+                "category is software. - Reverse if false is enabled. - Run "
+                "scripts is false. - A UI Policy Action makes assignment_group "
+                "mandatory and visible. - The solution does not use Client "
+                "Script or server-side script. - Delivery is a retrieved Update "
+                "Set ready for ServiceNow preview and commit.</p>"
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.UI_POLICY_GENERATE}
+    assert assessment.missing_details == []
+    assert assessment.required_instance_context == ["table_schema", "form_layout", "ui_policies"]

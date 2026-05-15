@@ -5,6 +5,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from jedi_devproject.requirement_text import positive_requirement_text
+
 
 class InstanceDiscoveryClient(Protocol):
     def fetch_table_records(
@@ -403,7 +405,7 @@ def discover_servicenow_surface_context(
 
 
 def _required_surfaces(story_text: str) -> list[SurfaceName]:
-    lowered = story_text.lower()
+    lowered = positive_requirement_text(story_text)
     surfaces: list[SurfaceName] = ["table_schema", "form_layout"]
     keyword_map: list[tuple[SurfaceName, tuple[str, ...]]] = [
         ("business_rules", ("business rule", "server script")),

@@ -2452,5 +2452,18 @@ def test_sprint_one_forty_three_change_log_documents_script_metadata_separation(
     assert "STRY0010021" in change_log
     assert "fields_written" in change_log
     assert "candidate metadata" in change_log
+    assert "`filter`" in change_log
     assert "sys_script.script" in change_log
     assert "Sprint 143: Business Rule script metadata separation" in backlog
+
+
+def test_sprint_one_forty_four_change_log_documents_structured_ui_policy_gate() -> None:
+    change_log = Path("docs/sprints/sprint-144-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "STRY0010024" in change_log
+    assert "`Run scripts: false`" in change_log
+    assert "shared requirement-text parsing" in change_log
+    assert "`flow_graph`" in change_log
+    assert "`ui_policy_generate`" in change_log
+    assert "Sprint 144: Structured UI Policy gate hardening" in backlog

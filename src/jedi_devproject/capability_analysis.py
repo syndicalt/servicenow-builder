@@ -10,6 +10,7 @@ from jedi_devproject.capabilities import (
     capability_profile,
 )
 from jedi_devproject.models import Story
+from jedi_devproject.requirement_text import positive_requirement_text
 from jedi_devproject.risk import RiskInput, calculate_risk_score
 
 SUPPORTED_BASELINE_CAPABILITIES = {
@@ -329,47 +330,7 @@ def _story_text(story: Story) -> str:
 
 
 def _positive_requirement_text(text: str) -> str:
-    clauses = re.split(r"(?<=[.;\n])\s+", text)
-    positive_clauses = [
-        clause
-        for clause in clauses
-        if not _is_negative_clause(clause)
-    ]
-    return " ".join(positive_clauses)
-
-
-NEGATED_FORBIDDEN_TOKENS = [
-    "acl",
-    "async",
-    "credential",
-    "cross-table",
-    "delete",
-    "display",
-    "dom",
-    "endpoint",
-    "external",
-    "glideajax",
-    "gliderecord",
-    "globals",
-    "http://",
-    "https://",
-    "integration",
-    "migration",
-    "outbound",
-    "password",
-    "rest",
-    "secret",
-    "soap",
-    "token",
-]
-
-
-def _is_negative_clause(clause: str) -> bool:
-    cleaned = clause.strip().lstrip("-* ").lower()
-    if cleaned.startswith(("do not ", "don't ", "no ")):
-        return True
-    has_negation = bool(re.search(r"\b(?:must|should|shall|does|do|use)?\s*not\b", cleaned))
-    return has_negation and any(token in cleaned for token in NEGATED_FORBIDDEN_TOKENS)
+    return positive_requirement_text(text)
 
 
 def _requested_capabilities(text: str) -> set[Capability]:
@@ -586,14 +547,30 @@ def _is_ui_policy_generation_request(text: str) -> bool:
 def _missing_ui_policy_generation_details(text: str) -> list[str]:
     checks = [
         ("target table", _target_table(text) is not None),
-        ("condition", "condition:" in text or "when " in text),
-        ("expected behavior", "expected behavior:" in text),
-        ("fields read", "fields read:" in text),
+        ("condition", "condition:" in text or "when " in text or "condition is" in text),
+        (
+            "expected behavior",
+            "expected behavior:" in text
+            or "mandatory" in text
+            or "visible" in text
+            or "read only" in text,
+        ),
+        ("fields read", "fields read:" in text or "category" in text),
         (
             "fields affected",
-            "fields affected:" in text or "field affected:" in text or "actions:" in text,
+            "fields affected:" in text
+            or "field affected:" in text
+            or "actions:" in text
+            or "assignment_group" in text
+            or "assignment group" in text,
         ),
-        ("reverse if false decision", "reverse if false:" in text),
+        (
+            "reverse if false decision",
+            "reverse if false:" in text
+            or "reverse if false is enabled" in text
+            or "condition is false" in text
+            or "policy must reverse" in text,
+        ),
     ]
     return [label for label, present in checks if not present]
 
@@ -602,7 +579,7 @@ def _ui_policy_forbidden_details(text: str) -> list[str]:
     if not _is_ui_policy_generation_request(text):
         return []
     forbidden_patterns = {
-        "run scripts": ["run scripts: true", "run script", "advanced script"],
+        "run scripts": ["run scripts: true", "run script: true", "advanced script"],
         "Client Script behavior": ["client script", "g_form", "glideajax"],
         "Business Rule creation": ["business rule"],
         "Script Include creation": ["script include"],
