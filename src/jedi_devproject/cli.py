@@ -1460,7 +1460,16 @@ def _offline_discovery_context(story: Story) -> InstanceDiscoveryContext:
 def _default_policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.CONTENT_ONLY, StoryType.DICTIONARY_FORM},
-        tables={"sp_instance", "sys_ui_message", "sys_dictionary", "sys_ui_form"},
+        tables={
+            "sp_instance",
+            "sys_ui_message",
+            "sys_dictionary",
+            "sys_ui_form",
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+        },
         operations={"insert", "update"},
         max_points=3,
     )

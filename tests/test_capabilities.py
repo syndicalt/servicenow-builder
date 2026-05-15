@@ -118,6 +118,7 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
     assert [profile.capability for profile in profiles] == [
         Capability.DICTIONARY_FIELD_CREATE,
         Capability.FORM_LAYOUT_PLACE_FIELD,
+        Capability.CATALOG_ITEM_CREATE,
         Capability.BUSINESS_RULE_GENERATE,
         Capability.CLIENT_SCRIPT_GENERATE,
         Capability.SCRIPT_INCLUDE_GENERATE,
@@ -188,3 +189,28 @@ def test_flow_designer_generation_profile_is_designed_but_not_enabled() -> None:
     assert profile.build_pipeline == "flow_designer_update_set_pipeline"
     assert "graph rewrites" in profile.unsupported_cases
     assert "custom actions" in profile.unsupported_cases
+
+
+def test_catalog_item_generation_profile_is_enabled_for_simple_catalog_items() -> None:
+    profile = capability_profile(Capability.CATALOG_ITEM_CREATE)
+
+    assert profile.status == "enabled"
+    assert profile.current_max_story_points == 3
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == [
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+    ]
+    assert profile.required_instance_context == [
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    ]
+    assert profile.creates_update_set is True
+    assert profile.researcher == "catalog_item_researcher"
+    assert profile.build_pipeline == "catalog_item_update_set_pipeline"
+    assert "Record Producers" in profile.unsupported_cases
+    assert "fulfillment flow or workflow creation" in profile.unsupported_cases

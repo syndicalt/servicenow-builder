@@ -19,6 +19,7 @@ from jedi_devproject.requirement_text import positive_requirement_text
 from jedi_devproject.risk import RiskInput, calculate_risk_score
 
 SUPPORTED_BASELINE_CAPABILITIES = {
+    Capability.CATALOG_ITEM_CREATE,
     Capability.BUSINESS_RULE_ANALYZE,
     Capability.BUSINESS_RULE_GENERATE,
     Capability.CLIENT_SCRIPT_ANALYZE,
@@ -295,6 +296,7 @@ def analyze_story_capabilities(
 
 
 AUTOMATED_INTENT_REASONS = {
+    Capability.CATALOG_ITEM_CREATE: "supported standard catalog item generation request",
     Capability.BUSINESS_RULE_GENERATE: "supported table-local business rule generation request",
     Capability.CLIENT_SCRIPT_GENERATE: "supported table-local client script generation request",
     Capability.SCRIPT_INCLUDE_GENERATE: "supported utility script include generation request",
@@ -447,6 +449,11 @@ def _automation_intent_forbidden_details(automation_intent: AutomationIntent) ->
         and automation_intent.client_callable is True
     ):
         details.append("client callable Script Includes")
+    if (
+        automation_intent.intent_type is AutomationIntentType.CATALOG_ITEM
+        and automation_intent.fulfillment_flow
+    ):
+        details.append("fulfillment flow or workflow creation")
     return details
 
 

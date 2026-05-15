@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class Capability(StrEnum):
+    CATALOG_ITEM_CREATE = "catalog_item_create"
     BUSINESS_RULE_ANALYZE = "business_rule_analyze"
     BUSINESS_RULE_GENERATE = "business_rule_generate"
     CLIENT_SCRIPT_ANALYZE = "client_script_analyze"
@@ -322,6 +323,61 @@ def _flow_designer_generation_profile() -> CapabilityProfile:
     )
 
 
+def _catalog_item_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.CATALOG_ITEM_CREATE,
+        status="enabled",
+        supported_artifacts=[
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+        ],
+        required_instance_context=[
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+        ],
+        deterministic_validators=[
+            "catalog_resolved",
+            "category_resolved_under_catalog",
+            "taxonomy_resolved",
+            "employee_center_topic_resolved_under_taxonomy",
+            "catalog_item_content_type_resolved",
+            "catalog_variables_validated",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "Record Producers",
+            "Catalog Client Scripts",
+            "Catalog UI Policies",
+            "Variable Sets",
+            "multi-row variable sets",
+            "fulfillment flow or workflow creation",
+            "approval orchestration",
+            "user criteria or entitlement changes",
+            "pricing, images, attachments, order guides, and bundles",
+            "creating Employee Center topics or taxonomies",
+        ],
+        uat_story_shape=[
+            "catalog item name",
+            "short description",
+            "catalog",
+            "category",
+            "taxonomy",
+            "Employee Center topic",
+            "variables",
+            "test evidence",
+        ],
+        researcher="catalog_item_researcher",
+        build_pipeline="catalog_item_update_set_pipeline",
+        current_max_story_points=3,
+        target_max_story_points=5,
+        creates_update_set=True,
+    )
+
+
 CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.DICTIONARY_FIELD_CREATE: _dictionary_form_profile(
         capability=Capability.DICTIONARY_FIELD_CREATE
@@ -329,6 +385,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.FORM_LAYOUT_PLACE_FIELD: _dictionary_form_profile(
         capability=Capability.FORM_LAYOUT_PLACE_FIELD
     ),
+    Capability.CATALOG_ITEM_CREATE: _catalog_item_generation_profile(),
     Capability.BUSINESS_RULE_ANALYZE: _code_surface_profile(
         capability=Capability.BUSINESS_RULE_ANALYZE,
         supported_artifact="sys_script",
@@ -408,6 +465,7 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
     return [
         CAPABILITY_REGISTRY[Capability.DICTIONARY_FIELD_CREATE],
         CAPABILITY_REGISTRY[Capability.FORM_LAYOUT_PLACE_FIELD],
+        CAPABILITY_REGISTRY[Capability.CATALOG_ITEM_CREATE],
         CAPABILITY_REGISTRY[Capability.BUSINESS_RULE_GENERATE],
         CAPABILITY_REGISTRY[Capability.CLIENT_SCRIPT_GENERATE],
         CAPABILITY_REGISTRY[Capability.SCRIPT_INCLUDE_GENERATE],

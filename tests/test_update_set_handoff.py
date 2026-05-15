@@ -127,6 +127,55 @@ class FakeUpdateSetClient:
                     "position": "8",
                 },
             ]
+        if table == "sc_catalog" and lookup == {}:
+            return [
+                {
+                    "sys_id": "service-catalog-sys-id",
+                    "title": "Service Catalog",
+                    "active": "true",
+                }
+            ]
+        if table == "sc_category" and lookup == {}:
+            return [
+                {
+                    "sys_id": "services-category-sys-id",
+                    "title": "Services",
+                    "active": "true",
+                    "sc_catalog": {
+                        "value": "service-catalog-sys-id",
+                        "display_value": "Service Catalog",
+                    },
+                }
+            ]
+        if table == "taxonomy" and lookup == {}:
+            return [
+                {
+                    "sys_id": "employee-taxonomy-sys-id",
+                    "name": "Employee",
+                    "active": "true",
+                }
+            ]
+        if table == "topic" and lookup == {}:
+            return [
+                {
+                    "sys_id": "access-topic-sys-id",
+                    "name": "Access issues",
+                    "topic_path": "Technology services / Software / Access issues",
+                    "active": "true",
+                    "taxonomy": {
+                        "value": "employee-taxonomy-sys-id",
+                        "display_value": "Employee",
+                    },
+                }
+            ]
+        if table == "taxonomy_content_configuration" and lookup == {}:
+            return [
+                {
+                    "sys_id": "catalog-item-content-type-sys-id",
+                    "name": "Catalog Item",
+                    "active": "true",
+                }
+            ]
         return []
 
     def upsert_table_record(
@@ -262,6 +311,77 @@ def _minimal_model_dictionary_form_candidate() -> UpdateSetCandidate:
                 ),
             ]
         }
+    )
+
+
+def _catalog_item_candidate() -> UpdateSetCandidate:
+    return UpdateSetCandidate(
+        story_number="STRY0010101",
+        name="UPD_STRY0010101_LLM_Implementation",
+        eligibility_decision="eligible",
+        eligibility_reasons=["supported standard catalog item generation request"],
+        confidence=0.77,
+        risk_score=0.22,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange(
+                table="sc_cat_item",
+                operation="insert",
+                fields={
+                    "name": "Request Temporary Badge",
+                    "short_description": "Request a temporary access badge for a visitor.",
+                    "description": "Use this item when a visitor needs temporary access.",
+                    "catalog": "Service Catalog",
+                    "category": "Services",
+                    "taxonomy": "Employee",
+                    "employee_center_topic": "Technology services / Software / Access issues",
+                },
+                rationale="Create the standard catalog item.",
+            ),
+            CandidateChange(
+                table="item_option_new",
+                operation="insert",
+                fields={
+                    "name": "visitor_name",
+                    "question_text": "Visitor name",
+                    "type": "single_line_text",
+                    "mandatory": "true",
+                    "order": "100",
+                },
+                rationale="Collect the visitor name.",
+            ),
+            CandidateChange(
+                table="item_option_new",
+                operation="insert",
+                fields={
+                    "name": "sponsor",
+                    "question_text": "Sponsor",
+                    "type": "reference",
+                    "reference": "sys_user",
+                    "reference_qualifier": "active=true",
+                    "mandatory": "true",
+                    "order": "200",
+                },
+                rationale="Collect the sponsoring employee.",
+            ),
+            CandidateChange(
+                table="sc_cat_item_category",
+                operation="insert",
+                fields={"catalog": "Service Catalog", "category": "Services"},
+                rationale="Place the item in the Services category.",
+            ),
+            CandidateChange(
+                table="m2m_connected_content",
+                operation="insert",
+                fields={
+                    "taxonomy": "Employee",
+                    "topic": "Technology services / Software / Access issues",
+                },
+                rationale="Associate the item to the Employee Center topic.",
+            ),
+        ],
+        reviewer_notes=["Preview the retrieved Update Set and open the item in Employee Center."],
+        artifact_hash="c" * 64,
     )
 
 
@@ -593,6 +713,32 @@ def test_create_update_set_handoff_normalizes_minimal_model_shape() -> None:
     assert "<element>u_ai_review_notes</element>" in imported_xml
     assert '<internal_type display_value="String">string</internal_type>' in imported_xml
     assert "sys_ui_section_default-main-section-sys-id" in imported_xml
+
+
+def test_create_update_set_handoff_imports_catalog_item_updates() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010101",
+            candidate=_catalog_item_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/201",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sc_cat_item_" in imported_xml
+    assert "item_option_new_" in imported_xml
+    assert "sc_cat_item_category_" in imported_xml
+    assert "m2m_connected_content_" in imported_xml
+    assert "<name>Request Temporary Badge</name>" in imported_xml
+    assert "<question_text>Visitor name</question_text>" in imported_xml
+    assert '<topic display_value="Technology services / Software / Access issues">' in imported_xml
+    assert "catalog-item-content-type-sys-id" in imported_xml
+    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
 
 
 def test_create_update_set_handoff_accepts_table_aliases_and_position_hints() -> None:

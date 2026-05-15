@@ -139,5 +139,6 @@ Review for:
 45. Sprint 146: Dictionary/form typed intent alias hardening.
 46. Sprint 147: Script Include structured story hardening.
 47. Sprint 148: Business Rule structured story hardening.
+48. Sprint 149: Catalog Item and Employee Center topic baseline.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

@@ -717,6 +717,80 @@ def test_structured_ui_policy_with_enabled_scripts_routes_to_manual_build() -> N
     assert "ui policy generation includes forbidden behavior: run scripts" in assessment.reasons
 
 
+def test_structured_catalog_item_story_routes_to_automated_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010101",
+            short_description="JEDI UAT: Add temporary badge catalog item",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge for a visitor.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100; "
+                "business_justification|Business justification|multi_line_text|"
+                "mandatory=true|order=200; "
+                "sponsor|Sponsor|reference|sys_user|active=true|mandatory=true|order=300\n"
+                "Forbidden behavior: Do not create flows, approvals, catalog client scripts, "
+                "catalog UI policies, user criteria, pricing, or integrations."
+            ),
+            acceptance_criteria=(
+                "- A standard Catalog Item named Request Temporary Badge exists.\n"
+                "- The item appears under the Services category in the Service Catalog.\n"
+                "- The item is associated to the Employee topic Technology services / "
+                "Software / Access issues.\n"
+                "- The item has Visitor name, Business justification, and Sponsor variables.\n"
+                "- Delivery is a retrieved Update Set ready for preview and commit."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.CATALOG_ITEM_CREATE}
+    assert assessment.target_table == "sc_cat_item"
+    assert assessment.required_instance_context == [
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    ]
+    assert assessment.reasons == ["supported standard catalog item generation request"]
+    assert assessment.automation_intent is not None
+    assert assessment.automation_intent["catalog_variables"][0]["name"] == "visitor_name"
+
+
+def test_catalog_item_story_with_fulfillment_flow_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010103",
+            short_description="JEDI UAT: Catalog item with flow",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100\n"
+                "Fulfillment flow: Create Badge Request"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "catalog item generation includes forbidden behavior: fulfillment flow or workflow creation"
+        in assessment.reasons
+    )
+
+
 def test_structured_flow_story_routes_to_unsupported_capability() -> None:
     assessment = analyze_story_capabilities(
         _story(

@@ -329,6 +329,95 @@ def test_extracts_dictionary_field_and_form_placement_intent() -> None:
     assert intent.missing_details == []
 
 
+def test_extracts_structured_catalog_item_intent_with_variables_and_topic() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010101",
+            short_description="JEDI UAT: Add temporary badge catalog item",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge for a visitor.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100; "
+                "business_justification|Business justification|multi_line_text|"
+                "mandatory=true|order=200; "
+                "sponsor|Sponsor|reference|sys_user|active=true|mandatory=true|order=300\n"
+                "Forbidden behavior: Do not create flows, approvals, catalog client scripts, "
+                "catalog UI policies, user criteria, pricing, or integrations."
+            ),
+        )
+    )
+
+    assert intent.source is AutomationIntentSource.STRUCTURED
+    assert intent.intent_type is AutomationIntentType.CATALOG_ITEM
+    assert intent.capability is Capability.CATALOG_ITEM_CREATE
+    assert intent.artifact_name == "Request Temporary Badge"
+    assert intent.catalog_item_short_description == (
+        "Request a temporary access badge for a visitor."
+    )
+    assert intent.catalog_name == "Service Catalog"
+    assert intent.category_name == "Services"
+    assert intent.taxonomy_name == "Employee"
+    assert intent.employee_center_topic == "Technology services / Software / Access issues"
+    assert intent.catalog_variables == [
+        {
+            "name": "visitor_name",
+            "label": "Visitor name",
+            "type": "single_line_text",
+            "mandatory": True,
+            "order": 100,
+        },
+        {
+            "name": "business_justification",
+            "label": "Business justification",
+            "type": "multi_line_text",
+            "mandatory": True,
+            "order": 200,
+        },
+        {
+            "name": "sponsor",
+            "label": "Sponsor",
+            "type": "reference",
+            "reference_table": "sys_user",
+            "reference_qualifier": "active=true",
+            "mandatory": True,
+            "order": 300,
+        },
+    ]
+    assert intent.required_instance_context == [
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    ]
+    assert intent.missing_details == []
+
+
+def test_catalog_item_intent_requires_variables_and_topic() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010102",
+            short_description="JEDI UAT: Incomplete catalog item",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee"
+            ),
+        )
+    )
+
+    assert intent.intent_type is AutomationIntentType.CATALOG_ITEM
+    assert intent.capability is Capability.CATALOG_ITEM_CREATE
+    assert intent.missing_details == ["Employee Center topic", "variables"]
+
+
 def test_unknown_or_unsupported_structured_intents_are_typed_without_context() -> None:
     unknown = extract_automation_intent(
         _story(

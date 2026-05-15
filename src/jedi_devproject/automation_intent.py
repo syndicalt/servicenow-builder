@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,6 +17,7 @@ class AutomationIntentSource(StrEnum):
 
 
 class AutomationIntentType(StrEnum):
+    CATALOG_ITEM = "catalog_item"
     DICTIONARY_FORM = "dictionary_form"
     BUSINESS_RULE = "business_rule"
     CLIENT_SCRIPT = "client_script"
@@ -59,6 +61,13 @@ class AutomationIntent(BaseModel):
     max_length: int | None = None
     placement_anchor: str | None = None
     placement_position: str | None = None
+    catalog_item_short_description: str | None = None
+    catalog_name: str | None = None
+    category_name: str | None = None
+    taxonomy_name: str | None = None
+    employee_center_topic: str | None = None
+    catalog_variables: list[dict[str, Any]] = Field(default_factory=list)
+    fulfillment_flow: str | None = None
     forbidden_behavior: list[str] = Field(default_factory=list)
     provided_fields: list[str] = Field(default_factory=list)
     required_instance_context: list[str] = Field(default_factory=list)
@@ -70,6 +79,14 @@ class AutomationIntent(BaseModel):
 
 
 ARTIFACT_TYPE_ALIASES: dict[str, tuple[AutomationIntentType, Capability]] = {
+    "catalog item": (
+        AutomationIntentType.CATALOG_ITEM,
+        Capability.CATALOG_ITEM_CREATE,
+    ),
+    "standard catalog item": (
+        AutomationIntentType.CATALOG_ITEM,
+        Capability.CATALOG_ITEM_CREATE,
+    ),
     "dictionary form": (
         AutomationIntentType.DICTIONARY_FORM,
         Capability.DICTIONARY_FIELD_CREATE,
@@ -126,6 +143,18 @@ STRUCTURED_KEY_ALIASES = {
     "name": "artifact_name",
     "business rule name": "artifact_name",
     "script include name": "artifact_name",
+    "catalog item name": "artifact_name",
+    "short description": "catalog_item_short_description",
+    "catalog item short description": "catalog_item_short_description",
+    "catalog": "catalog_name",
+    "category": "category_name",
+    "taxonomy": "taxonomy_name",
+    "employee center topic": "employee_center_topic",
+    "topic": "employee_center_topic",
+    "variables": "catalog_variables",
+    "catalog variables": "catalog_variables",
+    "fulfillment flow": "fulfillment_flow",
+    "fulfillment workflow": "fulfillment_flow",
     "field label": "field_label",
     "field name": "field_name",
     "field type": "field_type",
@@ -188,7 +217,9 @@ def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
         source=AutomationIntentSource.STRUCTURED,
         intent_type=intent_type,
         capability=capability,
-        target_table=target_table,
+        target_table=(
+            "sc_cat_item" if intent_type is AutomationIntentType.CATALOG_ITEM else target_table
+        ),
         artifact_name=artifact_name,
         condition=_clean_text(fields.get("condition")),
         expected_behavior=_clean_text(fields.get("expected_behavior")),
@@ -217,6 +248,15 @@ def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
         placement_position=_placement_position(
             fields.get("placement_position") or fields.get("placement")
         ),
+        catalog_item_short_description=_clean_preserved_text(
+            fields.get("catalog_item_short_description")
+        ),
+        catalog_name=_clean_text(fields.get("catalog_name")),
+        category_name=_clean_text(fields.get("category_name")),
+        taxonomy_name=_clean_text(fields.get("taxonomy_name")),
+        employee_center_topic=_clean_text(fields.get("employee_center_topic")),
+        catalog_variables=_catalog_variables(fields.get("catalog_variables")),
+        fulfillment_flow=_clean_text(fields.get("fulfillment_flow")),
         forbidden_behavior=_forbidden_behavior(fields.get("forbidden_behavior")),
         provided_fields=sorted(fields),
         required_instance_context=_required_context(capability),
@@ -313,6 +353,23 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
                 if not present
             ],
         ]
+    if intent.intent_type is AutomationIntentType.CATALOG_ITEM:
+        return [
+            label
+            for label, present in [
+                ("catalog item name", bool(intent.artifact_name)),
+                (
+                    "catalog item short description",
+                    bool(intent.catalog_item_short_description),
+                ),
+                ("catalog", bool(intent.catalog_name)),
+                ("category", bool(intent.category_name)),
+                ("taxonomy", bool(intent.taxonomy_name)),
+                ("Employee Center topic", bool(intent.employee_center_topic)),
+                ("variables", bool(intent.catalog_variables)),
+            ]
+            if not present
+        ]
     if intent.intent_type is AutomationIntentType.BUSINESS_RULE:
         return [
             *common_missing,
@@ -361,6 +418,83 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
             if not present
         ]
     return []
+
+
+def _catalog_variables(raw_value: str | None) -> list[dict[str, Any]]:
+    cleaned = _clean_text(raw_value)
+    if cleaned is None:
+        return []
+    variables: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+    for raw_entry in cleaned.split(";"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        variable = _catalog_variable(entry)
+        name = str(variable.get("name") or "")
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        variables.append(variable)
+    return variables
+
+
+def _catalog_variable(entry: str) -> dict[str, Any]:
+    parts = [part.strip() for part in entry.split("|") if part.strip()]
+    if len(parts) < 3:
+        return {}
+    variable_type = _normalize_catalog_variable_type(parts[2])
+    variable: dict[str, Any] = {
+        "name": _clean_field_name(parts[0]) or parts[0],
+        "label": parts[1],
+        "type": variable_type,
+        "mandatory": False,
+    }
+    for part in parts[3:]:
+        key, separator, raw_part_value = part.partition("=")
+        normalized_key = key.strip().lower().replace(" ", "_")
+        cleaned_value = raw_part_value.strip() if separator else part.strip()
+        if separator and normalized_key in {"mandatory", "required"}:
+            variable["mandatory"] = _bool_text_value(cleaned_value)
+        elif separator and normalized_key == "order":
+            order = _optional_int(cleaned_value)
+            if order is not None:
+                variable["order"] = order
+        elif separator and normalized_key in {"help", "help_text"}:
+            variable["help_text"] = cleaned_value
+        elif separator and normalized_key in {"default", "default_value"}:
+            variable["default_value"] = cleaned_value
+        elif separator and normalized_key in {"reference", "reference_table", "ref_table"}:
+            variable["reference_table"] = _clean_field_name(cleaned_value) or cleaned_value
+        elif separator and normalized_key in {
+            "reference_qualifier",
+            "reference_qual",
+            "qualifier",
+        }:
+            variable["reference_qualifier"] = cleaned_value
+        elif variable_type == "reference" and "reference_table" not in variable:
+            variable["reference_table"] = _clean_field_name(cleaned_value) or cleaned_value
+        elif variable_type == "reference" and "reference_qualifier" not in variable:
+            variable["reference_qualifier"] = part.strip()
+    return variable
+
+
+def _normalize_catalog_variable_type(value: str) -> str:
+    cleaned = value.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "single_line": "single_line_text",
+        "string": "single_line_text",
+        "text": "single_line_text",
+        "multi_line": "multi_line_text",
+        "multiline": "multi_line_text",
+        "yes/no": "yes_no",
+        "boolean": "yes_no",
+    }
+    return aliases.get(cleaned, cleaned)
+
+
+def _bool_text_value(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "required", "mandatory"}
 
 
 def _field_list(raw_value: str | None) -> list[str]:
@@ -467,6 +601,13 @@ def _clean_text(raw_value: str | None) -> str | None:
     if raw_value is None:
         return None
     cleaned = re.sub(r"\s+", " ", raw_value).strip(" .:-")
+    return cleaned or None
+
+
+def _clean_preserved_text(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    cleaned = re.sub(r"\s+", " ", raw_value).strip()
     return cleaned or None
 
 

@@ -8,6 +8,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.business_rule_generation import business_rule_customer_updates
+from jedi_devproject.catalog_item_generation import catalog_item_customer_updates
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.generic_dictionary_form import (
     DictionaryFormIntent,
@@ -272,6 +273,19 @@ def _customer_updates_for_candidate(
             changes=candidate.changes,
             remote_update_set_sys_id=remote_update_set_sys_id,
         )
+    elif "sc_cat_item" in tables and tables.issubset(
+        {
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+        }
+    ):
+        updates = catalog_item_customer_updates(
+            client=client,
+            changes=candidate.changes,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        )
     elif tables.issubset({"sys_dictionary", "sys_ui_form"}):
         intent = _dictionary_form_intent(candidate.changes)
         updates = dictionary_form_customer_updates(
@@ -288,6 +302,10 @@ def _customer_updates_for_candidate(
             "sys_script_include",
             "sys_ui_policy",
             "sys_ui_policy_action",
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
         }
         if not unsupported_tables:
             raise ValueError("retrieved Update Set candidate mixes unsupported change types")

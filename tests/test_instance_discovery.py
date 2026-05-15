@@ -65,6 +65,8 @@ class FakeDiscoveryClient:
         self.calls.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
         if table == "sys_db_object" and lookup == {"name": "incident"}:
             return [{"name": "incident", "label": "Incident", "is_extendable": "true"}]
+        if table == "sys_db_object" and lookup == {"name": "sc_cat_item"}:
+            return [{"name": "sc_cat_item", "label": "Catalog Item", "is_extendable": "true"}]
         if table == "sys_dictionary" and lookup == {"name": "incident"}:
             return [
                 {
@@ -72,6 +74,15 @@ class FakeDiscoveryClient:
                     "column_label": "Description",
                     "internal_type": "string",
                     "max_length": "4000",
+                }
+            ]
+        if table == "sys_dictionary" and lookup == {"name": "sc_cat_item"}:
+            return [
+                {
+                    "element": "name",
+                    "column_label": "Name",
+                    "internal_type": "translated_text",
+                    "max_length": "255",
                 }
             ]
         if table == "sys_ui_section" and lookup == {"name": "incident"}:
@@ -83,11 +94,15 @@ class FakeDiscoveryClient:
                     "view": {"display_value": "Default view", "value": "default"},
                 }
             ]
+        if table == "sys_ui_section" and lookup == {"name": "sc_cat_item"}:
+            return []
         if table == "sys_ui_element" and lookup == {
             "name": "incident",
             "sys_ui_section": "incident-main-section",
         }:
             return [{"sys_id": "description-element", "element": "description", "position": "2"}]
+        if table == "sys_security_acl" and lookup == {"name": "sc_cat_item"}:
+            return []
         if table == "sys_security_acl" and lookup == {"name": "incident"}:
             return []
         if table == "sys_script" and lookup == {"collection": "incident"}:
@@ -210,6 +225,61 @@ class FakeDiscoveryClient:
                     "rest_endpoint": "https://api.example.invalid/path?token=secret-value",
                 }
             ]
+        if table == "sc_catalog" and lookup == {}:
+            return [
+                {
+                    "sys_id": "service-catalog-sys-id",
+                    "title": "Service Catalog",
+                    "active": "true",
+                }
+            ]
+        if table == "sc_category" and lookup == {}:
+            return [
+                {
+                    "sys_id": "services-category-sys-id",
+                    "title": "Services",
+                    "active": "true",
+                    "sc_catalog": {
+                        "value": "service-catalog-sys-id",
+                        "display_value": "Service Catalog",
+                    },
+                }
+            ]
+        if table == "topic" and lookup == {}:
+            return [
+                {
+                    "sys_id": "access-topic-sys-id",
+                    "name": "Access issues",
+                    "topic_path": "Technology services / Software / Access issues",
+                    "active": "true",
+                    "taxonomy": {"value": "employee-taxonomy-sys-id", "display_value": "Employee"},
+                }
+            ]
+        if table == "taxonomy" and lookup == {}:
+            return [
+                {
+                    "sys_id": "employee-taxonomy-sys-id",
+                    "name": "Employee",
+                    "active": "true",
+                }
+            ]
+        if table == "taxonomy_content_configuration" and lookup == {}:
+            return [
+                {
+                    "sys_id": "catalog-item-content-type-sys-id",
+                    "name": "Catalog Item",
+                    "active": "true",
+                }
+            ]
+        if table == "m2m_connected_content" and lookup == {}:
+            return [
+                {
+                    "sys_id": "connected-content-sys-id",
+                    "topic": {"value": "access-topic-sys-id"},
+                    "catalog_item": {"value": "existing-catalog-item-sys-id"},
+                    "content_type": {"value": "catalog-item-content-type-sys-id"},
+                }
+            ]
         return []
 
 
@@ -288,6 +358,46 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     assert integrations.records[0].metadata["rest_endpoint"] == (
         "https://api.example.invalid/path?[redacted_query]"
     )
+
+
+def test_discover_servicenow_surface_context_collects_catalog_employee_center_surfaces() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="sc_cat_item",
+        story_text=(
+            "Target artifact type: Catalog Item. Catalog Service Catalog. "
+            "Category Services. Employee Center topic Access issues."
+        ),
+        public_doc_queries=[],
+        required_surfaces_override=[
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+        ],
+    )
+
+    assert bundle.required_surfaces == [
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    ]
+    assert bundle.missing_required_surfaces == []
+    catalogs = bundle.surface("catalog_definitions")
+    assert catalogs.source_table == "sc_catalog"
+    assert catalogs.records[0].name == "Service Catalog"
+    categories = bundle.surface("catalog_categories")
+    assert categories.records[0].metadata["sc_catalog"] == "service-catalog-sys-id"
+    topics = bundle.surface("employee_center_topics")
+    assert topics.records[0].name == "Technology services / Software / Access issues"
+    assert topics.records[0].metadata["taxonomy"] == "employee-taxonomy-sys-id"
+    connected_content = bundle.surface("employee_center_connected_content")
+    assert connected_content.records[0].name == "Catalog Item"
+    assert connected_content.records[0].metadata["sys_id"] == "catalog-item-content-type-sys-id"
+    assert any(call["table"] == "taxonomy" for call in client.calls)
 
 
 def test_surface_context_ignores_forbidden_boundaries_as_requested_surfaces() -> None:

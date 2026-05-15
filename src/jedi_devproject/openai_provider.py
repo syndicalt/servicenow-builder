@@ -59,6 +59,14 @@ class OpenAIResponsesProvider:
                                 "Do not put fields_written, tables_read, tables_written, "
                                 "test notes, rollback notes, or any metadata variable "
                                 "inside the executable script."
+                                "For standard Catalog Item builds, return one "
+                                "sc_cat_item insert change, one item_option_new "
+                                "insert change per variable, and optional "
+                                "sc_cat_item_category and m2m_connected_content "
+                                "insert changes using discovered catalog, category, "
+                                "taxonomy, and Employee Center topic display names. "
+                                "Do not invent sys_ids; the deterministic handoff "
+                                "builder resolves existing records from instance context."
                             ),
                         },
                         {

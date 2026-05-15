@@ -79,6 +79,10 @@ class InstanceDiscoveryContext(BaseModel):
 SurfaceName = Literal[
     "table_schema",
     "form_layout",
+    "catalog_definitions",
+    "catalog_categories",
+    "employee_center_topics",
+    "employee_center_connected_content",
     "business_rules",
     "client_scripts",
     "ui_policies",
@@ -382,6 +386,22 @@ def discover_servicenow_surface_context(
                 for query in public_doc_queries
             ],
         ),
+        _catalog_definitions_surface(
+            client=client,
+            required="catalog_definitions" in required_surfaces,
+        ),
+        _catalog_categories_surface(
+            client=client,
+            required="catalog_categories" in required_surfaces,
+        ),
+        _employee_center_topics_surface(
+            client=client,
+            required="employee_center_topics" in required_surfaces,
+        ),
+        _employee_center_connected_content_surface(
+            client=client,
+            required="employee_center_connected_content" in required_surfaces,
+        ),
     ]
     missing_required_surfaces = [
         context.surface
@@ -439,6 +459,30 @@ def _required_surfaces(story_text: str) -> list[SurfaceName]:
                 r"\bpublic\s+docs\b",
                 r"\bdocs\b",
             ),
+        ),
+        (
+            "catalog_definitions",
+            (
+                r"\bcatalog\s+items?\b",
+                r"\bservice\s+catalog\b",
+                r"\bemployee\s+center\b",
+            ),
+        ),
+        (
+            "catalog_categories",
+            (
+                r"\bcatalog\s+items?\b",
+                r"\bservice\s+catalog\b",
+                r"\bemployee\s+center\b",
+            ),
+        ),
+        (
+            "employee_center_topics",
+            (r"\bemployee\s+center\b", r"\btopics?\b", r"\btaxonom(?:y|ies)\b"),
+        ),
+        (
+            "employee_center_connected_content",
+            (r"\bemployee\s+center\b", r"\bconnected\s+content\b", r"\btopics?\b"),
         ),
     ]
     for surface, patterns in keyword_map:
@@ -521,6 +565,188 @@ def _flow_surfaces(
             )
         ),
     ]
+
+
+def _catalog_definitions_surface(
+    *,
+    client: InstanceDiscoveryClient,
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    if not required:
+        return _empty_surface(
+            surface="catalog_definitions",
+            source_table="sc_catalog",
+            required=False,
+        )
+    return _table_surface(
+        client=client,
+        surface="catalog_definitions",
+        source_table="sc_catalog",
+        lookup={},
+        fields=["sys_id", "title", "active"],
+        required=True,
+        evidence="sc_catalog:active",
+        limit=100,
+    )
+
+
+def _catalog_categories_surface(
+    *,
+    client: InstanceDiscoveryClient,
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    if not required:
+        return _empty_surface(
+            surface="catalog_categories",
+            source_table="sc_category",
+            required=False,
+        )
+    return _table_surface(
+        client=client,
+        surface="catalog_categories",
+        source_table="sc_category",
+        lookup={},
+        fields=["sys_id", "title", "active", "sc_catalog"],
+        required=True,
+        evidence="sc_category:active",
+        limit=250,
+    )
+
+
+def _employee_center_topics_surface(
+    *,
+    client: InstanceDiscoveryClient,
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    if not required:
+        return _empty_surface(
+            surface="employee_center_topics",
+            source_table="topic",
+            required=False,
+        )
+    taxonomy_records = client.fetch_table_records(
+        table="taxonomy",
+        lookup={},
+        fields=["sys_id", "name", "active"],
+        limit=100,
+    )
+    topic_records = client.fetch_table_records(
+        table="topic",
+        lookup={},
+        fields=["sys_id", "name", "topic_path", "active", "taxonomy", "parent_topic"],
+        limit=250,
+    )
+    records = [
+        ServiceNowSurfaceRecord(
+            source_table="topic",
+            name=_record_name(record),
+            active=_optional_bool(record.get("active")),
+            summary=_display_or_value(record.get("name")),
+            metadata={
+                "taxonomy": _reference_value(record.get("taxonomy")),
+                "parent_topic": _reference_value(record.get("parent_topic")),
+            },
+        )
+        for record in topic_records
+    ]
+    return ServiceNowSurfaceContext(
+        surface="employee_center_topics",
+        source_table="topic",
+        required=required,
+        records=records,
+        evidence=["taxonomy:active", "topic:active"],
+        confidence=0.95 if records and taxonomy_records else 0.0,
+        citations=[
+            {
+                "source_table": "taxonomy",
+                "query": "",
+                "record_count": str(len(taxonomy_records)),
+            },
+            {
+                "source_table": "topic",
+                "query": "",
+                "record_count": str(len(topic_records)),
+            },
+        ],
+    )
+
+
+def _employee_center_connected_content_surface(
+    *,
+    client: InstanceDiscoveryClient,
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    if not required:
+        return _empty_surface(
+            surface="employee_center_connected_content",
+            source_table="taxonomy_content_configuration",
+            required=False,
+        )
+    content_types = client.fetch_table_records(
+        table="taxonomy_content_configuration",
+        lookup={},
+        fields=["sys_id", "name", "active"],
+        limit=100,
+    )
+    connected_content = client.fetch_table_records(
+        table="m2m_connected_content",
+        lookup={},
+        fields=["sys_id", "topic", "catalog_item", "content_type"],
+        limit=100,
+    )
+    catalog_item_types = [
+        record
+        for record in content_types
+        if _record_name(record).strip().lower() == "catalog item"
+        and _optional_bool(record.get("active")) is not False
+    ]
+    records = [
+        ServiceNowSurfaceRecord(
+            source_table="taxonomy_content_configuration",
+            name=_record_name(record),
+            active=_optional_bool(record.get("active")),
+            summary="Employee Center connected content type.",
+            metadata={"sys_id": _display_or_value(record.get("sys_id"))},
+        )
+        for record in catalog_item_types
+    ]
+    return ServiceNowSurfaceContext(
+        surface="employee_center_connected_content",
+        source_table="taxonomy_content_configuration",
+        required=required,
+        records=records,
+        evidence=["taxonomy_content_configuration:active", "m2m_connected_content"],
+        confidence=0.95 if records else 0.0,
+        citations=[
+            {
+                "source_table": "taxonomy_content_configuration",
+                "query": "",
+                "record_count": str(len(content_types)),
+            },
+            {
+                "source_table": "m2m_connected_content",
+                "query": "",
+                "record_count": str(len(connected_content)),
+            },
+        ],
+    )
+
+
+def _empty_surface(
+    *,
+    surface: SurfaceName,
+    source_table: str,
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    return ServiceNowSurfaceContext(
+        surface=surface,
+        source_table=source_table,
+        required=required,
+        records=[],
+        evidence=[],
+        confidence=0.0,
+        citations=[],
+    )
 
 
 def _flow_graph_surface(
@@ -834,6 +1060,12 @@ def _display_or_value(value: object) -> str:
     return str(value or "")
 
 
+def _reference_value(value: object) -> str:
+    if isinstance(value, dict):
+        return str(value.get("value") or value.get("display_value") or "")
+    return str(value or "")
+
+
 def _optional_int(value: object) -> int | None:
     text = str(value or "").strip()
     return int(text) if text.isdigit() else None
@@ -849,7 +1081,15 @@ def _optional_bool(value: object) -> bool | None:
 
 
 def _record_name(record: dict[str, Any]) -> str:
-    for field_name in ["name", "short_description", "display_text", "column_label", "element"]:
+    for field_name in [
+        "topic_path",
+        "title",
+        "name",
+        "short_description",
+        "display_text",
+        "column_label",
+        "element",
+    ]:
         value = str(record.get(field_name) or "").strip()
         if value:
             return value
@@ -885,6 +1125,15 @@ def _query_string(lookup: dict[str, str]) -> str:
 def _minimize_metadata_value(*, key: str, value: Any) -> str:
     if key in {"script", "condition", "operation_script"}:
         return "[redacted_script_body]"
+    if key in {
+        "sc_catalog",
+        "taxonomy",
+        "parent_topic",
+        "topic",
+        "catalog_item",
+        "content_type",
+    } and isinstance(value, dict):
+        return str(value.get("value") or value.get("display_value") or "")
     text = _display_or_value(value)
     if key in {"rest_endpoint", "endpoint", "url"}:
         return _redact_url(text)
