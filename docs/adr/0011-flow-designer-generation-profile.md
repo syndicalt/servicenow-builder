@@ -14,6 +14,8 @@ The product should eventually handle low-complexity Flow Designer stories, but o
 
 Define the future `flow_modify` capability profile. No runtime generation is enabled by this ADR.
 
+Sprint 125 adds read-only `flow_graph` retrieval as prerequisite context. This is not a builder and does not mutate Flow Designer records. The context worker retrieves current graph shape from approved ServiceNow metadata tables and fails closed when a required graph cannot be assembled.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -66,7 +68,8 @@ The builder converts validated structured graph output into retrieved Update Set
 The `flow_modify` profile must fail closed unless all deterministic validators pass:
 
 - target flow context is retrieved.
-- flow graph context is retrieved from approved `sys_hub_*` records.
+- `flow_graph` context is retrieved from approved `sys_hub_*` records.
+- flow graph retrieval includes read-only citations for `sys_hub_trigger_instance`, `sys_hub_action_instance`, `sys_hub_flow_logic_instance_v2`, `sys_hub_trigger_input`, `sys_hub_trigger_output`, `sys_hub_action_input`, and `sys_hub_action_output`.
 - runtime execution history records are excluded from mutation.
 - graph diff references only retrieved nodes and edges.
 - generated diff is additive or narrowly edits an allowed condition.

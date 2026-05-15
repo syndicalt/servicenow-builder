@@ -120,6 +120,78 @@ class FakeDiscoveryClient:
             ]
         if table == "sys_hub_flow" and lookup == {}:
             return [{"sys_id": "flow-sys-id", "name": "Incident Triage", "active": "true"}]
+        if table == "sys_hub_trigger_instance" and lookup == {"flow": "flow-sys-id"}:
+            return [
+                {
+                    "sys_id": "trigger-sys-id",
+                    "name": "Incident record trigger",
+                    "flow": "flow-sys-id",
+                    "trigger_type": "record",
+                    "trigger_definition": "trigger-definition-sys-id",
+                    "display_text": "When Incident is created or updated",
+                }
+            ]
+        if table == "sys_hub_action_instance" and lookup == {"flow": "flow-sys-id"}:
+            return [
+                {
+                    "sys_id": "action-sys-id",
+                    "flow": "flow-sys-id",
+                    "order": "100",
+                    "action_type": "action-type-sys-id",
+                    "display_text": "Set assignment group",
+                }
+            ]
+        if table == "sys_hub_flow_logic_instance_v2" and lookup == {"flow": "flow-sys-id"}:
+            return [
+                {
+                    "sys_id": "logic-sys-id",
+                    "flow": "flow-sys-id",
+                    "order": "200",
+                    "logic_definition": "if-definition-sys-id",
+                    "display_text": "If category is software",
+                }
+            ]
+        if table == "sys_hub_trigger_input" and lookup == {"model": "trigger-definition-sys-id"}:
+            return [
+                {
+                    "sys_id": "trigger-input-sys-id",
+                    "model": "trigger-definition-sys-id",
+                    "element": "table",
+                    "column_label": "Table",
+                    "internal_type": "string",
+                }
+            ]
+        if table == "sys_hub_trigger_output" and lookup == {"model": "trigger-definition-sys-id"}:
+            return [
+                {
+                    "sys_id": "trigger-output-sys-id",
+                    "model": "trigger-definition-sys-id",
+                    "element": "current",
+                    "column_label": "Current record",
+                    "internal_type": "reference",
+                }
+            ]
+        if table == "sys_hub_action_input" and lookup == {"model": "action-type-sys-id"}:
+            return [
+                {
+                    "sys_id": "action-input-sys-id",
+                    "model": "action-type-sys-id",
+                    "element": "assignment_group",
+                    "column_label": "Assignment group",
+                    "internal_type": "reference",
+                    "reference": "sys_user_group",
+                }
+            ]
+        if table == "sys_hub_action_output" and lookup == {"model": "action-type-sys-id"}:
+            return [
+                {
+                    "sys_id": "action-output-sys-id",
+                    "model": "action-type-sys-id",
+                    "element": "updated_record",
+                    "column_label": "Updated record",
+                    "internal_type": "reference",
+                }
+            ]
         if table == "sys_script_include" and lookup == {}:
             return [{"sys_id": "script-include-sys-id", "name": "IncidentUtils", "active": "true"}]
         if table == "cmdb_ci" and lookup == {"sys_class_name": "cmdb_ci_discovery"}:
@@ -185,6 +257,7 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
         "client_scripts",
         "ui_policies",
         "flows",
+        "flow_graph",
         "script_includes",
         "cmdb_discovery_maps",
         "integration_surfaces",
@@ -194,6 +267,7 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     assert bundle.surface_record_count("client_scripts") == 1
     assert bundle.surface_record_count("ui_policies") == 1
     assert bundle.surface_record_count("flows") == 1
+    assert bundle.surface_record_count("flow_graph") == 7
     assert bundle.surface_record_count("script_includes") == 1
     assert bundle.surface_record_count("cmdb_discovery_maps") == 1
     assert bundle.surface_record_count("integration_surfaces") == 1
@@ -214,6 +288,97 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     assert integrations.records[0].metadata["rest_endpoint"] == (
         "https://api.example.invalid/path?[redacted_query]"
     )
+
+
+def test_required_flow_graph_context_collects_graph_records_with_citations() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text="Update the Incident Flow Designer flow for triage.",
+        public_doc_queries=[],
+        required_surfaces_override=["table_schema", "form_layout", "flows", "flow_graph"],
+    )
+
+    assert bundle.context_sufficient is True
+    assert bundle.missing_required_surfaces == []
+    assert bundle.surface_record_count("flows") == 1
+    assert bundle.surface_record_count("flow_graph") == 7
+
+    graph = bundle.surface("flow_graph")
+    assert graph.required is True
+    assert graph.confidence == 0.95
+    assert graph.source_table == "sys_hub_flow_graph"
+    assert {record.source_table for record in graph.records} == {
+        "sys_hub_trigger_instance",
+        "sys_hub_action_instance",
+        "sys_hub_flow_logic_instance_v2",
+        "sys_hub_trigger_input",
+        "sys_hub_trigger_output",
+        "sys_hub_action_input",
+        "sys_hub_action_output",
+    }
+    assert {citation["source_table"] for citation in graph.citations} == {
+        "sys_hub_trigger_instance",
+        "sys_hub_action_instance",
+        "sys_hub_flow_logic_instance_v2",
+        "sys_hub_trigger_input",
+        "sys_hub_trigger_output",
+        "sys_hub_action_input",
+        "sys_hub_action_output",
+    }
+    assert "sys_hub_action_instance:Incident Triage" in graph.evidence
+    assert "sys_hub_action_input:action-type-sys-id" in graph.evidence
+    assert "secret-value" not in bundle.model_dump_json()
+
+
+def test_required_flow_graph_context_fails_closed_when_graph_is_incomplete() -> None:
+    class IncompleteFlowGraphClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_hub_flow" and lookup == {}:
+                self.calls.append(
+                    {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
+                )
+                return [{"sys_id": "flow-sys-id", "name": "Incident Triage", "active": "true"}]
+            if table in {
+                "sys_hub_trigger_instance",
+                "sys_hub_action_instance",
+                "sys_hub_flow_logic_instance_v2",
+                "sys_hub_trigger_input",
+                "sys_hub_trigger_output",
+                "sys_hub_action_input",
+                "sys_hub_action_output",
+            }:
+                self.calls.append(
+                    {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
+                )
+                return []
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    bundle = discover_servicenow_surface_context(
+        client=IncompleteFlowGraphClient(),
+        target_table="incident",
+        story_text="Update the Incident Flow Designer flow for triage.",
+        public_doc_queries=[],
+        required_surfaces_override=["table_schema", "form_layout", "flows", "flow_graph"],
+    )
+
+    assert bundle.context_sufficient is False
+    assert "flow_graph" in bundle.missing_required_surfaces
+    assert bundle.surface("flow_graph").confidence == 0.0
 
 
 def test_discover_servicenow_surface_context_marks_required_missing_surface() -> None:

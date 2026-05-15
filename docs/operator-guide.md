@@ -347,9 +347,11 @@ Business Rule analysis first is the next supported implementation step. Sprint 1
 
 The Sprint 124 Flow Designer generation profile design defines the future `flow_modify` capability. No runtime generation is enabled for Flow Designer. The profile has `current_max_story_points=0` and `target_max_story_points=5`.
 
-Flow Designer remains context-only at runtime. Flow Designer context-only review can retrieve and summarize relevant `sys_hub_flow` records, but generated flow mutation is unsupported until flow graph retrieval, graph diff output shape, validators, and retrieved Update Set evidence are implemented.
+Flow Designer remains context-only at runtime. Flow Designer context-only review can retrieve and summarize relevant `sys_hub_flow` records and the read-only `flow_graph` flow graph context, but generated flow mutation is unsupported until graph diff output shape, validators, and retrieved Update Set evidence are implemented.
 
-The future supported subset is one active record-triggered flow at a time, one target table or trigger context, and either one additive action or one narrow condition change. Required context includes `flows` and `flow graph` retrieval across approved `sys_hub_*` records such as `sys_hub_flow`, `sys_hub_trigger_instance`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2`.
+The future supported subset is one active record-triggered flow at a time, one target table or trigger context, and either one additive action or one narrow condition change. Required context includes `flows` and `flow_graph` retrieval across approved `sys_hub_*` records such as `sys_hub_flow`, `sys_hub_trigger_instance`, `sys_hub_action_instance`, `sys_hub_flow_logic_instance_v2`, `sys_hub_trigger_input`, `sys_hub_trigger_output`, `sys_hub_action_input`, and `sys_hub_action_output`.
+
+Required `flow_graph` retrieval fails closed when the target flow list is missing or when a flow has no trigger or action graph records. Runtime history tables remain excluded from the context worker and from any future mutation boundary.
 
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 

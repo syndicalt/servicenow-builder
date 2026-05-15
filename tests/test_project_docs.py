@@ -1111,6 +1111,36 @@ def test_sprint_124_change_log_documents_flow_designer_generation_design() -> No
     assert "No runtime generation is enabled" in change_log
 
 
+def test_flow_designer_docs_document_read_only_flow_graph_retrieval() -> None:
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    for text in [adr, guide]:
+        assert "flow_graph" in text
+        assert "sys_hub_trigger_input" in text
+        assert "sys_hub_trigger_output" in text
+        assert "sys_hub_action_input" in text
+        assert "sys_hub_action_output" in text
+        assert "read-only" in text
+        assert "fails closed" in text
+        assert "No runtime generation is enabled" in text
+
+
+def test_sprint_125_change_log_documents_flow_graph_retrieval_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-125-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 125 Change Log" in change_log
+    assert "Flow graph retrieval hardening" in change_log
+    assert "flow_graph" in change_log
+    assert "sys_hub_trigger_instance" in change_log
+    assert "sys_hub_action_instance" in change_log
+    assert "sys_hub_flow_logic_instance_v2" in change_log
+    assert "sys_hub_action_input" in change_log
+    assert "No runtime generation is enabled" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 

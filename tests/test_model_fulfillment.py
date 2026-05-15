@@ -155,6 +155,78 @@ class FakeModelClient:
             return []
         if table == "sys_hub_flow":
             return [{"sys_id": "flow-sys-id", "name": "Incident Triage", "active": "true"}]
+        if table == "sys_hub_trigger_instance" and lookup == {"flow": "flow-sys-id"}:
+            return [
+                {
+                    "sys_id": "trigger-sys-id",
+                    "name": "Incident record trigger",
+                    "flow": "flow-sys-id",
+                    "trigger_type": "record",
+                    "trigger_definition": "trigger-definition-sys-id",
+                    "display_text": "When Incident is created or updated",
+                }
+            ]
+        if table == "sys_hub_action_instance" and lookup == {"flow": "flow-sys-id"}:
+            return [
+                {
+                    "sys_id": "action-sys-id",
+                    "flow": "flow-sys-id",
+                    "order": "100",
+                    "action_type": "action-type-sys-id",
+                    "display_text": "Set assignment group",
+                }
+            ]
+        if table == "sys_hub_flow_logic_instance_v2" and lookup == {"flow": "flow-sys-id"}:
+            return [
+                {
+                    "sys_id": "logic-sys-id",
+                    "flow": "flow-sys-id",
+                    "order": "200",
+                    "logic_definition": "if-definition-sys-id",
+                    "display_text": "If category is software",
+                }
+            ]
+        if table == "sys_hub_trigger_input" and lookup == {"model": "trigger-definition-sys-id"}:
+            return [
+                {
+                    "sys_id": "trigger-input-sys-id",
+                    "model": "trigger-definition-sys-id",
+                    "element": "table",
+                    "column_label": "Table",
+                    "internal_type": "string",
+                }
+            ]
+        if table == "sys_hub_trigger_output" and lookup == {"model": "trigger-definition-sys-id"}:
+            return [
+                {
+                    "sys_id": "trigger-output-sys-id",
+                    "model": "trigger-definition-sys-id",
+                    "element": "current",
+                    "column_label": "Current record",
+                    "internal_type": "reference",
+                }
+            ]
+        if table == "sys_hub_action_input" and lookup == {"model": "action-type-sys-id"}:
+            return [
+                {
+                    "sys_id": "action-input-sys-id",
+                    "model": "action-type-sys-id",
+                    "element": "assignment_group",
+                    "column_label": "Assignment group",
+                    "internal_type": "reference",
+                    "reference": "sys_user_group",
+                }
+            ]
+        if table == "sys_hub_action_output" and lookup == {"model": "action-type-sys-id"}:
+            return [
+                {
+                    "sys_id": "action-output-sys-id",
+                    "model": "action-type-sys-id",
+                    "element": "updated_record",
+                    "column_label": "Updated record",
+                    "internal_type": "reference",
+                }
+            ]
         if table == "sys_script_include":
             return [
                 {
@@ -589,10 +661,17 @@ def test_model_candidate_handler_blocks_model_when_required_surface_context_miss
         "implementation_candidate",
     ]
     assert result.artifacts[0].payload_json is not None
-    assert result.artifacts[0].payload_json["missing_required_surfaces"] == ["flows"]
+    assert result.artifacts[0].payload_json["missing_required_surfaces"] == [
+        "flows",
+        "flow_graph",
+    ]
     assert result.artifacts[2].payload_json is not None
     assert result.artifacts[2].payload_json["status"] == CandidateStatus.MANUAL_BUILD.value
     assert "context_insufficient:flows" in result.artifacts[2].payload_json["eligibility_reasons"]
+    assert (
+        "context_insufficient:flow_graph"
+        in result.artifacts[2].payload_json["eligibility_reasons"]
+    )
 
 
 def test_model_candidate_handler_runs_code_surface_analysis_without_model_or_update_set() -> None:
