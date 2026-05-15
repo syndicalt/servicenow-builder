@@ -158,11 +158,48 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
     )
 
 
+def validate_runtime_settings(
+    settings: RuntimeSettings,
+    *,
+    require_admin_auth: bool = True,
+) -> None:
+    if _runtime_environment(settings) != "production":
+        return
+
+    errors: list[str] = []
+    if settings.lifecycle_webhook_auth_mode != "hmac_sha256":
+        errors.append("JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE must be hmac_sha256 in production")
+    elif not settings.lifecycle_webhook_secret:
+        errors.append("JEDI_LIFECYCLE_WEBHOOK_SECRET is required in production")
+
+    if require_admin_auth:
+        if settings.admin_auth_mode == "disabled":
+            errors.append("JEDI_ADMIN_AUTH_MODE must not be disabled in production")
+        elif settings.admin_auth_mode == "dev_basic":
+            errors.append("JEDI_ADMIN_AUTH_MODE=dev_basic is development-only")
+        elif settings.admin_auth_mode in {"oidc", "servicenow_oauth"}:
+            errors.append(f"JEDI_ADMIN_AUTH_MODE={settings.admin_auth_mode} is not implemented")
+
+    if settings.model_provider is None:
+        errors.append("JEDI_MODEL_PROVIDER is required in production")
+    elif settings.model_provider != "openai":
+        errors.append(f"Unsupported JEDI_MODEL_PROVIDER: {settings.model_provider}")
+    elif not settings.openai_api_key or not settings.openai_model:
+        if not settings.openai_api_key:
+            errors.append("OPENAI_API_KEY is required when JEDI_MODEL_PROVIDER=openai")
+        if not settings.openai_model:
+            errors.append("OPENAI_MODEL is required when JEDI_MODEL_PROVIDER=openai")
+
+    if errors:
+        raise RuntimeConfigError("; ".join(errors))
+
+
 def create_runtime_api(
     *,
     settings: RuntimeSettings,
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
 ) -> FastAPI:
+    validate_runtime_settings(settings)
     store = store_factory(settings.database_url)
     app = create_lifecycle_api(
         store=store,
@@ -709,6 +746,7 @@ def process_one_runtime_fulfillment(
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
     transport: HttpTransport | None = None,
 ) -> FulfillmentWorkerResult:
+    validate_runtime_settings(settings, require_admin_auth=False)
     request_transport = transport or UrllibTransport()
     servicenow_client = _servicenow_client_from_settings(
         settings=settings,
@@ -743,6 +781,10 @@ def process_one_runtime_fulfillment(
                 secret_values=_runtime_secret_values(settings),
             ),
         )
+
+
+def _runtime_environment(settings: RuntimeSettings) -> str:
+    return settings.runtime_environment.strip().lower()
 
 
 def _servicenow_client_from_settings(

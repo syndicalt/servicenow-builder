@@ -241,6 +241,31 @@ For ServiceNow Table API integrations, prefer state values over labels. In the c
 
 Runtime fulfillment failures write back to the originating ServiceNow story work notes through the worker `failure_notifier`. The note begins with `Automated fulfillment failed` and includes the lifecycle event id, fulfillment job id, and redacted failure message. If the ServiceNow writeback itself fails, the worker still marks the PostgreSQL job failed and stores both the original handler error and the notifier error in `last_error`.
 
+### Production Runtime Fail-Closed Checklist
+
+Production API and worker entrypoints call `validate_runtime_settings()` before opening the operational store or processing work. Development can run with local defaults, but `JEDI_ENVIRONMENT=production` fails closed unless the runtime posture is explicit.
+
+Production requirements:
+
+- `JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=hmac_sha256`
+- `JEDI_LIFECYCLE_WEBHOOK_SECRET=<shared signing secret>`
+- `JEDI_MODEL_PROVIDER=openai`
+- `OPENAI_API_KEY=<provider key>`
+- `OPENAI_MODEL=<approved model id>`
+
+`JEDI_ADMIN_AUTH_MODE=dev_basic` is rejected in production. `JEDI_ADMIN_AUTH_MODE=disabled` is also rejected for the API runtime because the hosted app exposes `/admin`. Reserved production admin modes `oidc` and `servicenow_oauth` remain fail-closed until their token validation, session handling, and authorization checks are implemented.
+
+### Secret Inventory
+
+| Secret | Location | Purpose | Rotation Path |
+|---|---|---|---|
+| `SERVICENOW_CLIENT_SECRET` | API and worker runtime env | ServiceNow OAuth client credentials for Table API operations | Rotate the ServiceNow OAuth app secret, update runtime env, redeploy API and worker |
+| `JEDI_LIFECYCLE_WEBHOOK_SECRET` | API runtime env | HMAC validation for inbound lifecycle events | Generate a new random value, update API env and ServiceNow `x_jedi.lifecycle.webhook.secret`, then redeploy/retest signed webhook calls |
+| `x_jedi.lifecycle.webhook.secret` | ServiceNow system property | HMAC signing secret read by the lifecycle Business Rule emitter | Match `JEDI_LIFECYCLE_WEBHOOK_SECRET`; update out of band and do not place the value in bootstrap artifacts |
+| `OPENAI_API_KEY` | Worker runtime env | ChatGPT/OpenAI model execution | Rotate in the approved OpenAI project, update worker env, redeploy worker, and run a model smoke story |
+| `JEDI_ADMIN_CONSOLE_PASSWORD` | API runtime env, development only | Local Basic auth for `/admin` during development | Replace with a strong temporary value when needed; do not use with `JEDI_ENVIRONMENT=production` |
+| `JEDI_ADMIN_API_TOKEN` | API runtime env | Bearer token for JSON artifact/admin diagnostic API endpoints | Rotate by updating the API env and all approved operator clients |
+
 ## ChatGPT Implementation Adapter
 
 `OpenAIResponsesProvider` in `jedi_devproject.openai_provider` is the first ChatGPT/OpenAI adapter boundary for implementation candidate generation. It calls the OpenAI Responses API with strict JSON schema output and returns the existing internal implementation candidate shape.

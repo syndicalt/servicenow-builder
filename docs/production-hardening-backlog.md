@@ -22,12 +22,13 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 1 | Sprint 102 | Admin auth strategy boundary | Local Basic auth is acceptable for the MVP but not the production operator identity model, and ServiceNow browser-session role checks are not safe to assume under SSO. | `/admin` fails closed by default, Basic auth is explicitly development-only, and future `oidc` and `servicenow_oauth` modes are documented but not enabled until implemented. |
 | 2 | Sprint 103 | Authenticated inbound lifecycle webhook | The current PDI bootstrap history includes `no_authentication`; production cannot accept public lifecycle events without request authentication. | `/lifecycle/events` rejects unauthenticated calls. ServiceNow emits lifecycle events with a signed secret, OAuth-authenticated REST message, or another approved mechanism. Replay and malformed-signature tests are present. |
 | 3 | Sprint 104 | Confidence-based context retrieval worker | Deterministic context escalation exists, but the runtime still needs the actual retrieval step before model generation. | Missing live instance context claims a retrieval task before model execution. Insufficient retrieved context routes to human review. The model is never asked to infer unavailable ServiceNow shape. |
-| 4 | Sprint 105 | Admin console drill-down and evidence views | Operators need diagnostics without database access, but the console should remain read-only. | Job detail, lifecycle event detail, artifact detail, retrieved Update Set links, and failure summaries are visible. No retry/rebuild/commit controls exist. |
-| 5 | Sprint 106 | ATO evidence refresh | Security docs still describe the early MVP path more than the current hosted sidecar. | Data flow, threat model, control mapping, risk register, and sprint evidence index reflect Railway dev hosting, PostgreSQL artifacts, ChatGPT evaluation, ServiceNow webhook, and retrieved Update Set handoff. |
-| 6 | Sprint 107 | Runtime configuration and secret posture review | Production deployments need explicit failure behavior when required auth secrets are missing. | Startup/runtime checks fail closed for missing production auth settings. Operator docs describe required secrets, rotation expectations, and dev-only exceptions. |
-| 7 | Sprint 108 | Observability and audit event quality | Postgres has events and jobs, but production operations need consistent correlation and safe diagnostics. | Lifecycle events, job events, artifact refs, ServiceNow work notes, and admin views share correlation ids. Error messages are redacted and actionable. |
-| 8 | Sprint 109 | Rate limiting and abuse controls | Public API exposure needs request volume controls even when authenticated. | Lifecycle and admin endpoints have bounded request sizes, bounded list limits, and documented rate/abuse behavior. |
-| 9 | Sprint 110 | Capability backlog design | Generic dictionary/form placement is the only baseline build capability. The next capability should be selected deliberately. | ADR names the next supported capability, required validators, unsupported cases, and UAT story shape before implementation begins. |
+| 4 | Sprint 105 | HMAC PDI/Railway cutover | The PDI and hosted API needed to prove the signed lifecycle emitter path, not just local request validation. | Unsigned lifecycle calls are rejected, signed ServiceNow `sha256-base64` calls are accepted, and the signing secret is kept out of artifacts and docs. |
+| 5 | Sprint 106 | ServiceNow surface investigation | Generic table/form context is not enough for model implementation planning across ServiceNow surfaces. | The worker retrieves table schema, form layout, Business Rules, Client Scripts, UI Policies, Flow records, Script Includes, ACL indicators, CMDB/discovery, integrations, and curated public-doc query context before provider calls. |
+| 6 | Sprint 107 | Surface evidence hardening | Retrieved context needs provenance and minimization before it is safe to show in admin views or send to models. | Surface contexts include confidence scores and citations, script-like fields are redacted, endpoint query strings are redacted, and missing context is named in ServiceNow work notes. |
+| 7 | Sprint 108 | Runtime configuration and secret posture review | Production deployments need explicit failure behavior when required auth secrets are missing. | Startup/runtime checks fail closed for missing production auth settings. Operator docs describe required secrets, rotation expectations, and dev-only exceptions. |
+| 8 | Sprint 109 | Observability and audit event quality | Postgres has events and jobs, but production operations need consistent correlation and safe diagnostics. | Lifecycle events, job events, artifact refs, ServiceNow work notes, and admin views share correlation ids. Error messages are redacted and actionable. |
+| 9 | Sprint 110 | Rate limiting and abuse controls | Public API exposure needs request volume controls even when authenticated. | Lifecycle and admin endpoints have bounded request sizes, bounded list limits, and documented rate/abuse behavior. |
+| 10 | Sprint 111 | Capability backlog design | Generic dictionary/form placement is the only baseline build capability. The next capability should be selected deliberately. | ADR names the next supported capability, required validators, unsupported cases, and UAT story shape before implementation begins. |
 
 ## Review Gates
 
@@ -66,8 +67,10 @@ Review for:
 1. Sprint 102: Admin auth strategy boundary.
 2. Sprint 103: Authenticated inbound lifecycle webhook.
 3. Sprint 104: Confidence-based context retrieval worker.
-4. Sprint 105: Admin console drill-down and evidence views.
-5. Sprint 106: ATO evidence refresh.
-6. Sprint 107: Runtime configuration and secret posture review.
+4. Sprint 105: HMAC PDI/Railway cutover.
+5. Sprint 106: ServiceNow surface investigation.
+6. Sprint 107: Surface evidence hardening.
+7. Sprint 108: Runtime configuration and secret posture review.
+8. Sprint 109: Observability and audit event quality.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

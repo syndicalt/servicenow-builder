@@ -20,6 +20,7 @@ from jedi_devproject.runtime import (
     create_runtime_api,
     load_runtime_settings,
     process_one_runtime_fulfillment,
+    validate_runtime_settings,
 )
 from jedi_devproject.servicenow import HttpRequest, HttpResponse
 
@@ -485,22 +486,164 @@ def test_load_runtime_settings_reads_lifecycle_webhook_hmac_config(tmp_path: Pat
     assert settings.lifecycle_webhook_max_skew_seconds == 120
 
 
+def test_validate_runtime_settings_allows_development_disabled_auth(
+    tmp_path: Path,
+) -> None:
+    validate_runtime_settings(_settings(tmp_path))
+
+
+def test_validate_runtime_settings_rejects_production_disabled_webhook_auth(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(update={"runtime_environment": "production"})
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE"):
+        validate_runtime_settings(settings)
+
+
+def test_validate_runtime_settings_rejects_production_hmac_without_secret(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": None,
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_LIFECYCLE_WEBHOOK_SECRET"):
+        validate_runtime_settings(settings)
+
+
+def test_validate_runtime_settings_rejects_production_without_admin_auth(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": "webhook-secret",
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_ADMIN_AUTH_MODE"):
+        validate_runtime_settings(settings)
+
+
+def test_validate_runtime_settings_rejects_development_basic_auth_in_production(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": "webhook-secret",
+            "admin_auth_mode": "dev_basic",
+            "admin_console_username": "admin",
+            "admin_console_password": "password",
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError, match="dev_basic"):
+        validate_runtime_settings(settings)
+
+
+def test_validate_runtime_settings_rejects_unimplemented_production_admin_auth(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": "webhook-secret",
+            "admin_auth_mode": "oidc",
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError, match="not implemented"):
+        validate_runtime_settings(settings)
+
+
+def test_validate_runtime_settings_requires_production_model_provider(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": "webhook-secret",
+            "admin_auth_mode": "oidc",
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_MODEL_PROVIDER"):
+        validate_runtime_settings(settings, require_admin_auth=False)
+
+
+def test_validate_runtime_settings_requires_openai_production_secrets(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": "webhook-secret",
+            "admin_auth_mode": "oidc",
+            "model_provider": "openai",
+            "openai_api_key": None,
+            "openai_model": None,
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError) as exc:
+        validate_runtime_settings(settings, require_admin_auth=False)
+
+    message = str(exc.value)
+    assert "OPENAI_API_KEY" in message
+    assert "OPENAI_MODEL" in message
+
+
+def test_create_runtime_api_validates_production_settings_before_store_open(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(update={"runtime_environment": "production"})
+
+    def store_factory(_database_url: str) -> FakeRuntimeStore:
+        raise AssertionError("store factory should not be called")
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE"):
+        create_runtime_api(settings=settings, store_factory=store_factory)
+
+
+def test_process_one_runtime_fulfillment_validates_production_settings_before_store_open(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(update={"runtime_environment": "production"})
+
+    def store_factory(_database_url: str) -> FakeRuntimeStore:
+        raise AssertionError("store factory should not be called")
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE"):
+        process_one_runtime_fulfillment(
+            settings=settings,
+            store_factory=store_factory,
+            transport=RecordingTransport([]),
+        )
+
+
 def test_runtime_lifecycle_webhook_rejects_when_auth_disabled_in_production(
     tmp_path: Path,
 ) -> None:
     store = FakeRuntimeStore()
     settings = _settings(tmp_path).model_copy(update={"runtime_environment": "production"})
-    client = TestClient(
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE"):
         create_runtime_api(
             settings=settings,
             store_factory=lambda _database_url: store,
         )
-    )
 
-    response = client.post("/lifecycle/events", json=_ready_event_payload())
-
-    assert response.status_code == 503
-    assert response.json()["detail"] == "lifecycle webhook authentication is disabled"
     assert store.recorded_events == []
     assert store.enqueued_jobs == []
 
@@ -885,17 +1028,14 @@ def test_admin_console_rejects_dev_basic_in_production_environment(tmp_path: Pat
     settings = _settings_with_admin_console(tmp_path).model_copy(
         update={"runtime_environment": "production"}
     )
-    client = TestClient(
+
+    with pytest.raises(RuntimeConfigError, match="dev_basic"):
         create_runtime_api(
             settings=settings,
             store_factory=lambda _database_url: store,
         )
-    )
 
-    response = client.get("/admin", auth=("console-admin", "console-password"))
-
-    assert response.status_code == 503
-    assert response.json()["detail"] == "dev_basic admin auth is development-only"
+    assert store.recorded_events == []
 
 
 def test_admin_console_future_oidc_mode_fails_closed_until_implemented(

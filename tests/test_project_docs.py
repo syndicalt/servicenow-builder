@@ -559,6 +559,43 @@ def test_sprint_one_hundred_seven_change_log_documents_evidence_quality() -> Non
     assert "Missing ServiceNow context: flows" in change_log
 
 
+def test_operator_guide_documents_production_runtime_secret_posture() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Production Runtime Fail-Closed Checklist" in guide
+    assert "validate_runtime_settings()" in guide
+    assert "JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE=hmac_sha256" in guide
+    assert "JEDI_LIFECYCLE_WEBHOOK_SECRET" in guide
+    assert "JEDI_ADMIN_AUTH_MODE=dev_basic" in guide
+    assert "rejected in production" in guide
+    assert "JEDI_MODEL_PROVIDER=openai" in guide
+    assert "OPENAI_API_KEY" in guide
+    assert "OPENAI_MODEL" in guide
+    assert "Secret Inventory" in guide
+    assert "x_jedi.lifecycle.webhook.secret" in guide
+
+
+def test_production_hardening_backlog_reflects_completed_sprints_through_108() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 106 | ServiceNow surface investigation" in backlog
+    assert "Sprint 107 | Surface evidence hardening" in backlog
+    assert "Sprint 108 | Runtime configuration and secret posture review" in backlog
+    assert "Startup/runtime checks fail closed" in backlog
+    assert "Sprint 109 | Observability and audit event quality" in backlog
+
+
+def test_sprint_one_hundred_eight_change_log_documents_secret_posture() -> None:
+    change_log = Path("docs/sprints/sprint-108-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 108 Change Log" in change_log
+    assert "validate_runtime_settings()" in change_log
+    assert "hmac_sha256" in change_log
+    assert "dev_basic" in change_log
+    assert "JEDI_MODEL_PROVIDER=openai" in change_log
+    assert "563" not in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
