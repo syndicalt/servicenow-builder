@@ -367,6 +367,8 @@ Sprint 131 adds the Flow snapshot update strategy `flow-snapshot-update-strategy
 
 Sprint 132 adds the Flow preview/commit review strategy `flow-preview-commit-review-strategy-v1`. The strategy names the human review boundary as `retrieved_update_set_preview_commit`, requires preview before commit, requires human commit, and rejects auto-commit because Flow Designer auto-commit is not supported. This keeps ServiceNow preview/commit as the review point, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
 
+Sprint 133 adds the Flow builder readiness contract `flow-builder-readiness-v1`. The contract aggregates required Flow builder evidence into one auditable object, reports `missing_evidence`, and keeps both runtime generation and retrieved Update Set handoff disabled with the blocked reason `Flow Designer builder is not implemented`. This is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

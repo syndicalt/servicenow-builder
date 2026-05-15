@@ -205,6 +205,17 @@ class FlowPreviewCommitReviewStrategy(BaseModel):
             raise ValueError("Flow Designer preview is required before commit")
 
 
+class FlowBuilderReadinessContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["flow-builder-readiness-v1"]
+    required_evidence: list[str]
+    missing_evidence: list[str]
+    ready_for_runtime_generation: bool
+    ready_for_retrieved_update_set_handoff: bool
+    blocked_reason: str
+
+
 def validate_flow_graph_diff_candidate(
     *,
     changes: list[CandidateChange],
@@ -383,6 +394,33 @@ def flow_preview_commit_review_strategy() -> FlowPreviewCommitReviewStrategy:
             "runtime_generation_disabled",
             "retrieved_update_set_handoff_disabled",
         ],
+    )
+
+
+def flow_builder_readiness_contract(
+    *,
+    available_evidence: set[str] | None = None,
+) -> FlowBuilderReadinessContract:
+    required_evidence = [
+        "retrieved_graph_hash_matches_existing_graph_hash",
+        "diff_references_only_retrieved_nodes",
+        "diff_operation_is_add_action_or_update_condition",
+        "xml_shape_repository_available",
+        "xml_shape_evidence_validator_available",
+        "customer_update_name_strategy_defined",
+        "flow_snapshot_update_strategy_defined",
+        "rollback_customer_update_strategy_defined",
+        "servicenow_preview_commit_review_required",
+    ]
+    evidence = set(required_evidence) if available_evidence is None else available_evidence
+    missing_evidence = [item for item in required_evidence if item not in evidence]
+    return FlowBuilderReadinessContract(
+        version="flow-builder-readiness-v1",
+        required_evidence=required_evidence,
+        missing_evidence=missing_evidence,
+        ready_for_runtime_generation=False,
+        ready_for_retrieved_update_set_handoff=False,
+        blocked_reason="Flow Designer builder is not implemented",
     )
 
 

@@ -5,6 +5,7 @@ import pytest
 from jedi_devproject.business_rule_generation import business_rule_customer_updates
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.flow_designer_generation import (
+    flow_builder_readiness_contract,
     flow_customer_update_strategy,
     flow_preview_commit_review_strategy,
     flow_snapshot_update_strategy,
@@ -495,6 +496,40 @@ def test_flow_preview_commit_review_strategy_rejects_missing_preview() -> None:
 
     with pytest.raises(ValueError, match="Flow Designer preview is required before commit"):
         strategy.validate_review_request(auto_commit=False, preview_requested=False)
+
+
+def test_flow_builder_readiness_contract_reports_all_required_evidence() -> None:
+    readiness = flow_builder_readiness_contract()
+
+    assert readiness.version == "flow-builder-readiness-v1"
+    assert readiness.ready_for_runtime_generation is False
+    assert readiness.ready_for_retrieved_update_set_handoff is False
+    assert readiness.blocked_reason == "Flow Designer builder is not implemented"
+    assert readiness.required_evidence == [
+        "retrieved_graph_hash_matches_existing_graph_hash",
+        "diff_references_only_retrieved_nodes",
+        "diff_operation_is_add_action_or_update_condition",
+        "xml_shape_repository_available",
+        "xml_shape_evidence_validator_available",
+        "customer_update_name_strategy_defined",
+        "flow_snapshot_update_strategy_defined",
+        "rollback_customer_update_strategy_defined",
+        "servicenow_preview_commit_review_required",
+    ]
+    assert readiness.missing_evidence == []
+
+
+def test_flow_builder_readiness_contract_reports_missing_evidence() -> None:
+    readiness = flow_builder_readiness_contract(
+        available_evidence={
+            "retrieved_graph_hash_matches_existing_graph_hash",
+            "diff_references_only_retrieved_nodes",
+        }
+    )
+
+    assert readiness.ready_for_runtime_generation is False
+    assert "xml_shape_repository_available" in readiness.missing_evidence
+    assert "servicenow_preview_commit_review_required" in readiness.missing_evidence
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:

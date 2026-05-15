@@ -30,6 +30,8 @@ Sprint 131 adds the Flow snapshot update strategy `flow-snapshot-update-strategy
 
 Sprint 132 adds the Flow preview/commit review strategy `flow-preview-commit-review-strategy-v1`. The strategy names the review boundary as `retrieved_update_set_preview_commit`, requires preview before commit, requires human commit, and states that auto-commit is not supported for Flow Designer. This is still no Flow XML builder and no retrieved Update Set handoff; it only makes the ServiceNow human review boundary machine-checkable.
 
+Sprint 133 adds the Flow builder readiness contract `flow-builder-readiness-v1`. The contract aggregates the required graph, XML shape, customer update naming, snapshot, rollback, and preview/commit evidence into one auditable readiness object with `missing_evidence`. The contract still reports `Flow Designer builder is not implemented`; it is not permission to generate XML.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -141,6 +143,15 @@ The Flow preview/commit review strategy records:
 - fail-closed validation when auto-commit is requested.
 - `runtime_generation_enabled=false`.
 - `retrieved_update_set_handoff_enabled=false`.
+
+The Flow builder readiness contract records:
+
+- contract version `flow-builder-readiness-v1`.
+- all required builder evidence.
+- `missing_evidence` for incomplete preflight inputs.
+- `ready_for_runtime_generation=false`.
+- `ready_for_retrieved_update_set_handoff=false`.
+- blocked reason `Flow Designer builder is not implemented`.
 
 ## Deterministic Validators
 
