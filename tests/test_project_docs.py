@@ -1395,6 +1395,30 @@ def test_sprint_135_change_log_documents_flow_unsupported_reason_codes() -> None
     assert "no Flow XML builder" in change_log
 
 
+def test_flow_designer_docs_document_unsupported_reason_guidance() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in [guide, adr]:
+        assert "Flow unsupported reason guidance" in text
+        assert "unsupported_reason_guidance" in text
+        assert "route_to_human_review" in text
+        assert "work note" in text
+        assert "still no Flow XML builder" in text
+
+
+def test_sprint_136_change_log_documents_flow_unsupported_reason_guidance() -> None:
+    change_log = Path("docs/sprints/sprint-136-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 136 Change Log" in change_log
+    assert "Flow unsupported reason guidance" in change_log
+    assert "unsupported_reason_guidance" in change_log
+    assert "route_to_human_review" in change_log
+    assert "no Flow XML builder" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
@@ -1410,6 +1434,7 @@ def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> 
     assert "Sprint 133 | Flow builder readiness contract" in backlog
     assert "Sprint 134 | Flow builder plan readiness wiring" in backlog
     assert "Sprint 135 | Flow unsupported reason codes" in backlog
+    assert "Sprint 136 | Flow unsupported reason guidance" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

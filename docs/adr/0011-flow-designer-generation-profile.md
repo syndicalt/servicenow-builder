@@ -36,6 +36,8 @@ Sprint 134 adds Flow builder plan readiness wiring. The builder preflight plan n
 
 Sprint 135 adds Flow unsupported reason codes. The readiness contract and builder preflight plan now expose `unsupported_reason_codes` so callers can route unsupported Flow work without parsing human-readable blocker text. Current codes are `flow_builder_not_implemented`, `runtime_generation_disabled`, and `retrieved_update_set_handoff_disabled`.
 
+Sprint 136 adds Flow unsupported reason guidance. Each unsupported reason code now has `unsupported_reason_guidance` with a stable summary, `route_to_human_review` operator action, and work note text. This supports ServiceNow work notes and admin views without duplicating routing prose.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -172,6 +174,14 @@ Flow unsupported reason codes record:
 - `flow_builder_not_implemented`.
 - `runtime_generation_disabled`.
 - `retrieved_update_set_handoff_disabled`.
+
+Flow unsupported reason guidance records:
+
+- `unsupported_reason_guidance` on the readiness contract.
+- `unsupported_reason_guidance` on each builder plan.
+- stable `summary` text for each unsupported code.
+- `route_to_human_review` as the operator action.
+- work note text suitable for ServiceNow feedback.
 
 ## Deterministic Validators
 

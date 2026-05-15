@@ -101,6 +101,7 @@ class FlowGraphBuilderPlan(BaseModel):
     ready_for_retrieved_update_set_handoff: bool
     readiness_blocked_reason: str
     unsupported_reason_codes: list[str]
+    unsupported_reason_guidance: list[FlowUnsupportedReasonGuidance]
     missing_builder_evidence: list[str]
 
 
@@ -221,6 +222,16 @@ class FlowBuilderReadinessContract(BaseModel):
     ready_for_retrieved_update_set_handoff: bool
     blocked_reason: str
     unsupported_reason_codes: list[str]
+    unsupported_reason_guidance: list[FlowUnsupportedReasonGuidance]
+
+
+class FlowUnsupportedReasonGuidance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    summary: str
+    operator_action: Literal["route_to_human_review"]
+    work_note: str
 
 
 def validate_flow_graph_diff_candidate(
@@ -304,6 +315,7 @@ def plan_flow_graph_builder(
         ready_for_retrieved_update_set_handoff=readiness.ready_for_retrieved_update_set_handoff,
         readiness_blocked_reason=readiness.blocked_reason,
         unsupported_reason_codes=readiness.unsupported_reason_codes,
+        unsupported_reason_guidance=readiness.unsupported_reason_guidance,
         missing_builder_evidence=readiness.missing_evidence,
     )
 
@@ -440,7 +452,40 @@ def flow_builder_readiness_contract(
             "runtime_generation_disabled",
             "retrieved_update_set_handoff_disabled",
         ],
+        unsupported_reason_guidance=flow_unsupported_reason_guidance(),
     )
+
+
+def flow_unsupported_reason_guidance() -> list[FlowUnsupportedReasonGuidance]:
+    return [
+        FlowUnsupportedReasonGuidance(
+            code="flow_builder_not_implemented",
+            summary="Flow Designer builder is not implemented.",
+            operator_action="route_to_human_review",
+            work_note=(
+                "Flow Designer automation is context/preflight-only. Route this story to "
+                "human review or manual developer build."
+            ),
+        ),
+        FlowUnsupportedReasonGuidance(
+            code="runtime_generation_disabled",
+            summary="Flow Designer runtime generation is disabled.",
+            operator_action="route_to_human_review",
+            work_note=(
+                "The Flow Designer generation path is disabled until XML builder evidence "
+                "and preview/commit controls are implemented."
+            ),
+        ),
+        FlowUnsupportedReasonGuidance(
+            code="retrieved_update_set_handoff_disabled",
+            summary="Flow Designer retrieved Update Set handoff is disabled.",
+            operator_action="route_to_human_review",
+            work_note=(
+                "No Flow Designer retrieved Update Set will be created by automation. "
+                "Use ServiceNow review for manually prepared Flow changes."
+            ),
+        ),
+    ]
 
 
 def flow_xml_shape_repository() -> FlowXmlShapeRepository:
