@@ -572,6 +572,28 @@ def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:
         )
 
 
+def test_business_rule_validator_normalizes_model_operation_and_field_aliases() -> None:
+    updates = business_rule_customer_updates(
+        changes=[
+            _business_rule_change(
+                action_insert=False,
+                action_update=False,
+                insert=True,
+                update=True,
+                script="current.short_description = 'Inquiry needs triage';",
+                fields_read=[],
+                fields_written=[],
+            )
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    payload = updates[0]["payload"]
+    assert "<action_insert>true</action_insert>" in payload
+    assert "<action_update>true</action_update>" in payload
+    assert "current.short_description" in payload
+
+
 def test_client_script_validator_rejects_undeclared_clear_value_write() -> None:
     change = _client_script_change(
         script=(

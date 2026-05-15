@@ -75,16 +75,19 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
     if change.operation != "insert":
         raise ValueError("Business Rule handoff supports insert only")
     fields = dict(change.fields)
+    script = str(fields.get("script") or "")
     return BusinessRuleIntent(
         target_table=str(fields.get("collection") or fields.get("table") or ""),
         rule_name=str(fields.get("name") or ""),
         when=str(fields.get("when") or ""),
-        action_insert=_bool_value(fields.get("action_insert")),
-        action_update=_bool_value(fields.get("action_update")),
+        action_insert=_bool_value(fields.get("action_insert")) or _bool_value(fields.get("insert")),
+        action_update=_bool_value(fields.get("action_update")) or _bool_value(fields.get("update")),
         filter_condition=str(fields.get("filter_condition") or fields.get("condition") or ""),
-        script=str(fields.get("script") or ""),
+        script=script,
         fields_read=_string_list(fields.get("fields_read")),
-        fields_written=_string_list(fields.get("fields_written")),
+        fields_written=(
+            _string_list(fields.get("fields_written")) or _written_fields_from_script(script)
+        ),
     )
 
 
@@ -152,6 +155,17 @@ def _validate_field_writes(*, script: str, fields_written: list[str]) -> None:
     undeclared = sorted(written_fields - declared)
     if undeclared:
         raise ValueError(f"Business Rule writes undeclared field: {undeclared[0]}")
+
+
+def _written_fields_from_script(script: str) -> list[str]:
+    written_fields = set(re.findall(r"\bcurrent\.([a-zA-Z0-9_]+)\s*=(?!=)", script))
+    written_fields.update(
+        re.findall(r"\bcurrent\.setValue\(\s*['\"]([a-zA-Z0-9_]+)['\"]", script)
+    )
+    written_fields.update(
+        re.findall(r"\bcurrent\[\s*['\"]([a-zA-Z0-9_]+)['\"]\s*\]\s*=(?!=)", script)
+    )
+    return sorted(written_fields)
 
 
 def _slug(value: str) -> str:
