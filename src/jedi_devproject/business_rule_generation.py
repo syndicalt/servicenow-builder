@@ -78,12 +78,21 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
     script = str(
         fields.get("script") or fields.get("action_script") or fields.get("script_body") or ""
     )
+    operation_text = f"{fields.get('rationale') or ''} {change.rationale or ''}"
     return BusinessRuleIntent(
         target_table=str(fields.get("collection") or fields.get("table") or ""),
         rule_name=str(fields.get("name") or ""),
         when=str(fields.get("when") or ""),
-        action_insert=_bool_value(fields.get("action_insert")) or _bool_value(fields.get("insert")),
-        action_update=_bool_value(fields.get("action_update")) or _bool_value(fields.get("update")),
+        action_insert=(
+            _bool_value(fields.get("action_insert"))
+            or _bool_value(fields.get("insert"))
+            or _operation_mentions(operation_text, "insert")
+        ),
+        action_update=(
+            _bool_value(fields.get("action_update"))
+            or _bool_value(fields.get("update"))
+            or _operation_mentions(operation_text, "update")
+        ),
         filter_condition=str(fields.get("filter_condition") or fields.get("condition") or ""),
         script=script,
         fields_read=_string_list(fields.get("fields_read")),
@@ -168,6 +177,10 @@ def _written_fields_from_script(script: str) -> list[str]:
         re.findall(r"\bcurrent\[\s*['\"]([a-zA-Z0-9_]+)['\"]\s*\]\s*=(?!=)", script)
     )
     return sorted(written_fields)
+
+
+def _operation_mentions(text: str, operation: str) -> bool:
+    return re.search(rf"\b{re.escape(operation)}\b", text, flags=re.IGNORECASE) is not None
 
 
 def _slug(value: str) -> str:

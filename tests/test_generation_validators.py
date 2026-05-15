@@ -595,6 +595,31 @@ def test_business_rule_validator_normalizes_model_operation_and_field_aliases() 
     assert "current.short_description" in payload
 
 
+def test_business_rule_validator_infers_operation_flags_from_rationale_when_missing() -> None:
+    updates = business_rule_customer_updates(
+        changes=[
+            _business_rule_change(
+                action_insert=False,
+                action_update=False,
+                script=(
+                    "if (current.category == 'inquiry') {\n"
+                    "    current.short_description = 'Inquiry needs triage';\n"
+                    "}"
+                ),
+                fields_written=[],
+                rationale=(
+                    "Applied on before insert and update operations on the incident table."
+                ),
+            )
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    payload = updates[0]["payload"]
+    assert "<action_insert>true</action_insert>" in payload
+    assert "<action_update>true</action_update>" in payload
+
+
 def test_script_include_validator_infers_public_methods_from_script() -> None:
     updates = script_include_customer_updates(
         changes=[
