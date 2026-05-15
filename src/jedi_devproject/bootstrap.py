@@ -80,6 +80,7 @@ class LifecycleRestMessageSpec(BaseModel):
 class LifecycleWebhookBootstrapSpec(BaseModel):
     rest_message: LifecycleRestMessageSpec
     business_rule: LifecycleBusinessRuleSpec
+    hmac_secret_property_name: str | None = None
 
 
 class UpdateSetImporterDefinitionSpec(BaseModel):
@@ -260,12 +261,15 @@ def build_lifecycle_business_rule_spec(
     complete_state_value: str | None = None,
     rest_message_name: str = "Jedi DevProject Lifecycle Event API",
     rest_method_name: str = "post_event",
+    hmac_secret_property_name: str | None = None,
 ) -> LifecycleBusinessRuleSpec:
     _require_non_empty("integration_identity", integration_identity)
     _require_non_empty("draft_state_value", draft_state_value)
     _require_non_empty("ready_state_value", ready_state_value)
     _require_non_empty("rest_message_name", rest_message_name)
     _require_non_empty("rest_method_name", rest_method_name)
+    if hmac_secret_property_name is not None:
+        _require_non_empty("hmac_secret_property_name", hmac_secret_property_name)
     if ready_for_testing_state_value is not None:
         _require_non_empty("ready_for_testing_state_value", ready_for_testing_state_value)
     if complete_state_value is not None:
@@ -318,6 +322,28 @@ def build_lifecycle_business_rule_spec(
     ) {{
         previousStateLabel = 'Ready for Testing';
         currentStateLabel = 'Complete';"""
+    hmac_script = ""
+    if hmac_secret_property_name is not None:
+        hmac_script = f"""
+    var body = JSON.stringify(payload);
+    var timestamp = Math.floor(new GlideDateTime().getNumericValue() / 1000).toString();
+    var webhookSecret = gs.getProperty({_js_string(hmac_secret_property_name)});
+    if (!webhookSecret) {{
+        gs.error('Jedi DevProject lifecycle webhook secret property is not configured');
+        return;
+    }}
+    var encodedSecret = GlideStringUtil.base64Encode(webhookSecret);
+    var signatureBase = timestamp + '.' + body;
+    var signer = new GlideCertificateEncryption();
+    var mac = signer.generateMac(encodedSecret, 'HmacSHA256', signatureBase);
+    request.setRequestHeader('X-JEDI-Webhook-Timestamp', timestamp);
+    request.setRequestHeader('X-JEDI-Webhook-Signature', 'sha256-base64=' + mac);
+
+    request.setRequestBody(body);"""
+    else:
+        hmac_script = """
+    request.setRequestBody(JSON.stringify(payload));"""
+
     script = f"""(function executeRule(current, previous) {{
     var previousStateLabel = 'Draft';
     var currentStateLabel = 'Ready';
@@ -357,8 +383,7 @@ def build_lifecycle_business_rule_spec(
         correlation_id: eventId,
         emitted_by: {_js_string(integration_identity)}
     }};
-
-    request.setRequestBody(JSON.stringify(payload));
+{hmac_script}
     request.executeAsync();
 }})(current, previous);"""
 
@@ -381,6 +406,7 @@ def build_lifecycle_webhook_bootstrap_spec(
     ready_state_value: str,
     ready_for_testing_state_value: str | None = None,
     complete_state_value: str | None = None,
+    hmac_secret_property_name: str | None = None,
 ) -> LifecycleWebhookBootstrapSpec:
     rest_message = build_lifecycle_rest_message_spec(endpoint_url=endpoint_url)
     business_rule = build_lifecycle_business_rule_spec(
@@ -391,10 +417,12 @@ def build_lifecycle_webhook_bootstrap_spec(
         complete_state_value=complete_state_value,
         rest_message_name=rest_message.name,
         rest_method_name=rest_message.method_name,
+        hmac_secret_property_name=hmac_secret_property_name,
     )
     return LifecycleWebhookBootstrapSpec(
         rest_message=rest_message,
         business_rule=business_rule,
+        hmac_secret_property_name=hmac_secret_property_name,
     )
 
 

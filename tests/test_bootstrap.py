@@ -325,6 +325,26 @@ def test_lifecycle_webhook_bootstrap_spec_includes_rest_message_and_business_rul
     assert "story_sys_id" not in spec.model_dump_json()
 
 
+def test_lifecycle_webhook_bootstrap_spec_can_emit_hmac_signed_requests() -> None:
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+        hmac_secret_property_name="x_jedi.lifecycle.webhook.secret",
+    )
+
+    script = spec.business_rule.script
+    assert "gs.getProperty('x_jedi.lifecycle.webhook.secret')" in script
+    assert "new GlideCertificateEncryption()" in script
+    assert "GlideStringUtil.base64Encode(webhookSecret)" in script
+    assert "generateMac(encodedSecret, 'HmacSHA256', signatureBase)" in script
+    assert "request.setRequestHeader('X-JEDI-Webhook-Timestamp', timestamp)" in script
+    assert "request.setRequestHeader('X-JEDI-Webhook-Signature', 'sha256-base64=' + mac)" in script
+    assert "webhook-secret" not in script
+    assert spec.hmac_secret_property_name == "x_jedi.lifecycle.webhook.secret"
+
+
 def test_lifecycle_webhook_bootstrap_spec_requires_reviewed_endpoint() -> None:
     import pytest
 

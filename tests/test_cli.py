@@ -3047,6 +3047,8 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
             "-7",
             "--complete-state-value",
             "3",
+            "--hmac-secret-property-name",
+            "x_jedi.lifecycle.webhook.secret",
             "--run-id",
             "lifecycle-business-rule-001",
             "--spec-root",
@@ -3081,6 +3083,9 @@ def test_cli_plan_lifecycle_business_rule_writes_reviewable_spec(
     assert "story_state_changed" in payload["business_rule"]["script"]
     assert "Ready for Testing" in payload["business_rule"]["script"]
     assert "Complete" in payload["business_rule"]["script"]
+    assert payload["hmac_secret_property_name"] == "x_jedi.lifecycle.webhook.secret"
+    assert "X-JEDI-Webhook-Signature" in payload["business_rule"]["script"]
+    assert "sha256-base64=" in payload["business_rule"]["script"]
     assert "story_sys_id" not in json.dumps(payload)
 
 

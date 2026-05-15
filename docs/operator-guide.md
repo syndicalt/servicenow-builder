@@ -165,7 +165,7 @@ X-JEDI-Webhook-Timestamp: <unix epoch seconds>
 X-JEDI-Webhook-Signature: sha256=<hex hmac>
 ```
 
-The signature base string is `<timestamp>.<raw request body>`, signed with `HMAC-SHA256` using `JEDI_LIFECYCLE_WEBHOOK_SECRET`. The receiver verifies the timestamp replay window before validating the event payload and rejects missing signatures with `401` and bad signatures with `403`.
+The signature base string is `<timestamp>.<raw request body>`, signed with `HMAC-SHA256` using `JEDI_LIFECYCLE_WEBHOOK_SECRET`. The receiver verifies the timestamp replay window before validating the event payload and rejects missing signatures with `401` and bad signatures with `403`. The receiver accepts `sha256=<hex hmac>` for generic clients and `sha256-base64=<base64 hmac>` for ServiceNow emitters because ServiceNow's `GlideCertificateEncryption.generateMac()` returns Base64 MAC output.
 
 `shared_secret` is available only as a simpler interim mode using `X-JEDI-Webhook-Secret`; it is not replay-resistant and should not be the Federal production posture. `servicenow_oauth` is reserved and currently fails closed with `501` until the OAuth validation path is designed and tested.
 
@@ -428,6 +428,7 @@ python3 -m jedi_devproject.cli plan-lifecycle-business-rule \
   --ready-state-value 1 \
   --ready-for-testing-state-value -7 \
   --complete-state-value 3 \
+  --hmac-secret-property-name x_jedi.lifecycle.webhook.secret \
   --run-id lifecycle-business-rule-20260513-001 \
   --spec-root artifacts/lifecycle-bootstrap
 ```
@@ -436,6 +437,8 @@ The command writes a local lifecycle webhook bootstrap bundle with two reviewed 
 
 - `rest_message`: an Outbound REST Message named `Jedi DevProject Lifecycle Event API` with method `post_event`, HTTPS endpoint, JSON content type, and authentication marked `configured_in_servicenow`.
 - `business_rule`: the `rm_story` after-update Business Rule script and condition.
+
+When `--hmac-secret-property-name` is supplied, the generated Business Rule reads the signing secret from that ServiceNow system property, signs `<timestamp>.<body>` with `GlideCertificateEncryption.generateMac()`, and sends `X-JEDI-Webhook-Timestamp` plus `X-JEDI-Webhook-Signature: sha256-base64=<mac>`. The bootstrap artifact records only the property name, not the secret value. Operators must create or update the ServiceNow property value out of band and set the same secret in the API runtime as `JEDI_LIFECYCLE_WEBHOOK_SECRET`.
 
 The Business Rule references the named REST Message instead of setting the endpoint directly. This keeps the endpoint URL out of the Business Rule script, lets ServiceNow own authentication configuration, and gives reviewers a clean separation between trigger logic and transport configuration.
 

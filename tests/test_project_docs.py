@@ -155,6 +155,8 @@ def test_operator_guide_documents_authenticated_lifecycle_webhook() -> None:
     assert "X-JEDI-Webhook-Timestamp" in guide
     assert "X-JEDI-Webhook-Signature" in guide
     assert "<timestamp>.<raw request body>" in guide
+    assert "sha256-base64=<base64 hmac>" in guide
+    assert "GlideCertificateEncryption.generateMac()" in guide
     assert "replay window" in guide
 
 
@@ -491,6 +493,16 @@ def test_sprint_one_hundred_three_change_log_documents_webhook_auth() -> None:
     assert "JEDI_LIFECYCLE_WEBHOOK_SECRET" in change_log
     assert "replay-window enforcement" in change_log
     assert "development-only" in change_log
+
+
+def test_sprint_one_hundred_four_change_log_documents_signed_servicenow_emitter() -> None:
+    change_log = Path("docs/sprints/sprint-104-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 104 Change Log" in change_log
+    assert "sha256-base64=<mac>" in change_log
+    assert "--hmac-secret-property-name" in change_log
+    assert "GlideCertificateEncryption.generateMac()" in change_log
+    assert "Kept the secret value out" in change_log
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

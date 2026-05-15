@@ -195,6 +195,28 @@ def _signed_webhook_request(
     }
 
 
+def _signed_base64_webhook_request(
+    payload: dict[str, str],
+    *,
+    secret: str = "webhook-secret",
+    timestamp: int | None = None,
+) -> tuple[bytes, dict[str, str]]:
+    import base64
+
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    issued_at = str(timestamp if timestamp is not None else int(time.time()))
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        issued_at.encode("utf-8") + b"." + body,
+        hashlib.sha256,
+    ).digest()
+    return body, {
+        "content-type": "application/json",
+        "X-JEDI-Webhook-Timestamp": issued_at,
+        "X-JEDI-Webhook-Signature": f"sha256-base64={base64.b64encode(digest).decode()}",
+    }
+
+
 def test_lifecycle_webhook_records_ready_event_and_enqueues_fulfillment() -> None:
     store = FakeOperationalStore()
     client = TestClient(create_lifecycle_api(store=store))
@@ -244,6 +266,25 @@ def test_lifecycle_webhook_hmac_auth_accepts_valid_signature() -> None:
         )
     )
     body, headers = _signed_webhook_request(_ready_event_payload())
+
+    response = client.post("/lifecycle/events", content=body, headers=headers)
+
+    assert response.status_code == 202
+    assert response.json()["job_id"] == "job-evt-20260513-001"
+    assert [event.event_id for event in store.recorded_events] == ["evt-20260513-001"]
+    assert store.enqueued_jobs == [("evt-20260513-001", "STRY0010013")]
+
+
+def test_lifecycle_webhook_hmac_auth_accepts_valid_servicenow_base64_signature() -> None:
+    store = FakeOperationalStore()
+    client = TestClient(
+        create_lifecycle_api(
+            store=store,
+            webhook_auth_mode="hmac_sha256",
+            webhook_secret="webhook-secret",
+        )
+    )
+    body, headers = _signed_base64_webhook_request(_ready_event_payload())
 
     response = client.post("/lifecycle/events", content=body, headers=headers)
 

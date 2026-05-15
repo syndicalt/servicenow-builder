@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -280,7 +281,15 @@ def _require_hmac_webhook_auth(
         timestamp=timestamp_header,
         body=body,
     )
-    if not hmac.compare_digest(signature_header, expected_signature):
+    expected_servicenow_signature = _hmac_base64_signature(
+        configured_secret=configured_secret,
+        timestamp=timestamp_header,
+        body=body,
+    )
+    if not (
+        hmac.compare_digest(signature_header, expected_signature)
+        or hmac.compare_digest(signature_header, expected_servicenow_signature)
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="lifecycle webhook signature rejected",
@@ -294,3 +303,12 @@ def _hmac_signature(*, configured_secret: str, timestamp: str, body: bytes) -> s
         hashlib.sha256,
     ).hexdigest()
     return f"sha256={digest}"
+
+
+def _hmac_base64_signature(*, configured_secret: str, timestamp: str, body: bytes) -> str:
+    digest = hmac.new(
+        configured_secret.encode("utf-8"),
+        timestamp.encode("utf-8") + b"." + body,
+        hashlib.sha256,
+    ).digest()
+    return f"sha256-base64={base64.b64encode(digest).decode('ascii')}"

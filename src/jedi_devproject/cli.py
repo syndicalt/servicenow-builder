@@ -287,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_lifecycle_business_rule.add_argument("--ready-state-value", required=True)
     plan_lifecycle_business_rule.add_argument("--ready-for-testing-state-value")
     plan_lifecycle_business_rule.add_argument("--complete-state-value")
+    plan_lifecycle_business_rule.add_argument("--hmac-secret-property-name")
     plan_lifecycle_business_rule.add_argument("--run-id", required=True)
     plan_lifecycle_business_rule.add_argument("--spec-root", type=Path, required=True)
     plan_update_set_importer = subparsers.add_parser(
@@ -1077,6 +1078,7 @@ def main(argv: list[str] | None = None) -> int:
                 ready_state_value=args.ready_state_value,
                 ready_for_testing_state_value=args.ready_for_testing_state_value,
                 complete_state_value=args.complete_state_value,
+                hmac_secret_property_name=args.hmac_secret_property_name,
             )
         except ValueError as exc:
             print(f"lifecycle_business_rule_specs=0 reason={exc}")
