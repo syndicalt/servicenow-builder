@@ -35,11 +35,12 @@ def analyze_story_capabilities(
     supported_capabilities: set[Capability] = SUPPORTED_BASELINE_CAPABILITIES,
 ) -> StoryCapabilityAssessment:
     text = _story_text(story)
-    requested = _requested_capabilities(text)
-    missing_details = _missing_details(text)
+    positive_text = _positive_requirement_text(text)
+    requested = _requested_capabilities(positive_text)
+    missing_details = _missing_details(positive_text)
     unsupported = requested - supported_capabilities
-    intent = _field_form_intent(story, text) if _is_dictionary_form_request(text) else None
-    target_table = intent.target_table if intent is not None else _target_table(text)
+    intent = _field_form_intent(story, text) if _is_dictionary_form_request(positive_text) else None
+    target_table = intent.target_table if intent is not None else _target_table(positive_text)
     reasons: list[str] = []
 
     if story.story_points > FULL_MATURITY_MAX_AUTOMATED_POINTS:
@@ -76,7 +77,7 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
-    forbidden_business_rule_details = _business_rule_forbidden_details(text)
+    forbidden_business_rule_details = _business_rule_forbidden_details(positive_text)
     if Capability.BUSINESS_RULE_GENERATE in requested and forbidden_business_rule_details:
         reasons.append(
             "business rule generation includes forbidden behavior: "
@@ -94,7 +95,7 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
-    forbidden_client_script_details = _client_script_forbidden_details(text)
+    forbidden_client_script_details = _client_script_forbidden_details(positive_text)
     if Capability.CLIENT_SCRIPT_GENERATE in requested and forbidden_client_script_details:
         reasons.append(
             "client script generation includes forbidden behavior: "
@@ -112,7 +113,7 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
-    forbidden_script_include_details = _script_include_forbidden_details(text)
+    forbidden_script_include_details = _script_include_forbidden_details(positive_text)
     if Capability.SCRIPT_INCLUDE_GENERATE in requested and forbidden_script_include_details:
         reasons.append(
             "script include generation includes forbidden behavior: "
@@ -130,7 +131,7 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
-    forbidden_ui_policy_details = _ui_policy_forbidden_details(text)
+    forbidden_ui_policy_details = _ui_policy_forbidden_details(positive_text)
     if Capability.UI_POLICY_GENERATE in requested and forbidden_ui_policy_details:
         reasons.append(
             "ui policy generation includes forbidden behavior: "
@@ -177,7 +178,7 @@ def analyze_story_capabilities(
         )
 
     code_surface_capability = _code_surface_capability(requested)
-    if code_surface_capability is not None and not _is_dictionary_form_request(text):
+    if code_surface_capability is not None and not _is_dictionary_form_request(positive_text):
         profile = capability_profile(code_surface_capability)
         code_surface_label = code_surface_capability.value.removesuffix("_analyze").replace(
             "_", " "
@@ -325,6 +326,16 @@ def _story_text(story: Story) -> str:
         for part in [story.short_description, story.description, story.acceptance_criteria or ""]
         if part
     ).lower()
+
+
+def _positive_requirement_text(text: str) -> str:
+    clauses = re.split(r"(?<=[.;\n])\s+", text)
+    positive_clauses = [
+        clause
+        for clause in clauses
+        if not clause.strip().startswith(("do not ", "don't ", "no "))
+    ]
+    return " ".join(positive_clauses)
 
 
 def _requested_capabilities(text: str) -> set[Capability]:

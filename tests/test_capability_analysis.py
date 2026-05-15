@@ -136,6 +136,80 @@ def test_acl_requirement_is_unsupported_capability() -> None:
     assert Capability.ACL_MODIFY in assessment.unsupported_capabilities
 
 
+def test_negative_scope_constraints_do_not_count_as_requested_capabilities() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            short_description="Add Review Summary field to Change Request form",
+            description=(
+                "Create a custom string field on table named change_request and place "
+                "it on the change_request form. Field label: UAT Review Summary. "
+                "Field name: u_uat_review_summary. Field type: string. Max length: "
+                "255 characters. Placement: below description on the default form. "
+                "Do not create ACLs, flows, data migration, or integrations."
+            ),
+            acceptance_criteria=(
+                "- The change_request table has an active dictionary field named "
+                "u_uat_review_summary.\n"
+                "- The field appears on the default Change Request form below Description."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert Capability.ACL_MODIFY not in assessment.capabilities
+    assert Capability.FLOW_MODIFY not in assessment.capabilities
+    assert Capability.DATA_MIGRATION not in assessment.capabilities
+    assert Capability.INTEGRATION_MODIFY not in assessment.capabilities
+    assert assessment.unsupported_capabilities == set()
+
+
+def test_business_rule_negative_safety_constraints_do_not_block_generation() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            short_description="Create Incident inquiry short description default Business Rule",
+            description=(
+                "Create a Business Rule for table named incident. Business Rule name: "
+                "JEDI UAT Default Inquiry Short Description. Trigger timing: before. "
+                "Trigger operations: insert and update. Condition: when category is "
+                "inquiry and short_description is empty. Expected behavior: set "
+                "short_description to Inquiry needs triage. Fields read: category, "
+                "short_description. Fields written: short_description. Do not use "
+                "GlideRecord, outbound calls, credentials, async/display rules, "
+                "deletes, or cross-table writes."
+            ),
+            acceptance_criteria="- The rule runs before insert and update only.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.unsupported_capabilities == set()
+    assert "business rule generation includes forbidden behavior" not in assessment.reasons
+
+
+def test_client_script_negative_safety_constraints_do_not_block_generation() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            short_description="Create Problem software category onLoad Client Script",
+            description=(
+                "Create a Client Script for table named problem. Client Script name: "
+                "JEDI UAT Software Category Notice. Client script type: onLoad. "
+                "Condition: when category is software. Expected behavior: show an "
+                "informational form message. Fields read: category. Fields written: "
+                "none. Do not use GlideAjax, browser storage, document or window APIs, "
+                "external calls, credentials, or DOM manipulation outside g_form APIs."
+            ),
+            acceptance_criteria="- It uses g_form APIs to show the message.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.unsupported_capabilities == set()
+    assert "client script generation includes forbidden behavior" not in assessment.reasons
+
+
 def test_high_point_story_routes_to_manual_developer_build() -> None:
     assessment = analyze_story_capabilities(
         _story(
