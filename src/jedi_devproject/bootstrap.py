@@ -14,26 +14,26 @@ class BootstrapFieldSpec(BaseModel):
     column_label: str
     internal_type: str
     max_length: int | None = None
-    read_only: bool = True
+    read_only: bool = False
 
 
 class BootstrapFieldPlan(BaseModel):
     table: str
     missing_fields: list[str]
     fields_to_create: list[BootstrapFieldSpec]
-    fields_to_update_read_only: list[str] = []
+    fields_to_update_writable: list[str] = []
     form_layout_changes: list[str]
     requires_apply_confirmation: bool
 
     @property
     def ready(self) -> bool:
-        return not self.missing_fields and not self.fields_to_update_read_only
+        return not self.missing_fields and not self.fields_to_update_writable
 
 
 class BootstrapApplyResult(BaseModel):
     applied: bool
     created_fields: list[str]
-    updated_read_only_fields: list[str] = []
+    updated_writable_fields: list[str] = []
     form_layout_changes: list[str]
     reasons: list[str]
 
@@ -190,18 +190,18 @@ def plan_bootstrap_fields(
     fields_to_create = [
         field for field in REQUIRED_BOOTSTRAP_FIELDS if field.element not in existing_fields
     ]
-    fields_to_update_read_only = [
+    fields_to_update_writable = [
         field.element
         for field in REQUIRED_BOOTSTRAP_FIELDS
         if field.element in existing_fields
-        and field.read_only
-        and not existing_fields[field.element].read_only
+        and not field.read_only
+        and existing_fields[field.element].read_only
     ]
     return BootstrapFieldPlan(
         table=BOOTSTRAP_TABLE,
         missing_fields=[field.element for field in fields_to_create],
         fields_to_create=fields_to_create,
-        fields_to_update_read_only=fields_to_update_read_only,
+        fields_to_update_writable=fields_to_update_writable,
         form_layout_changes=[],
         requires_apply_confirmation=True,
     )
@@ -217,7 +217,7 @@ def apply_bootstrap_fields(
         return BootstrapApplyResult(
             applied=False,
             created_fields=[],
-            updated_read_only_fields=[],
+            updated_writable_fields=[],
             form_layout_changes=[],
             reasons=["bootstrap_confirmation_required"],
         )
@@ -234,19 +234,19 @@ def apply_bootstrap_fields(
         )
         created_fields.append(field.element)
 
-    updated_read_only_fields: list[str] = []
-    for element in plan.fields_to_update_read_only:
+    updated_writable_fields: list[str] = []
+    for element in plan.fields_to_update_writable:
         client.upsert_table_record(
             table="sys_dictionary",
             lookup={"name": BOOTSTRAP_TABLE, "element": element},
-            fields={"read_only": "true"},
+            fields={"read_only": "false"},
         )
-        updated_read_only_fields.append(element)
+        updated_writable_fields.append(element)
 
     return BootstrapApplyResult(
-        applied=bool(created_fields or updated_read_only_fields),
+        applied=bool(created_fields or updated_writable_fields),
         created_fields=created_fields,
-        updated_read_only_fields=updated_read_only_fields,
+        updated_writable_fields=updated_writable_fields,
         form_layout_changes=[],
         reasons=[],
     )

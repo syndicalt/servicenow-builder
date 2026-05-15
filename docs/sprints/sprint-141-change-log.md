@@ -18,3 +18,9 @@
 
 - These fixes were driven by the supported-artifact UAT matrix for dictionary/form, Business Rule, Client Script, Script Include, and UI Policy stories.
 - The current mutation boundary remains retrieved Update Set handoff for supported generated artifacts; unsupported or insufficient-context requests continue to route to human review.
+
+## Bootstrap field writability correction
+
+- Live UAT proved dictionary `read_only=true` prevents the worker from persisting `u_ai_status` and retrieved Update Set handoff metadata through the Table API.
+- Bootstrap now creates AI operational fields with dictionary `read_only=false` and remediates existing read-only AI operational fields back to writable.
+- Human read-only behavior must be enforced outside the dictionary flag with form policy, UI policy, ACLs, or role-scoped controls that still allow the integration identity to write.

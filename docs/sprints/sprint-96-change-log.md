@@ -30,4 +30,6 @@ Make AI story metadata system-owned and align structured fields with the retriev
 
 ## Decision
 
-`u_ai_build_reference` and `u_ai_candidate_artifact` are legacy external-build fields. They should not be deleted from existing instances yet, but new retrieved Update Set fulfillment should use handoff-specific metadata instead. All AI operational fields should be read-only because users should not manually edit orchestration state.
+`u_ai_build_reference` and `u_ai_candidate_artifact` are legacy external-build fields. They should not be deleted from existing instances yet, but new retrieved Update Set fulfillment should use handoff-specific metadata instead. This sprint originally used dictionary `read_only=true` to keep users from manually editing AI operational fields.
+
+Sprint 141 supersedes that dictionary-level read-only decision. AI operational fields must be dictionary-writable so the integration identity can persist runtime state and handoff metadata through the Table API. Human read-only behavior belongs in form policy, UI policy, ACLs, or role-scoped controls that still allow automation writes.

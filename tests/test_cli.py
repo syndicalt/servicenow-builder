@@ -2898,7 +2898,7 @@ def test_cli_plan_bootstrap_fields_reports_missing_custom_fields_without_mutatio
             column_label="AI Status",
             internal_type="string",
             active=True,
-            read_only=True,
+            read_only=False,
         )
     ]
 
@@ -2921,7 +2921,7 @@ def test_cli_plan_bootstrap_fields_reports_missing_custom_fields_without_mutatio
         "missing_fields=u_ai_handoff_type,u_ai_handoff_reference,u_ai_artifact_reference"
         in captured.out
     )
-    assert "fields_to_update_read_only=0" in captured.out
+    assert "fields_to_update_writable=0" in captured.out
     assert "form_layout_changes=0" in captured.out
     assert "state" not in captured.out
     assert "client-secret" not in captured.out
@@ -3005,7 +3005,7 @@ def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
     assert exit_code == 0
     assert "applied=True" in captured.out
     assert "created_fields=4" in captured.out
-    assert "updated_read_only_fields=0" in captured.out
+    assert "updated_writable_fields=0" in captured.out
     assert "form_layout_changes=0" in captured.out
     assert [field["element"] for field in fake_client.created_dictionary_fields] == [
         "u_ai_status",
@@ -3013,14 +3013,14 @@ def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
         "u_ai_handoff_reference",
         "u_ai_artifact_reference",
     ]
-    assert all(field["read_only"] is True for field in fake_client.created_dictionary_fields)
+    assert all(field["read_only"] is False for field in fake_client.created_dictionary_fields)
     assert audit["created_fields"] == [
         "u_ai_status",
         "u_ai_handoff_type",
         "u_ai_handoff_reference",
         "u_ai_artifact_reference",
     ]
-    assert audit["updated_read_only_fields"] == []
+    assert audit["updated_writable_fields"] == []
     assert audit["form_layout_changes"] == []
     assert "state" not in json.dumps(audit)
     assert "client-secret" not in captured.out

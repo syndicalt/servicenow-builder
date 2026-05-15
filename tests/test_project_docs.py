@@ -2426,4 +2426,8 @@ def test_sprint_one_forty_one_change_log_documents_parser_hardening() -> None:
     assert "`conditions`" in change_log
     assert "Script Include stories" in change_log
     assert "supported-artifact UAT matrix" in change_log
+    assert "dictionary `read_only=true` prevents the worker" in change_log
+    assert "dictionary-writable by design" in Path("docs/operator-guide.md").read_text(
+        encoding="utf-8"
+    )
     assert "Sprint 141: Supported artifact UAT parser hardening" in backlog

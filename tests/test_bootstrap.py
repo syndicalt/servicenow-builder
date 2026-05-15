@@ -112,8 +112,8 @@ def test_bootstrap_plan_only_includes_missing_custom_writeback_fields() -> None:
         "u_ai_handoff_reference",
         "u_ai_artifact_reference",
     ]
-    assert all(field.read_only for field in plan.fields_to_create)
-    assert plan.fields_to_update_read_only == ["u_ai_status"]
+    assert all(field.read_only is False for field in plan.fields_to_create)
+    assert plan.fields_to_update_writable == []
     assert "state" not in [field.element for field in plan.fields_to_create]
     assert plan.requires_apply_confirmation is True
     assert plan.form_layout_changes == []
@@ -127,35 +127,35 @@ def test_bootstrap_plan_is_noop_when_custom_fields_exist() -> None:
                 column_label="AI Status",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
             StoryDictionaryField(
                 element="u_ai_handoff_type",
                 column_label="AI Handoff Type",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
             StoryDictionaryField(
                 element="u_ai_handoff_reference",
                 column_label="AI Handoff Reference",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
             StoryDictionaryField(
                 element="u_ai_artifact_reference",
                 column_label="AI Artifact Reference",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
         ]
     )
 
     assert plan.missing_fields == []
     assert plan.fields_to_create == []
-    assert plan.fields_to_update_read_only == []
+    assert plan.fields_to_update_writable == []
     assert plan.ready is True
 
 
@@ -170,7 +170,7 @@ def test_apply_bootstrap_fields_requires_explicit_confirmation() -> None:
 
     assert result.applied is False
     assert result.created_fields == []
-    assert result.updated_read_only_fields == []
+    assert result.updated_writable_fields == []
     assert result.reasons == ["bootstrap_confirmation_required"]
     assert client.created_fields == []
     assert client.upserted_records == []
@@ -184,7 +184,7 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
                 column_label="AI Status",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             )
         ]
     )
@@ -206,14 +206,14 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
         "u_ai_handoff_reference",
         "u_ai_artifact_reference",
     ]
-    assert all(field["read_only"] is True for field in client.created_fields)
-    assert result.updated_read_only_fields == []
+    assert all(field["read_only"] is False for field in client.created_fields)
+    assert result.updated_writable_fields == []
     assert client.upserted_records == []
     assert "state" not in result.created_fields
     assert result.form_layout_changes == []
 
 
-def test_apply_bootstrap_fields_patches_existing_operational_fields_read_only() -> None:
+def test_apply_bootstrap_fields_patches_existing_operational_fields_writable() -> None:
     client = FakeBootstrapClient(
         [
             StoryDictionaryField(
@@ -221,28 +221,28 @@ def test_apply_bootstrap_fields_patches_existing_operational_fields_read_only() 
                 column_label="AI Status",
                 internal_type="string",
                 active=True,
-                read_only=False,
+                read_only=True,
             ),
             StoryDictionaryField(
                 element="u_ai_handoff_type",
                 column_label="AI Handoff Type",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
             StoryDictionaryField(
                 element="u_ai_handoff_reference",
                 column_label="AI Handoff Reference",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
             StoryDictionaryField(
                 element="u_ai_artifact_reference",
                 column_label="AI Artifact Reference",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
         ]
     )
@@ -255,13 +255,13 @@ def test_apply_bootstrap_fields_patches_existing_operational_fields_read_only() 
 
     assert result.applied is True
     assert result.created_fields == []
-    assert result.updated_read_only_fields == ["u_ai_status"]
+    assert result.updated_writable_fields == ["u_ai_status"]
     assert client.created_fields == []
     assert client.upserted_records == [
         {
             "table": "sys_dictionary",
             "lookup": {"name": "rm_story", "element": "u_ai_status"},
-            "fields": {"read_only": "true"},
+            "fields": {"read_only": "false"},
         }
     ]
 
