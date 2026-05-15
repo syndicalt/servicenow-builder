@@ -5,12 +5,13 @@ import binascii
 import html
 import json
 import os
+import re
 import secrets
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import HTMLResponse
@@ -412,6 +413,7 @@ def _lifecycle_event_response(event: LifecycleEventRecord) -> dict[str, Any]:
         "event_id": event.event_id,
         "event_type": event.event_type,
         "story_number": event.story_number,
+        "correlation_id": event.correlation_id,
         "received_at": _json_timestamp(event.received_at),
         "validation_status": event.validation_status,
     }
@@ -428,7 +430,8 @@ def _fulfillment_job_response(job: FulfillmentJobRecord) -> dict[str, Any]:
         "updated_at": _json_timestamp(job.updated_at),
         "locked_by": job.locked_by,
         "locked_at": _json_timestamp(job.locked_at) if job.locked_at is not None else None,
-        "last_error": job.last_error,
+        "correlation_id": job.correlation_id,
+        "last_error": _redact_diagnostic_text(job.last_error),
     }
 
 
@@ -548,6 +551,7 @@ def _admin_console_html(
             <tr>
               <th>Job</th>
               <th>Story</th>
+              <th>Correlation</th>
               <th>Status</th>
               <th>Attempts</th>
               <th>Updated</th>
@@ -569,6 +573,7 @@ def _admin_console_html(
               <th>Event</th>
               <th>Type</th>
               <th>Story</th>
+              <th>Correlation</th>
               <th>Received</th>
               <th>Validation</th>
             </tr>
@@ -595,6 +600,7 @@ def _admin_job_row(job: FulfillmentJobRecord, refs: list[ArtifactRefRecord]) -> 
         "<tr>"
         f"<td><code>{_html(job.job_id)}</code></td>"
         f"<td>{_html(job.story_number)}</td>"
+        f"<td><code>{_html(job.correlation_id or '')}</code></td>"
         f"<td>{_html(job.status)}</td>"
         f"<td>{job.attempt_count}</td>"
         f"<td>{_html(_json_timestamp(job.updated_at))}</td>"
@@ -611,6 +617,7 @@ def _admin_event_row(event: LifecycleEventRecord) -> str:
         f"<td><code>{_html(event.event_id)}</code></td>"
         f"<td>{_html(event.event_type)}</td>"
         f"<td>{_html(event.story_number)}</td>"
+        f"<td><code>{_html(event.correlation_id or '')}</code></td>"
         f"<td>{_html(_json_timestamp(event.received_at))}</td>"
         f"<td>{_html(event.validation_status)}</td>"
         "</tr>"
@@ -947,6 +954,31 @@ def _redact_text(text: str, secret_values: Iterable[str]) -> str:
         if secret:
             redacted = redacted.replace(secret, "***REDACTED***")
     return redacted
+
+
+def _redact_diagnostic_text(text: str | None) -> str | None:
+    if text is None:
+        return None
+    return re.sub(
+        r"\b(postgresql|postgres)://[^\s]+",
+        lambda match: _redact_url_password(match.group(0)),
+        text,
+    )
+
+
+def _redact_url_password(url: str) -> str:
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "***REDACTED***"
+    if parts.password is None:
+        return url
+    username = parts.username or ""
+    host = parts.hostname or ""
+    port = f":{parts.port}" if parts.port is not None else ""
+    userinfo = f"{username}:***REDACTED***@"
+    netloc = f"{userinfo}{host}{port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 def _truthy(value: str | None) -> bool:

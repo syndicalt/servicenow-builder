@@ -65,6 +65,7 @@ class FakeRuntimeStore:
             event_type=event.event_type.value,
             story_number=event.story_number,
             payload_json=event.model_dump(mode="json"),
+            correlation_id=event.correlation_id,
             received_at=datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
             validation_status=validation_status,
         )
@@ -251,6 +252,7 @@ def _job(
         locked_by="worker-1",
         locked_at=datetime(2026, 5, 13, 15, 1, tzinfo=UTC),
         last_error=None,
+        correlation_id=f"corr-{event_id}",
     )
 
 
@@ -919,6 +921,7 @@ def test_admin_lifecycle_events_lists_recent_events(tmp_path: Path) -> None:
                 "story_number": "STRY0010002",
                 "story_sys_id": "secret-sys-id-payload",
             },
+            correlation_id="corr-evt-002",
             received_at=datetime(2026, 5, 14, 18, 0, tzinfo=UTC),
             validation_status="accepted",
         )
@@ -942,6 +945,7 @@ def test_admin_lifecycle_events_lists_recent_events(tmp_path: Path) -> None:
                 "event_id": "evt-002",
                 "event_type": "story_state_changed",
                 "story_number": "STRY0010002",
+                "correlation_id": "corr-evt-002",
                 "received_at": "2026-05-14T18:00:00Z",
                 "validation_status": "accepted",
             }
@@ -976,6 +980,7 @@ def test_admin_jobs_lists_recent_fulfillment_jobs(tmp_path: Path) -> None:
                 "job_id": "job-evt-002",
                 "event_id": "evt-002",
                 "story_number": "STRY0010002",
+                "correlation_id": "corr-evt-002",
                 "status": "rejected",
                 "attempt_count": 1,
                 "created_at": "2026-05-13T15:00:00Z",
@@ -986,6 +991,36 @@ def test_admin_jobs_lists_recent_fulfillment_jobs(tmp_path: Path) -> None:
             }
         ]
     }
+
+
+def test_admin_jobs_redacts_sensitive_diagnostics(tmp_path: Path) -> None:
+    store = FakeRuntimeStore()
+    store.fulfillment_job_records = [
+        _job(event_id="evt-002", story_number="STRY0010002").model_copy(
+            update={
+                "status": "failed",
+                "last_error": (
+                    "connection failed for "
+                    "postgresql://jedi:super-secret@db.example.invalid:5432/jedi"
+                ),
+            }
+        )
+    ]
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings_with_admin_token(tmp_path),
+            store_factory=lambda _database_url: store,
+        )
+    )
+
+    response = client.get(
+        "/admin/jobs",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert "super-secret" not in response.text
+    assert "***REDACTED***" in response.text
 
 
 def test_admin_console_requires_configured_credentials(tmp_path: Path) -> None:
@@ -1111,6 +1146,7 @@ def test_admin_console_renders_jobs_events_and_artifact_links(tmp_path: Path) ->
             event_type="story_state_changed",
             story_number="STRY0010002",
             payload_json={"story_number": "STRY0010002", "story_sys_id": "hidden"},
+            correlation_id="corr-evt-002",
             received_at=datetime(2026, 5, 14, 18, 0, tzinfo=UTC),
             validation_status="accepted",
         )
@@ -1146,6 +1182,7 @@ def test_admin_console_renders_jobs_events_and_artifact_links(tmp_path: Path) ->
     assert "Fulfillment Jobs" in response.text
     assert "Lifecycle Events" in response.text
     assert "STRY0010002" in response.text
+    assert "corr-evt-002" in response.text
     assert "rejected" in response.text
     assert "Story returned to Draft" in response.text
     assert "/admin/artifacts/3" in response.text

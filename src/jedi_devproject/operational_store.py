@@ -53,6 +53,7 @@ class LifecycleEventRecord(BaseModel):
     event_type: str
     story_number: str
     payload_json: dict[str, object]
+    correlation_id: str | None = None
     received_at: datetime
     validation_status: str
 
@@ -70,6 +71,7 @@ class FulfillmentJobRecord(BaseModel):
     locked_by: str | None
     locked_at: datetime | None
     last_error: str | None
+    correlation_id: str | None = None
 
 
 class JobEventRecord(BaseModel):
@@ -202,6 +204,7 @@ class PostgresOperationalStore:
         row = self._connection.fetch_one(
             """
             SELECT event_id, event_type, story_number, payload_json,
+                   payload_json->>'correlation_id' AS correlation_id,
                    received_at, validation_status
             FROM lifecycle_events
             WHERE event_id = %s
@@ -254,9 +257,15 @@ class PostgresOperationalStore:
                     WHERE event_id = %s
                       AND NOT EXISTS (SELECT 1 FROM inserted_job)
                 )
-                SELECT job_id, event_id, story_number, status, attempt_count,
-                       created_at, updated_at, locked_by, locked_at, last_error
+                SELECT selected_job.job_id, selected_job.event_id, selected_job.story_number,
+                       selected_job.status, selected_job.attempt_count,
+                       selected_job.created_at, selected_job.updated_at,
+                       selected_job.locked_by, selected_job.locked_at,
+                       selected_job.last_error,
+                       lifecycle_events.payload_json->>'correlation_id' AS correlation_id
                 FROM selected_job
+                JOIN lifecycle_events
+                  ON lifecycle_events.event_id = selected_job.event_id
                 """,
                 (
                     job_id,
@@ -311,9 +320,15 @@ class PostgresOperationalStore:
                     SELECT job_id, 'running', %s, %s
                     FROM updated_job
                 )
-                SELECT job_id, event_id, story_number, status, attempt_count,
-                       created_at, updated_at, locked_by, locked_at, last_error
+                SELECT updated_job.job_id, updated_job.event_id, updated_job.story_number,
+                       updated_job.status, updated_job.attempt_count,
+                       updated_job.created_at, updated_job.updated_at,
+                       updated_job.locked_by, updated_job.locked_at,
+                       updated_job.last_error,
+                       lifecycle_events.payload_json->>'correlation_id' AS correlation_id
                 FROM updated_job
+                JOIN lifecycle_events
+                  ON lifecycle_events.event_id = updated_job.event_id
                 """,
                 (
                     now,
@@ -331,9 +346,15 @@ class PostgresOperationalStore:
     def get_job(self, job_id: str) -> FulfillmentJobRecord:
         row = self._connection.fetch_one(
             """
-            SELECT job_id, event_id, story_number, status, attempt_count,
-                   created_at, updated_at, locked_by, locked_at, last_error
+            SELECT fulfillment_jobs.job_id, fulfillment_jobs.event_id,
+                   fulfillment_jobs.story_number, fulfillment_jobs.status,
+                   fulfillment_jobs.attempt_count, fulfillment_jobs.created_at,
+                   fulfillment_jobs.updated_at, fulfillment_jobs.locked_by,
+                   fulfillment_jobs.locked_at, fulfillment_jobs.last_error,
+                   lifecycle_events.payload_json->>'correlation_id' AS correlation_id
             FROM fulfillment_jobs
+            JOIN lifecycle_events
+              ON lifecycle_events.event_id = fulfillment_jobs.event_id
             WHERE job_id = %s
             """,
             (job_id,),
@@ -599,6 +620,7 @@ class PostgresOperationalStore:
         rows = self._connection.fetch_all(
             """
             SELECT event_id, event_type, story_number, payload_json,
+                   payload_json->>'correlation_id' AS correlation_id,
                    received_at, validation_status
             FROM lifecycle_events
             ORDER BY received_at DESC, event_id DESC
@@ -611,9 +633,15 @@ class PostgresOperationalStore:
     def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]:
         rows = self._connection.fetch_all(
             """
-            SELECT job_id, event_id, story_number, status, attempt_count,
-                   created_at, updated_at, locked_by, locked_at, last_error
+            SELECT fulfillment_jobs.job_id, fulfillment_jobs.event_id,
+                   fulfillment_jobs.story_number, fulfillment_jobs.status,
+                   fulfillment_jobs.attempt_count, fulfillment_jobs.created_at,
+                   fulfillment_jobs.updated_at, fulfillment_jobs.locked_by,
+                   fulfillment_jobs.locked_at, fulfillment_jobs.last_error,
+                   lifecycle_events.payload_json->>'correlation_id' AS correlation_id
             FROM fulfillment_jobs
+            JOIN lifecycle_events
+              ON lifecycle_events.event_id = fulfillment_jobs.event_id
             ORDER BY updated_at DESC, job_id DESC
             LIMIT %s
             """,

@@ -63,3 +63,8 @@ CREATE INDEX IF NOT EXISTS idx_artifact_blobs_job_id
 
 CREATE INDEX IF NOT EXISTS idx_artifact_refs_job_id
     ON artifact_refs(job_id, id);
+
+-- Correlation ids are intentionally sourced from lifecycle_events.payload_json
+-- with payload_json->>'correlation_id' in operational queries. This keeps the
+-- inbound event payload as the system of record while avoiding duplicated
+-- mutable trace identifiers across derived job and artifact rows.

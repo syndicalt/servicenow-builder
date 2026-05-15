@@ -241,6 +241,20 @@ For ServiceNow Table API integrations, prefer state values over labels. In the c
 
 Runtime fulfillment failures write back to the originating ServiceNow story work notes through the worker `failure_notifier`. The note begins with `Automated fulfillment failed` and includes the lifecycle event id, fulfillment job id, and redacted failure message. If the ServiceNow writeback itself fails, the worker still marks the PostgreSQL job failed and stores both the original handler error and the notifier error in `last_error`.
 
+### Audit Correlation
+
+The runtime audit trail starts with the ServiceNow lifecycle payload `correlation_id`. Operational views carry that id forward from the canonical lifecycle event payload instead of duplicating mutable trace identifiers across derived tables.
+
+The operator trace path is:
+
+```text
+lifecycle event -> fulfillment job -> job events -> artifact refs
+```
+
+Use the story number plus `correlation_id` to connect ServiceNow work notes, the `/admin/lifecycle-events` response, the `/admin/jobs` response, artifact references, and retrieved Update Set handoff notes. The admin job and lifecycle event views include the correlation id, and the browser admin console renders it beside the story and job/event ids.
+
+Admin diagnostics remain minimized. Raw lifecycle payload JSON is not returned by list views, ServiceNow sys_ids are not shown in the dashboard, and diagnostic database URL passwords are redacted before `last_error` is returned by admin job views.
+
 ### Production Runtime Fail-Closed Checklist
 
 Production API and worker entrypoints call `validate_runtime_settings()` before opening the operational store or processing work. Development can run with local defaults, but `JEDI_ENVIRONMENT=production` fails closed unless the runtime posture is explicit.

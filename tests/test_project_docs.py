@@ -596,6 +596,26 @@ def test_sprint_one_hundred_eight_change_log_documents_secret_posture() -> None:
     assert "563" not in change_log
 
 
+def test_operator_guide_documents_audit_correlation_shape() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Audit Correlation" in guide
+    assert "correlation_id" in guide
+    assert "lifecycle event -> fulfillment job -> job events -> artifact refs" in guide
+    assert "admin job and lifecycle event views include the correlation id" in guide
+    assert "diagnostic database URL passwords are redacted" in guide
+
+
+def test_sprint_one_hundred_nine_change_log_documents_audit_correlation() -> None:
+    change_log = Path("docs/sprints/sprint-109-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 109 Change Log" in change_log
+    assert "correlation_id" in change_log
+    assert "admin JSON endpoints" in change_log
+    assert "admin console" in change_log
+    assert "diagnostic database URL passwords" in change_log
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

@@ -101,6 +101,7 @@ def _job_row(*, status: str = "queued", attempt_count: int = 0) -> dict[str, obj
         "locked_by": "worker-local-1" if status == "running" else None,
         "locked_at": datetime(2026, 5, 13, 15, 1, tzinfo=UTC) if status == "running" else None,
         "last_error": None,
+        "correlation_id": "corr-evt-job",
     }
 
 
@@ -115,6 +116,7 @@ def test_postgres_migration_defines_operational_schema() -> None:
     assert "locked_by TEXT" in migration
     assert "locked_at TIMESTAMPTZ" in migration
     assert "CREATE TABLE IF NOT EXISTS job_events" in migration
+    assert "payload_json->>'correlation_id'" in migration
     assert "BIGSERIAL PRIMARY KEY" in migration
     assert "CREATE TABLE IF NOT EXISTS artifact_blobs" in migration
     assert "payload_json JSONB NOT NULL" in migration
@@ -196,6 +198,7 @@ def test_record_lifecycle_event_uses_postgres_idempotency() -> None:
                 "event_type": "story_state_changed",
                 "story_number": "STRY0010013",
                 "payload_json": {"event_id": "evt-job", "story_number": "STRY0010013"},
+                "correlation_id": "corr-evt-job",
                 "received_at": datetime(2026, 5, 13, 15, 0, tzinfo=UTC),
                 "validation_status": "accepted",
             }
@@ -211,6 +214,7 @@ def test_record_lifecycle_event_uses_postgres_idempotency() -> None:
     assert "?" not in joined_sql
     assert record.event_id == "evt-job"
     assert record.story_number == "STRY0010013"
+    assert record.correlation_id == "corr-evt-job"
 
 
 def test_enqueue_fulfillment_job_uses_postgres_idempotency_and_job_event() -> None:
@@ -227,7 +231,9 @@ def test_enqueue_fulfillment_job_uses_postgres_idempotency_and_job_event() -> No
     assert "UNION ALL" in joined_sql
     assert "NOT EXISTS (SELECT 1 FROM inserted_job)" in joined_sql
     assert "INSERT INTO job_events" in joined_sql
+    assert "lifecycle_events.payload_json->>'correlation_id'" in joined_sql
     assert job == FulfillmentJobRecord.model_validate(_job_row())
+    assert job.correlation_id == "corr-evt-job"
     assert connection.transaction_count == 1
 
 
