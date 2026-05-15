@@ -736,6 +736,9 @@ def test_create_update_set_handoff_imports_catalog_item_updates() -> None:
     assert "m2m_connected_content_" in imported_xml
     assert "<name>Request Temporary Badge</name>" in imported_xml
     assert "<question_text>Visitor name</question_text>" in imported_xml
+    assert "<visible_standalone>true</visible_standalone>" in imported_xml
+    assert "<visible_bundle>true</visible_bundle>" in imported_xml
+    assert "<visible_summary>true</visible_summary>" in imported_xml
     assert '<topic display_value="Technology services / Software / Access issues">' in imported_xml
     assert "catalog-item-content-type-sys-id" in imported_xml
     assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"

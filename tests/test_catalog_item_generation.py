@@ -166,6 +166,9 @@ def test_catalog_item_customer_updates_builds_item_variables_category_and_topic_
     assert "<sc_catalogs>service-catalog-sys-id</sc_catalogs>" in combined_payload
     assert "<variable_name>visitor_name</variable_name>" in combined_payload
     assert "<question_text>Visitor name</question_text>" in combined_payload
+    assert "<visible_standalone>true</visible_standalone>" in combined_payload
+    assert "<visible_bundle>true</visible_bundle>" in combined_payload
+    assert "<visible_summary>true</visible_summary>" in combined_payload
     assert "<type>6</type>" in combined_payload
     assert "<variable_name>sponsor</variable_name>" in combined_payload
     assert "<reference>sys_user</reference>" in combined_payload

@@ -461,6 +461,9 @@ def _catalog_variable_payload(
         f"<sys_update_name>{escape(update_name)}</sys_update_name>"
         f"<type>{escape(CATALOG_VARIABLE_TYPE_IDS[variable.variable_type])}</type>"
         f"<variable_name>{escape(variable.name)}</variable_name>"
+        "<visible_bundle>true</visible_bundle>"
+        "<visible_standalone>true</visible_standalone>"
+        "<visible_summary>true</visible_summary>"
         "</item_option_new>"
         "</record_update>"
     )
