@@ -744,6 +744,60 @@ def test_sprint_one_hundred_thirteen_change_log_documents_code_surface_analysis(
     assert "No new mutation surface" in change_log
 
 
+def test_business_rule_generation_profile_adr_documents_mutation_boundary() -> None:
+    adr = Path("docs/adr/0007-business-rule-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ADR 0007: Business Rule Generation Profile" in adr
+    assert "business_rule_generate" in adr
+    assert "table-local" in adr
+    assert "before/after" in adr
+    assert "insert/update" in adr
+    assert "explicit condition" in adr
+    assert "sys_script" in adr
+    assert "sys_update_xml" in adr
+    assert "Retrieved Update Set preview/commit remains" in adr
+    assert "forbidden cases" in adr
+    assert "deterministic validators" in adr
+    assert "UAT story shape" in adr
+    assert "No runtime generation is enabled" in adr
+
+
+def test_operator_guide_documents_business_rule_generation_profile_design() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Business Rule Generation Profile Design" in guide
+    assert "business_rule_generate" in guide
+    assert "sys_script" in guide
+    assert "sys_update_xml" in guide
+    assert "table-local" in guide
+    assert "no outbound REST" in guide
+    assert "no cross-table writes" in guide
+    assert "No runtime generation is enabled" in guide
+
+
+def test_sprint_one_hundred_fourteen_change_log_documents_generation_profile_design() -> None:
+    change_log = Path("docs/sprints/sprint-114-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 114 Change Log" in change_log
+    assert "Business Rule generation profile design" in change_log
+    assert "ADR 0007" in change_log
+    assert "business_rule_generate" in change_log
+    assert "deterministic validators" in change_log
+    assert "No runtime generation is enabled" in change_log
+
+
+def test_production_backlog_moves_business_rule_generation_implementation_to_sprint_115() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 114 | Business Rule generation profile design" in backlog
+    assert "ADR 0007" in backlog
+    assert "Sprint 115 | Business Rule generation implementation" in backlog
+    assert "business_rule_generate" in backlog
+    assert "No runtime generation is enabled" in backlog
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
