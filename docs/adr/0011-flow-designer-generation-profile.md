@@ -26,6 +26,8 @@ Sprint 129 adds the Flow XML shape evidence validator `validate_flow_xml_shape_e
 
 Sprint 130 adds the Flow customer update strategy `flow-customer-update-strategy-v1`. The strategy defines the `table_sys_id` customer update naming convention for approved Flow tables and names rollback strategy coverage for the narrow `add_action` and `update_condition` diff operations. This is still no Flow XML builder and no retrieved Update Set handoff; it only proves that customer update names and rollback strategy are explicit before builder work starts.
 
+Sprint 131 adds the Flow snapshot update strategy `flow-snapshot-update-strategy-v1`. The strategy requires retrieved `latest_snapshot` evidence on `sys_hub_flow`, rejects unstable snapshot references, and makes clear that snapshot table mutation is not supported in the current Flow path. This is still no Flow XML builder and no retrieved Update Set handoff; it only defines the snapshot evidence boundary for future builder work.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -113,6 +115,17 @@ The Flow customer update strategy records:
 - approved Flow tables from `flow-xml-shapes-v1`.
 - rollback strategy text for `add_action`.
 - rollback strategy text for `update_condition`.
+- `runtime_generation_enabled=false`.
+- `retrieved_update_set_handoff_enabled=false`.
+
+The Flow snapshot update strategy records:
+
+- strategy version `flow-snapshot-update-strategy-v1`.
+- Flow record table `sys_hub_flow`.
+- snapshot reference field `latest_snapshot`.
+- required retrieved snapshot evidence.
+- unsupported snapshot and version tables.
+- fail-closed validation when snapshot table mutation is requested.
 - `runtime_generation_enabled=false`.
 - `retrieved_update_set_handoff_enabled=false`.
 

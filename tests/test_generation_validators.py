@@ -6,6 +6,7 @@ from jedi_devproject.business_rule_generation import business_rule_customer_upda
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.flow_designer_generation import (
     flow_customer_update_strategy,
+    flow_snapshot_update_strategy,
     flow_xml_shape_repository,
     plan_flow_graph_builder,
     validate_flow_graph_diff_candidate,
@@ -274,6 +275,7 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
         "sys_hub_flow_logic_instance_v2",
     ]
     assert plan.customer_update_strategy_version == "flow-customer-update-strategy-v1"
+    assert plan.snapshot_update_strategy_version == "flow-snapshot-update-strategy-v1"
     assert "rollback_customer_update_strategy_defined" in plan.required_builder_evidence
 
 
@@ -429,6 +431,39 @@ def test_flow_customer_update_strategy_rejects_unstable_sys_id() -> None:
 
     with pytest.raises(ValueError, match="Flow customer update sys_id must be 32 hex characters"):
         strategy.customer_update_name("sys_hub_action_instance", "generated-action-node")
+
+
+def test_flow_snapshot_update_strategy_requires_retrieved_latest_snapshot() -> None:
+    strategy = flow_snapshot_update_strategy()
+
+    assert strategy.version == "flow-snapshot-update-strategy-v1"
+    assert strategy.runtime_generation_enabled is False
+    assert strategy.retrieved_update_set_handoff_enabled is False
+    assert strategy.flow_record_table == "sys_hub_flow"
+    assert strategy.snapshot_reference_field == "latest_snapshot"
+    assert "flow_snapshot_update_strategy_defined" in strategy.evidence
+    assert strategy.validate_latest_snapshot("a" * 32) == "a" * 32
+
+
+def test_flow_snapshot_update_strategy_rejects_missing_snapshot_reference() -> None:
+    strategy = flow_snapshot_update_strategy()
+
+    with pytest.raises(ValueError, match="Flow latest_snapshot evidence is required"):
+        strategy.validate_latest_snapshot("")
+
+
+def test_flow_snapshot_update_strategy_rejects_unstable_snapshot_reference() -> None:
+    strategy = flow_snapshot_update_strategy()
+
+    with pytest.raises(ValueError, match="Flow latest_snapshot must be 32 hex characters"):
+        strategy.validate_latest_snapshot("snapshot-sys-id")
+
+
+def test_flow_snapshot_update_strategy_rejects_snapshot_table_mutation() -> None:
+    strategy = flow_snapshot_update_strategy()
+
+    with pytest.raises(ValueError, match="Flow snapshot table mutation is not supported"):
+        strategy.validate_mutation_table("sys_hub_flow_snapshot")
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:

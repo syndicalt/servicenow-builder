@@ -363,6 +363,8 @@ Sprint 129 adds the Flow XML shape evidence validator `validate_flow_xml_shape_e
 
 Sprint 130 adds the Flow customer update strategy `flow-customer-update-strategy-v1`. The strategy uses the existing ServiceNow-style `table_sys_id` update name convention for approved Flow tables, rejects unapproved Flow tables, rejects unstable non-hex sys_ids, and records rollback strategy coverage for `add_action` and `update_condition`. This gives the future builder a reviewable naming and rollback strategy, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
 
+Sprint 131 adds the Flow snapshot update strategy `flow-snapshot-update-strategy-v1`. The strategy requires retrieved `latest_snapshot` evidence from `sys_hub_flow`, rejects missing or unstable snapshot references, and rejects snapshot/version table mutations because snapshot table mutation is not supported in the current Flow path. This keeps future Flow builder work anchored to retrieved instance evidence, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

@@ -94,6 +94,7 @@ class FlowGraphBuilderPlan(BaseModel):
     xml_shape_repository_version: str
     xml_shape_tables: list[str]
     customer_update_strategy_version: str
+    snapshot_update_strategy_version: str
 
 
 class FlowXmlShape(BaseModel):
@@ -157,6 +158,33 @@ class FlowCustomerUpdateStrategy(BaseModel):
         return f"{table}_{cleaned_sys_id.lower()}"
 
 
+class FlowSnapshotUpdateStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["flow-snapshot-update-strategy-v1"]
+    flow_record_table: Literal["sys_hub_flow"]
+    snapshot_reference_field: Literal["latest_snapshot"]
+    unsupported_mutation_tables: list[str]
+    runtime_generation_enabled: bool
+    retrieved_update_set_handoff_enabled: bool
+    evidence: list[str]
+
+    def validate_latest_snapshot(self, latest_snapshot: str) -> str:
+        cleaned = latest_snapshot.strip()
+        if cleaned == "":
+            raise ValueError("Flow latest_snapshot evidence is required")
+        if not re.fullmatch(r"[a-fA-F0-9]{32}", cleaned):
+            raise ValueError("Flow latest_snapshot must be 32 hex characters")
+        return cleaned.lower()
+
+    def validate_mutation_table(self, table: str) -> str:
+        cleaned = table.strip()
+        if cleaned in self.unsupported_mutation_tables:
+            raise ValueError("Flow snapshot table mutation is not supported")
+        flow_xml_shape_repository().shape(cleaned)
+        return cleaned
+
+
 def validate_flow_graph_diff_candidate(
     *,
     changes: list[CandidateChange],
@@ -195,6 +223,7 @@ def plan_flow_graph_builder(
         raise ValueError("retrieved graph hash does not match Flow graph diff")
     repository = flow_xml_shape_repository()
     strategy = flow_customer_update_strategy()
+    snapshot_strategy = flow_snapshot_update_strategy()
     return FlowGraphBuilderPlan(
         capability=intent.capability,
         flow_name=intent.flow_name,
@@ -228,6 +257,7 @@ def plan_flow_graph_builder(
         xml_shape_repository_version=repository.version,
         xml_shape_tables=[shape.table for shape in repository.shapes],
         customer_update_strategy_version=strategy.version,
+        snapshot_update_strategy_version=snapshot_strategy.version,
     )
 
 
@@ -287,6 +317,28 @@ def flow_customer_update_strategy() -> FlowCustomerUpdateStrategy:
         evidence=[
             "customer_update_name_strategy_defined",
             "rollback_customer_update_strategy_defined",
+            "runtime_generation_disabled",
+            "retrieved_update_set_handoff_disabled",
+        ],
+    )
+
+
+def flow_snapshot_update_strategy() -> FlowSnapshotUpdateStrategy:
+    return FlowSnapshotUpdateStrategy(
+        version="flow-snapshot-update-strategy-v1",
+        flow_record_table="sys_hub_flow",
+        snapshot_reference_field="latest_snapshot",
+        unsupported_mutation_tables=[
+            "sys_hub_flow_snapshot",
+            "sys_hub_flow_snapshot_blob",
+            "sys_hub_flow_version",
+        ],
+        runtime_generation_enabled=False,
+        retrieved_update_set_handoff_enabled=False,
+        evidence=[
+            "flow_snapshot_update_strategy_defined",
+            "latest_snapshot_evidence_required",
+            "snapshot_table_mutation_blocked",
             "runtime_generation_disabled",
             "retrieved_update_set_handoff_disabled",
         ],
