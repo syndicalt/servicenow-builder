@@ -365,6 +365,8 @@ Sprint 130 adds the Flow customer update strategy `flow-customer-update-strategy
 
 Sprint 131 adds the Flow snapshot update strategy `flow-snapshot-update-strategy-v1`. The strategy requires retrieved `latest_snapshot` evidence from `sys_hub_flow`, rejects missing or unstable snapshot references, and rejects snapshot/version table mutations because snapshot table mutation is not supported in the current Flow path. This keeps future Flow builder work anchored to retrieved instance evidence, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
 
+Sprint 132 adds the Flow preview/commit review strategy `flow-preview-commit-review-strategy-v1`. The strategy names the human review boundary as `retrieved_update_set_preview_commit`, requires preview before commit, requires human commit, and rejects auto-commit because Flow Designer auto-commit is not supported. This keeps ServiceNow preview/commit as the review point, but there is still no Flow XML builder and no retrieved Update Set handoff for Flow Designer.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

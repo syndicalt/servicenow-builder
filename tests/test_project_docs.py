@@ -1296,6 +1296,31 @@ def test_sprint_131_change_log_documents_flow_snapshot_update_strategy() -> None
     assert "no Flow XML builder" in change_log
 
 
+def test_flow_designer_docs_document_preview_commit_review_strategy() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in [guide, adr]:
+        assert "flow-preview-commit-review-strategy-v1" in text
+        assert "Flow preview/commit review strategy" in text
+        assert "retrieved_update_set_preview_commit" in text
+        assert "auto-commit is not supported" in text
+        assert "still no Flow XML builder" in text
+
+
+def test_sprint_132_change_log_documents_flow_preview_commit_review_strategy() -> None:
+    change_log = Path("docs/sprints/sprint-132-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 132 Change Log" in change_log
+    assert "Flow preview/commit review strategy" in change_log
+    assert "flow-preview-commit-review-strategy-v1" in change_log
+    assert "retrieved_update_set_preview_commit" in change_log
+    assert "auto-commit is not supported" in change_log
+    assert "no Flow XML builder" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
@@ -1307,6 +1332,7 @@ def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> 
     assert "Sprint 129 | Flow XML shape evidence validation" in backlog
     assert "Sprint 130 | Flow customer update strategy" in backlog
     assert "Sprint 131 | Flow snapshot update strategy" in backlog
+    assert "Sprint 132 | Flow preview/commit review strategy" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

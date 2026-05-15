@@ -6,6 +6,7 @@ from jedi_devproject.business_rule_generation import business_rule_customer_upda
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.flow_designer_generation import (
     flow_customer_update_strategy,
+    flow_preview_commit_review_strategy,
     flow_snapshot_update_strategy,
     flow_xml_shape_repository,
     plan_flow_graph_builder,
@@ -276,6 +277,9 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
     ]
     assert plan.customer_update_strategy_version == "flow-customer-update-strategy-v1"
     assert plan.snapshot_update_strategy_version == "flow-snapshot-update-strategy-v1"
+    assert plan.preview_commit_review_strategy_version == (
+        "flow-preview-commit-review-strategy-v1"
+    )
     assert "rollback_customer_update_strategy_defined" in plan.required_builder_evidence
 
 
@@ -464,6 +468,33 @@ def test_flow_snapshot_update_strategy_rejects_snapshot_table_mutation() -> None
 
     with pytest.raises(ValueError, match="Flow snapshot table mutation is not supported"):
         strategy.validate_mutation_table("sys_hub_flow_snapshot")
+
+
+def test_flow_preview_commit_review_strategy_requires_servicenow_review() -> None:
+    strategy = flow_preview_commit_review_strategy()
+
+    assert strategy.version == "flow-preview-commit-review-strategy-v1"
+    assert strategy.review_boundary == "retrieved_update_set_preview_commit"
+    assert strategy.runtime_generation_enabled is False
+    assert strategy.retrieved_update_set_handoff_enabled is False
+    assert strategy.auto_commit_enabled is False
+    assert strategy.require_preview is True
+    assert strategy.require_human_commit is True
+    assert "servicenow_preview_commit_review_required" in strategy.evidence
+
+
+def test_flow_preview_commit_review_strategy_rejects_auto_commit() -> None:
+    strategy = flow_preview_commit_review_strategy()
+
+    with pytest.raises(ValueError, match="Flow Designer auto-commit is not supported"):
+        strategy.validate_review_request(auto_commit=True, preview_requested=True)
+
+
+def test_flow_preview_commit_review_strategy_rejects_missing_preview() -> None:
+    strategy = flow_preview_commit_review_strategy()
+
+    with pytest.raises(ValueError, match="Flow Designer preview is required before commit"):
+        strategy.validate_review_request(auto_commit=False, preview_requested=False)
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:

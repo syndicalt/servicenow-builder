@@ -28,6 +28,8 @@ Sprint 130 adds the Flow customer update strategy `flow-customer-update-strategy
 
 Sprint 131 adds the Flow snapshot update strategy `flow-snapshot-update-strategy-v1`. The strategy requires retrieved `latest_snapshot` evidence on `sys_hub_flow`, rejects unstable snapshot references, and makes clear that snapshot table mutation is not supported in the current Flow path. This is still no Flow XML builder and no retrieved Update Set handoff; it only defines the snapshot evidence boundary for future builder work.
 
+Sprint 132 adds the Flow preview/commit review strategy `flow-preview-commit-review-strategy-v1`. The strategy names the review boundary as `retrieved_update_set_preview_commit`, requires preview before commit, requires human commit, and states that auto-commit is not supported for Flow Designer. This is still no Flow XML builder and no retrieved Update Set handoff; it only makes the ServiceNow human review boundary machine-checkable.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -126,6 +128,17 @@ The Flow snapshot update strategy records:
 - required retrieved snapshot evidence.
 - unsupported snapshot and version tables.
 - fail-closed validation when snapshot table mutation is requested.
+- `runtime_generation_enabled=false`.
+- `retrieved_update_set_handoff_enabled=false`.
+
+The Flow preview/commit review strategy records:
+
+- strategy version `flow-preview-commit-review-strategy-v1`.
+- review boundary `retrieved_update_set_preview_commit`.
+- preview required before commit.
+- human commit required.
+- auto-commit disabled.
+- fail-closed validation when auto-commit is requested.
 - `runtime_generation_enabled=false`.
 - `retrieved_update_set_handoff_enabled=false`.
 

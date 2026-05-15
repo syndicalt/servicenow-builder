@@ -95,6 +95,7 @@ class FlowGraphBuilderPlan(BaseModel):
     xml_shape_tables: list[str]
     customer_update_strategy_version: str
     snapshot_update_strategy_version: str
+    preview_commit_review_strategy_version: str
 
 
 class FlowXmlShape(BaseModel):
@@ -185,6 +186,25 @@ class FlowSnapshotUpdateStrategy(BaseModel):
         return cleaned
 
 
+class FlowPreviewCommitReviewStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["flow-preview-commit-review-strategy-v1"]
+    review_boundary: Literal["retrieved_update_set_preview_commit"]
+    runtime_generation_enabled: bool
+    retrieved_update_set_handoff_enabled: bool
+    auto_commit_enabled: bool
+    require_preview: bool
+    require_human_commit: bool
+    evidence: list[str]
+
+    def validate_review_request(self, *, auto_commit: bool, preview_requested: bool) -> None:
+        if auto_commit:
+            raise ValueError("Flow Designer auto-commit is not supported")
+        if not preview_requested:
+            raise ValueError("Flow Designer preview is required before commit")
+
+
 def validate_flow_graph_diff_candidate(
     *,
     changes: list[CandidateChange],
@@ -224,6 +244,7 @@ def plan_flow_graph_builder(
     repository = flow_xml_shape_repository()
     strategy = flow_customer_update_strategy()
     snapshot_strategy = flow_snapshot_update_strategy()
+    review_strategy = flow_preview_commit_review_strategy()
     return FlowGraphBuilderPlan(
         capability=intent.capability,
         flow_name=intent.flow_name,
@@ -258,6 +279,7 @@ def plan_flow_graph_builder(
         xml_shape_tables=[shape.table for shape in repository.shapes],
         customer_update_strategy_version=strategy.version,
         snapshot_update_strategy_version=snapshot_strategy.version,
+        preview_commit_review_strategy_version=review_strategy.version,
     )
 
 
@@ -339,6 +361,25 @@ def flow_snapshot_update_strategy() -> FlowSnapshotUpdateStrategy:
             "flow_snapshot_update_strategy_defined",
             "latest_snapshot_evidence_required",
             "snapshot_table_mutation_blocked",
+            "runtime_generation_disabled",
+            "retrieved_update_set_handoff_disabled",
+        ],
+    )
+
+
+def flow_preview_commit_review_strategy() -> FlowPreviewCommitReviewStrategy:
+    return FlowPreviewCommitReviewStrategy(
+        version="flow-preview-commit-review-strategy-v1",
+        review_boundary="retrieved_update_set_preview_commit",
+        runtime_generation_enabled=False,
+        retrieved_update_set_handoff_enabled=False,
+        auto_commit_enabled=False,
+        require_preview=True,
+        require_human_commit=True,
+        evidence=[
+            "servicenow_preview_commit_review_required",
+            "flow_auto_commit_disabled",
+            "human_commit_required",
             "runtime_generation_disabled",
             "retrieved_update_set_handoff_disabled",
         ],
