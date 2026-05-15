@@ -369,15 +369,15 @@ Unsupported behavior includes delete rules, async/display rules, scheduled jobs,
 
 The provider output must be structured implementation intent, not authoritative XML. Required fields include target table, rule name, timing, operations, condition summary, condition expression, script body, fields read, fields written, test plan, rollback notes, and reviewer notes. Deterministic validators approve table context, operation scope, script safety, field access, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported. Scripts containing forbidden tokens such as `GlideRecord`, destructive update/delete APIs, outbound HTTP/S endpoints, credential access, passwords, tokens, or API keys fail closed before import.
 
-### Client Script Generation Profile Design
+### Client Script Generation Capability
 
-`client_script_generate` is designed but not enabled. No runtime generation is enabled for Client Scripts until the `sys_script_client` XML builder, deterministic validators, and model-output contract are implemented and tested.
+The Sprint 117 Client Script Generation Profile Design is implemented for the first production-hardening subset. `client_script_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
 
-The first supported subset is table-local Client Scripts only: one generated `sys_script_client` record on one target table, `onLoad`, `onChange`, or `onSubmit` type, optional target field for `onChange`, and behavior implemented through ServiceNow client APIs such as `g_form`. Generated changes must become `sys_script_client` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
+The supported subset is table-local Client Scripts only: one generated `sys_script_client` record on one target table, `onLoad`, `onChange`, or `onSubmit` type, optional target field for `onChange`, and behavior implemented through ServiceNow client APIs such as `g_form`. Generated changes must become `sys_script_client` customer updates wrapped in `sys_update_xml` for retrieved Update Set review. Retrieved Update Set preview/commit remains the human review boundary.
 
 Unsupported behavior includes DOM manipulation outside g_form APIs, `document` or `window` access, browser storage, `fetch` or `XMLHttpRequest`, endpoint construction, credentials, secrets, tokens, API keys, GlideAjax dependency creation, Script Include creation, ACL changes, integrations, cross-table writes, and system-table mutation outside the intended `sys_script_client` customer update.
 
-The future provider output must be structured implementation intent, not authoritative XML. Required fields include target table, script name, Client Script type, target field for `onChange`, condition summary, script body, fields read, fields written, messages shown, test plan, rollback notes, and reviewer notes. Deterministic validators must approve table context, script type, target field, allowed client APIs, field access, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported.
+The provider output must be structured implementation intent, not authoritative XML. Required fields include target table, script name, Client Script type, target field for `onChange`, condition summary, script body, fields read, fields written, messages shown, test plan, rollback notes, and reviewer notes. Deterministic validators approve table context, script type, target field, allowed client APIs, field access, secret detection, and parseable `sys_update_xml` before a retrieved Update Set can be imported. Any forbidden Client Script behavior fails closed before import.
 
 ## CI/CD Update Set API Capability
 

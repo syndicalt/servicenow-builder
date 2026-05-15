@@ -301,6 +301,44 @@ def _business_rule_candidate() -> UpdateSetCandidate:
     )
 
 
+def _client_script_candidate() -> UpdateSetCandidate:
+    return UpdateSetCandidate(
+        story_number="STRY0010118",
+        name="UPD_STRY0010118_LLM_Implementation",
+        eligibility_decision="eligible",
+        eligibility_reasons=["supported table-local client script generation request"],
+        confidence=0.72,
+        risk_score=0.25,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange(
+                table="sys_script_client",
+                operation="insert",
+                fields={
+                    "name": "JEDI Incident Category CI Message",
+                    "table": "incident",
+                    "type": "onChange",
+                    "field": "category",
+                    "script": (
+                        "function onChange(control, oldValue, newValue, isLoading) {\n"
+                        "    if (isLoading || newValue !== 'software') {\n"
+                        "        return;\n"
+                        "    }\n"
+                        "    g_form.addInfoMessage('Confirm the CI before saving.');\n"
+                        "}"
+                    ),
+                    "fields_read": ["category"],
+                    "fields_written": [],
+                    "messages_shown": ["Confirm the CI before saving."],
+                },
+                rationale="Add the requested table-local Client Script.",
+            )
+        ],
+        reviewer_notes=["Change Incident category to Software and confirm the message."],
+        artifact_hash="c" * 64,
+    )
+
+
 def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
@@ -620,6 +658,66 @@ def test_create_update_set_handoff_rejects_forbidden_business_rule_script() -> N
         assert "forbidden Business Rule script token: GlideRecord" in str(exc)
     else:
         raise AssertionError("forbidden Business Rule script was accepted")
+
+    assert client.imports == []
+
+
+def test_create_update_set_handoff_imports_client_script_customer_update() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010118",
+            candidate=_client_script_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/118",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_client_incident_jedi_incident_category_ci_message" in imported_xml
+    assert "<sys_script_client action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<table>incident</table>" in imported_xml
+    assert "<type>onChange</type>" in imported_xml
+    assert "<field>category</field>" in imported_xml
+    assert "g_form.addInfoMessage" in imported_xml
+    assert client.story_updates[-1]["fields"]["state"] == "-7"
+    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+
+
+def test_create_update_set_handoff_rejects_forbidden_client_script_browser_api() -> None:
+    client = FakeUpdateSetClient()
+    forbidden_fields = {
+        **_client_script_candidate().changes[0].fields,
+        "script": "fetch('https://example.com');",
+    }
+    candidate = _client_script_candidate().model_copy(
+        update={
+            "changes": [
+                _client_script_candidate().changes[0].model_copy(
+                    update={"fields": forbidden_fields}
+                )
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010118",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/118",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "forbidden Client Script token: fetch" in str(exc)
+    else:
+        raise AssertionError("forbidden Client Script was accepted")
 
     assert client.imports == []
 

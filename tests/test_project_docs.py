@@ -878,11 +878,11 @@ def test_client_script_generation_profile_adr_documents_mutation_boundary() -> N
 def test_operator_guide_documents_client_script_generation_profile_design() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
-    assert "Client Script Generation Profile Design" in guide
+    assert "Client Script Generation Capability" in guide
     assert "client_script_generate" in guide
     assert "sys_script_client" in guide
     assert "g_form" in guide
-    assert "No runtime generation is enabled for Client Scripts" in guide
+    assert "Client Script Generation Profile Design" in guide
     assert "DOM manipulation outside g_form APIs" in guide
     assert "GlideAjax dependency creation" in guide
 
@@ -905,6 +905,30 @@ def test_production_backlog_moves_client_script_generation_after_design() -> Non
     assert "Sprint 118 | Client Script generation implementation" in backlog
     assert "ADR 0008" in backlog
     assert "client_script_generate" in backlog
+
+
+def test_operator_guide_documents_enabled_client_script_generation_boundary() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Client Script Generation Capability" in guide
+    assert "client_script_generate" in guide
+    assert "current_max_story_points=3" in guide
+    assert "target_max_story_points=5" in guide
+    assert "Retrieved Update Set preview/commit remains" in guide
+    assert "forbidden Client Script" in guide
+
+
+def test_sprint_one_hundred_eighteen_change_log_documents_client_script_generation() -> None:
+    change_log = Path("docs/sprints/sprint-118-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 118 Change Log" in change_log
+    assert "Client Script generation implementation" in change_log
+    assert "client_script_generate" in change_log
+    assert "sys_script_client" in change_log
+    assert "current_max_story_points=3" in change_log
+    assert "target_max_story_points=5" in change_log
+    assert "retrieved Update Set" in change_log
+    assert "forbidden Client Script" in change_log
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

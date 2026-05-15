@@ -238,6 +238,35 @@ def test_business_rule_story_without_target_table_needs_clarification() -> None:
     assert "target table" in assessment.missing_details
 
 
+def test_complete_client_script_story_is_eligible_for_automated_generation() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010118",
+            short_description="Create Incident category onChange Client Script",
+            description=(
+                "Create an onChange Client Script on the Incident table for the "
+                "category field. Condition: category changes to software. Expected "
+                "behavior: show an info message telling the user to confirm the "
+                "configuration item. Fields read: category. Fields written: none. "
+                "Messages shown: Confirm the CI before saving."
+            ),
+            acceptance_criteria=(
+                "- Changing Incident category to software shows the message.\n"
+                "- The script uses g_form APIs only.\n"
+                "- Rollback removes the generated Client Script."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert Capability.CLIENT_SCRIPT_GENERATE in assessment.capabilities
+    assert Capability.CLIENT_SCRIPT_ANALYZE not in assessment.capabilities
+    assert assessment.target_table == "incident"
+    assert assessment.required_instance_context == ["table_schema", "client_scripts"]
+    assert assessment.reasons == ["supported table-local client script generation request"]
+
+
 def test_client_script_story_routes_to_context_analysis() -> None:
     assessment = analyze_story_capabilities(
         _story(

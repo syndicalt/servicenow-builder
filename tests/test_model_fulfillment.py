@@ -243,7 +243,7 @@ def _job() -> FulfillmentJobRecord:
 def _policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.DICTIONARY_FORM},
-        tables={"sys_dictionary", "sys_ui_form", "sys_script"},
+        tables={"sys_dictionary", "sys_ui_form", "sys_script", "sys_script_client"},
         operations={"insert", "update"},
         max_points=3,
     )
@@ -827,6 +827,98 @@ def test_model_candidate_handler_runs_client_script_analysis() -> None:
     assert "client-script-sys-id" not in str(analysis)
     assert "secret-value" not in str(analysis)
     assert "code_surface_analysis:first" in candidate["eligibility_reasons"]
+
+
+def test_model_candidate_handler_generates_client_script_update_set_handoff() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010118",
+            short_description="Create Incident category onChange Client Script",
+            description=(
+                "Create an onChange Client Script on the Incident table for the "
+                "category field. Condition: category changes to software. Expected "
+                "behavior: show an info message telling the user to confirm the "
+                "configuration item. Fields read: category. Fields written: none. "
+                "Messages shown: Confirm the CI before saving."
+            ),
+            acceptance_criteria=(
+                "Changing Incident category to software shows the message. "
+                "Rollback removes the generated Client Script."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_script_client",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "JEDI Incident Category CI Message",
+                        "table": "incident",
+                        "type": "onChange",
+                        "field": "category",
+                        "script": (
+                            "function onChange(control, oldValue, newValue, isLoading) {\n"
+                            "    if (isLoading || newValue !== 'software') {\n"
+                            "        return;\n"
+                            "    }\n"
+                            "    g_form.addInfoMessage('Confirm the CI before saving.');\n"
+                            "}"
+                        ),
+                        "fields_read": ["category"],
+                        "fields_written": [],
+                        "messages_shown": ["Confirm the CI before saving."],
+                    },
+                }
+            ],
+            "test_plan": ["Change Incident category to Software and confirm the message."],
+            "rollback_notes": ["Delete the generated Client Script."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010118"}))
+
+    assert provider.payloads[0]["controls"]["capability_assessment"]["capabilities"] == [
+        "client_script_generate"
+    ]
+    candidate = result.artifacts[2].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["table"] == "sys_script_client"
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/118",
+                sha256="8" * 64,
+                artifact_id=118,
+            )
+        ]
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_client_incident_jedi_incident_category_ci_message" in imported_xml
+    assert "<table>incident</table>" in imported_xml
+    updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert updated_fields["u_ai_status"] == "Ready for Testing"
 
 
 def test_model_candidate_handler_runs_script_include_analysis_without_target_table() -> None:

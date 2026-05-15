@@ -127,11 +127,11 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
     assert all(profile.build_pipeline for profile in profiles)
 
 
-def test_client_script_generation_profile_is_designed_but_not_enabled() -> None:
+def test_client_script_generation_profile_is_enabled_at_current_maturity() -> None:
     profile = capability_profile(Capability.CLIENT_SCRIPT_GENERATE)
 
-    assert profile.status == "designed"
-    assert profile.current_max_story_points == 0
+    assert profile.status == "enabled"
+    assert profile.current_max_story_points == 3
     assert profile.target_max_story_points == 5
     assert profile.supported_artifacts == ["sys_script_client"]
     assert profile.required_instance_context == ["table_schema", "client_scripts"]

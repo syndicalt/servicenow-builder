@@ -16,6 +16,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.BUSINESS_RULE_ANALYZE,
     Capability.BUSINESS_RULE_GENERATE,
     Capability.CLIENT_SCRIPT_ANALYZE,
+    Capability.CLIENT_SCRIPT_GENERATE,
     Capability.SCRIPT_INCLUDE_ANALYZE,
     Capability.DICTIONARY_FIELD_CREATE,
     Capability.FIELD_LABEL_CREATE,
@@ -91,6 +92,24 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
+    forbidden_client_script_details = _client_script_forbidden_details(text)
+    if Capability.CLIENT_SCRIPT_GENERATE in requested and forbidden_client_script_details:
+        reasons.append(
+            "client script generation includes forbidden behavior: "
+            f"{', '.join(forbidden_client_script_details)}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
     if unsupported:
         reasons.append("request includes unsupported pipeline capabilities")
         return _assessment(
@@ -147,6 +166,22 @@ def analyze_story_capabilities(
     if Capability.BUSINESS_RULE_GENERATE in requested:
         profile = capability_profile(Capability.BUSINESS_RULE_GENERATE)
         reasons.append("supported table-local business rule generation request")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
+        )
+
+    if Capability.CLIENT_SCRIPT_GENERATE in requested:
+        profile = capability_profile(Capability.CLIENT_SCRIPT_GENERATE)
+        reasons.append("supported table-local client script generation request")
         return _assessment(
             story=story,
             outcome=SuitabilityOutcome.AUTOMATED_BUILD,
@@ -240,13 +275,15 @@ def _requested_capabilities(text: str) -> set[Capability]:
         capabilities.add(Capability.BUSINESS_RULE_GENERATE)
     elif "business rule" in text or "server script" in text:
         capabilities.add(Capability.BUSINESS_RULE_ANALYZE)
-    if "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text:
+    if _is_client_script_generation_request(text):
+        capabilities.add(Capability.CLIENT_SCRIPT_GENERATE)
+    elif "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text:
         capabilities.add(Capability.CLIENT_SCRIPT_ANALYZE)
     if "script include" in text:
         capabilities.add(Capability.SCRIPT_INCLUDE_ANALYZE)
     if "migrat" in text:
         capabilities.add(Capability.DATA_MIGRATION)
-    if "integrat" in text or "api" in text:
+    if _is_integration_request(text):
         capabilities.add(Capability.INTEGRATION_MODIFY)
     if not capabilities:
         capabilities.add(Capability.UNKNOWN)
@@ -269,7 +306,9 @@ def _missing_details(text: str) -> list[str]:
         missing.extend(_missing_business_rule_generation_details(text))
     elif _is_business_rule_request(text) and _target_table(text) is None:
         missing.append("target table")
-    if _is_client_script_request(text) and _target_table(text) is None:
+    if _is_client_script_generation_request(text):
+        missing.extend(_missing_client_script_generation_details(text))
+    elif _is_client_script_request(text) and _target_table(text) is None:
         missing.append("target table")
     return missing
 
@@ -321,6 +360,69 @@ def _is_client_script_request(text: str) -> bool:
     return "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text
 
 
+def _is_client_script_generation_request(text: str) -> bool:
+    if not _is_client_script_request(text):
+        return False
+    if any(token in text for token in ["analyze", "analysis", "existing", "determine whether"]):
+        return False
+    return any(token in text for token in ["create", "add", "generate", "implement", "build"])
+
+
+def _missing_client_script_generation_details(text: str) -> list[str]:
+    checks = [
+        ("target table", _target_table(text) is not None),
+        ("client script type", any(token in text for token in ["onchange", "onload", "onsubmit"])),
+        ("explicit condition", "condition:" in text or "when " in text),
+        ("expected behavior", "expected behavior:" in text or "show " in text or "set " in text),
+        ("fields read", "fields read:" in text),
+        ("fields written", "fields written:" in text),
+    ]
+    if "onchange" in text and _client_script_target_field(text) is None:
+        checks.append(("target field", False))
+    return [label for label, present in checks if not present]
+
+
+def _client_script_forbidden_details(text: str) -> list[str]:
+    if not _is_client_script_generation_request(text):
+        return []
+    forbidden_patterns = {
+        "DOM manipulation outside g_form APIs": ["document.", "window.", "dom"],
+        "browser storage": ["localstorage", "sessionstorage"],
+        "external calls": ["fetch", "xmlhttprequest", "endpoint", "api call", "http://", "https://"],
+        "GlideAjax dependency creation": ["glideajax"],
+        "credentials": ["credential", "password", "token", "api key", "secret"],
+    }
+    return [
+        label
+        for label, tokens in forbidden_patterns.items()
+        if any(token in text for token in tokens)
+    ]
+
+
+def _client_script_target_field(text: str) -> str | None:
+    match = re.search(r"for the ([a-zA-Z0-9_]+) field", text)
+    if match:
+        return match.group(1).lower()
+    match = re.search(r"onchange .*? ([a-zA-Z0-9_]+) field", text)
+    if match:
+        return match.group(1).lower()
+    return None
+
+
+def _is_integration_request(text: str) -> bool:
+    return any(
+        token in text
+        for token in [
+            "integrat",
+            "rest api",
+            "api call",
+            "external api",
+            "outbound api",
+            "endpoint",
+        ]
+    )
+
+
 def _code_surface_capability(requested: set[Capability]) -> Capability | None:
     for capability in [
         Capability.BUSINESS_RULE_ANALYZE,
@@ -333,6 +435,8 @@ def _code_surface_capability(requested: set[Capability]) -> Capability | None:
 
 
 def _is_dictionary_form_request(text: str) -> bool:
+    if _is_business_rule_request(text) or _is_client_script_request(text):
+        return False
     return ("field" in text or "column" in text) and "form" in text
 
 

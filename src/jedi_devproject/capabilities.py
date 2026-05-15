@@ -277,7 +277,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.CLIENT_SCRIPT_GENERATE: _generation_profile(
         capability=Capability.CLIENT_SCRIPT_GENERATE,
-        status="designed",
+        status="enabled",
         supported_artifact="sys_script_client",
         required_instance_context=["table_schema", "client_scripts"],
         researcher="code_surface_researcher",
@@ -288,6 +288,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
             "external calls",
             "credentials",
         ],
+        current_max_story_points=3,
     ),
     Capability.SCRIPT_INCLUDE_GENERATE: _generation_profile(
         capability=Capability.SCRIPT_INCLUDE_GENERATE,
