@@ -813,6 +813,34 @@ def test_generate_implementation_update_set_candidate_treats_placeholder_sys_id_
     assert candidate.changes[0].sys_id is None
 
 
+def test_generate_implementation_update_set_candidate_rejects_empty_model_changes() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [],
+            "test_plan": ["Validate requested Script Include."],
+            "rollback_notes": ["No generated platform changes."],
+        }
+    )
+    packet = build_implementation_packet(
+        story=_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=_discovery_context(),
+    )
+
+    try:
+        generate_implementation_update_set_candidate_from_packet(
+            packet=packet,
+            policy=_policy(),
+            provider=provider,
+        )
+    except ModelResponseError as exc:
+        assert "changes must be a non-empty list" in str(exc)
+    else:
+        raise AssertionError("empty automated model changes were accepted")
+
+
 def test_generate_implementation_update_set_candidate_skips_provider_for_manual_review() -> None:
     manual_review_story = _story().model_copy(update={"story_points": 8})
 

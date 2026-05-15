@@ -2512,4 +2512,6 @@ def test_sprint_one_forty_seven_change_log_documents_script_include_hardening() 
     assert "`script_include_generate`" in change_log
     assert "`api_name`" in change_log
     assert "`global.<Script Include name>`" in change_log
+    assert "at least one concrete ServiceNow change" in change_log
+    assert "Empty candidate changes" in change_log
     assert "Sprint 147: Script Include structured story hardening" in backlog

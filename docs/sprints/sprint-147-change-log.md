@@ -9,3 +9,5 @@
 - The STRY0010023 path now remains scoped to `script_include_generate` and `sys_script_include` Update Set handoff.
 - Script Include handoff now deterministically derives `api_name` as `global.<Script Include name>` when the model omits it.
 - Explicit non-global or mismatched Script Include metadata is still rejected by the handoff validator.
+- Automated-build model responses must now include at least one concrete ServiceNow change.
+- Empty candidate changes are rejected before table-specific retrieved Update Set handoff routing.

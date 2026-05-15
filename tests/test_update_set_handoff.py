@@ -841,6 +841,27 @@ def test_create_update_set_handoff_imports_script_include_customer_update() -> N
     assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
 
 
+def test_create_update_set_handoff_rejects_empty_candidate_changes_before_table_routing() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _script_include_candidate().model_copy(update={"changes": []})
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010120",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/120",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "at least one candidate change" in str(exc)
+    else:
+        raise AssertionError("empty candidate changes reached table-specific handoff")
+
+
 def test_create_update_set_handoff_rejects_client_callable_script_include() -> None:
     client = FakeUpdateSetClient()
     forbidden_fields = {

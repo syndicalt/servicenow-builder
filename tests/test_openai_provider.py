@@ -89,6 +89,7 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
     assert request.body["text"]["format"]["strict"] is True
     schema = request.body["text"]["format"]["schema"]
     assert schema["additionalProperties"] is False
+    assert schema["properties"]["changes"]["minItems"] == 1
     change_schema = schema["properties"]["changes"]["items"]
     assert change_schema["additionalProperties"] is False
     assert change_schema["required"] == [
@@ -109,7 +110,8 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
     assert "fields_written" in system_prompt
     assert "JSON field metadata only" in system_prompt
     assert "Do not put fields_written" in system_prompt
-    assert "no changes" in system_prompt
+    assert "at least one concrete ServiceNow change" in system_prompt
+    assert "return no changes" not in system_prompt
     assert "openai-key" not in repr(request.body)
 
 

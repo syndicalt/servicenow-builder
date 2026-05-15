@@ -46,8 +46,10 @@ class OpenAIResponsesProvider:
                             "role": "system",
                             "content": (
                                 "Return only JSON matching the supplied schema. "
-                                "If uncertain, return no changes and explain review "
-                                "steps in the test plan. "
+                                "The deterministic gates decide whether the request "
+                                "is safe to automate before this model call. For an "
+                                "automated build packet, return at least one concrete "
+                                "ServiceNow change. "
                                 "For ServiceNow Business Rule sys_script changes, "
                                 "scripts must write fields only through current.<field> "
                                 "or current.setValue('<field>', value), must not use "
@@ -56,8 +58,7 @@ class OpenAIResponsesProvider:
                                 "the script writes in the JSON field metadata only. "
                                 "Do not put fields_written, tables_read, tables_written, "
                                 "test notes, rollback notes, or any metadata variable "
-                                "inside the executable script. If you cannot satisfy "
-                                "that Business Rule contract, return no changes."
+                                "inside the executable script."
                             ),
                         },
                         {
@@ -183,6 +184,7 @@ def _implementation_candidate_schema() -> dict[str, Any]:
         "properties": {
             "changes": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
                     "type": "object",
                     "additionalProperties": False,

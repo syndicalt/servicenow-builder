@@ -478,6 +478,9 @@ def _candidate_decision(value: str) -> Literal["eligible", "manual_review", "rej
 
 
 def _validate_implementation_contract(response: dict[str, Any]) -> None:
+    changes = response.get("changes")
+    if not isinstance(changes, list) or not changes:
+        raise ModelResponseError("changes must be a non-empty list")
     for field_name in ["test_plan", "rollback_notes"]:
         value = response.get(field_name)
         if not isinstance(value, list) or not value:

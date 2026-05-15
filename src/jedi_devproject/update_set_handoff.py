@@ -249,6 +249,8 @@ def _customer_updates_for_candidate(
     candidate: UpdateSetCandidate,
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
+    if not candidate.changes:
+        raise ValueError("retrieved Update Set handoff requires at least one candidate change")
     tables = {change.table for change in candidate.changes}
     if tables == {"sys_script"}:
         updates = business_rule_customer_updates(
