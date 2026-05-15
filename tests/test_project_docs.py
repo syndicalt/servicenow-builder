@@ -2515,3 +2515,16 @@ def test_sprint_one_forty_seven_change_log_documents_script_include_hardening() 
     assert "at least one concrete ServiceNow change" in change_log
     assert "Empty candidate changes" in change_log
     assert "Sprint 147: Script Include structured story hardening" in backlog
+
+
+def test_sprint_one_forty_eight_change_log_documents_business_rule_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-148-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "STRY0010021" in change_log
+    assert "`Timing: before`" in change_log
+    assert "`Trigger timing:`" in change_log
+    assert "`Fields written / affected:`" in change_log
+    assert "`business_rule_generate`" in change_log
+    assert "`sys_script`" in change_log
+    assert "Sprint 148: Business Rule structured story hardening" in backlog

@@ -1071,6 +1071,120 @@ def test_model_candidate_handler_generates_business_rule_update_set_handoff() ->
     assert updated_fields["u_ai_status"] == "Ready for Testing"
 
 
+def test_model_candidate_handler_generates_structured_business_rule_from_uat_story() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010021",
+            short_description="JEDI UAT: Default inquiry Incident short description",
+            description=(
+                "Target artifact type: Business Rule\n"
+                "Target table: incident\n"
+                "Artifact name: JEDI UAT Default Inquiry Short Description\n"
+                "Timing: before\n"
+                "Trigger operations: insert and update\n"
+                "Condition: category is inquiry and short_description is empty\n"
+                "Actions: Set short_description to Inquiry needs triage.\n"
+                "Fields read: category, short_description\n"
+                "Fields written / affected: short_description\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not use GlideRecord, outbound calls, credentials, "
+                "async Business Rules, display Business Rules, delete rules, globals, "
+                "or cross-table writes.\n"
+                "Rollback expectation: Deactivate or delete the generated Business Rule "
+                "through the retrieved Update Set review process."
+            ),
+            acceptance_criteria=(
+                "A before Business Rule named JEDI UAT Default Inquiry Short Description "
+                "is created for incident. The rule runs on insert and update, applies "
+                "only when category is inquiry and short_description is empty, and writes "
+                "only short_description."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_script",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "JEDI UAT Default Inquiry Short Description",
+                        "collection": "incident",
+                        "when": "before",
+                        "action_insert": True,
+                        "action_update": True,
+                        "filter_condition": (
+                            "category is inquiry and short_description is empty"
+                        ),
+                        "script": (
+                            "if (current.category == 'inquiry' && "
+                            "!current.short_description) {\n"
+                            "    current.short_description = 'Inquiry needs triage';\n"
+                            "}"
+                        ),
+                        "fields_read": ["category", "short_description"],
+                        "fields_written": ["short_description"],
+                    },
+                }
+            ],
+            "test_plan": [
+                "Create an inquiry Incident without short_description and confirm the default."
+            ],
+            "rollback_notes": ["Delete the generated Business Rule."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010021"}))
+
+    payload = provider.payloads[0]
+    assert payload["controls"]["capability_assessment"]["capabilities"] == [
+        "business_rule_generate"
+    ]
+    assert payload["instance_context_bundle"]["required_surfaces"] == [
+        "table_schema",
+        "business_rules",
+    ]
+    assert payload["controls"]["normalized_intent"]["trigger_timing"] == "before"
+    assert payload["controls"]["normalized_intent"]["missing_details"] == []
+    candidate = result.artifacts[2].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["table"] == "sys_script"
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/183",
+                sha256="a" * 64,
+                artifact_id=183,
+            )
+        ]
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_script_incident_jedi_uat_default_inquiry_short_description" in imported_xml
+    assert "<action_insert>true</action_insert>" in imported_xml
+    assert "<action_update>true</action_update>" in imported_xml
+    assert "<when>before</when>" in imported_xml
+
+
 def test_model_candidate_handler_runs_client_script_analysis() -> None:
     client = FakeModelClient(
         story=Story(

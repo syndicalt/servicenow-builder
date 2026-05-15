@@ -140,6 +140,8 @@ STRUCTURED_KEY_ALIASES = {
     "actions": "expected_behavior",
     "expected behavior": "expected_behavior",
     "expected server-side behavior": "expected_behavior",
+    "timing": "trigger_timing",
+    "when": "trigger_timing",
     "trigger timing": "trigger_timing",
     "trigger operations": "trigger_operations",
     "client script type": "client_script_type",
@@ -322,7 +324,10 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
                     ("condition", bool(intent.condition)),
                     ("expected behavior", bool(intent.expected_behavior)),
                     ("fields read", "fields_read" in fields),
-                    ("fields written", "fields_written" in fields),
+                    (
+                        "fields written",
+                        "fields_written" in fields or "fields_written_affected" in fields,
+                    ),
                 ]
                 if not present
             ],

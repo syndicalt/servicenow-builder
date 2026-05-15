@@ -152,6 +152,42 @@ def test_extracts_structured_business_rule_intent() -> None:
     assert intent.missing_details == []
 
 
+def test_extracts_business_rule_intent_with_timing_alias_and_combined_fields_written() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010021",
+            short_description="JEDI UAT: Default inquiry Incident short description",
+            description=(
+                "Target artifact type: Business Rule\n"
+                "Target table: incident\n"
+                "Artifact name: JEDI UAT Default Inquiry Short Description\n"
+                "Timing: before\n"
+                "Trigger operations: insert and update\n"
+                "Condition: category is inquiry and short_description is empty\n"
+                "Actions: Set short_description to Inquiry needs triage.\n"
+                "Fields read: category, short_description\n"
+                "Fields written / affected: short_description\n"
+                "Reverse behavior: Not applicable\n"
+                "Forbidden behavior: Do not use GlideRecord, outbound calls, credentials, "
+                "async Business Rules, display Business Rules, delete rules, globals, "
+                "or cross-table writes."
+            ),
+        )
+    )
+
+    assert intent.intent_type is AutomationIntentType.BUSINESS_RULE
+    assert intent.capability is Capability.BUSINESS_RULE_GENERATE
+    assert intent.target_table == "incident"
+    assert intent.artifact_name == "JEDI UAT Default Inquiry Short Description"
+    assert intent.trigger_timing == "before"
+    assert intent.trigger_operations == ["insert", "update"]
+    assert intent.fields_read == ["category", "short_description"]
+    assert intent.fields_written == ["short_description"]
+    assert intent.fields_affected == ["short_description"]
+    assert intent.required_instance_context == ["table_schema", "business_rules"]
+    assert intent.missing_details == []
+
+
 def test_extracts_structured_script_include_intent() -> None:
     intent = extract_automation_intent(
         _story(
