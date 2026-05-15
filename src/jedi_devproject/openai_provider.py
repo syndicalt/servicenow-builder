@@ -53,8 +53,11 @@ class OpenAIResponsesProvider:
                                 "or current.setValue('<field>', value), must not use "
                                 "globals or other implicit objects for record writes, "
                                 "and must include fields_written naming every field "
-                                "the script writes. If you cannot satisfy that Business "
-                                "Rule contract, return no changes."
+                                "the script writes in the JSON field metadata only. "
+                                "Do not put fields_written, tables_read, tables_written, "
+                                "test notes, rollback notes, or any metadata variable "
+                                "inside the executable script. If you cannot satisfy "
+                                "that Business Rule contract, return no changes."
                             ),
                         },
                         {

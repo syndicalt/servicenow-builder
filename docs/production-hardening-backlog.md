@@ -133,5 +133,6 @@ Review for:
 39. Sprint 140: Sys_id-backed lifecycle lookup.
 40. Sprint 141: Supported artifact UAT parser hardening.
 41. Sprint 142: Business Rule gate inference hardening.
+42. Sprint 143: Business Rule script metadata separation.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

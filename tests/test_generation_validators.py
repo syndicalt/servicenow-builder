@@ -572,6 +572,24 @@ def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:
         )
 
 
+def test_business_rule_validator_rejects_metadata_variable_inside_script() -> None:
+    change = _business_rule_change(
+        script=(
+            "if (current.category == 'inquiry' && !current.short_description) {\n"
+            "    current.short_description = 'Inquiry needs triage';\n"
+            "}\n"
+            "var fields_written = [\"short_description\"];\n"
+        ),
+        fields_written=["short_description"],
+    )
+
+    with pytest.raises(ValueError, match="Business Rule script must not declare fields_written"):
+        business_rule_customer_updates(
+            changes=[change],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
 def test_business_rule_validator_normalizes_model_operation_and_field_aliases() -> None:
     updates = business_rule_customer_updates(
         changes=[

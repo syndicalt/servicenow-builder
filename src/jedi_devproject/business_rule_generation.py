@@ -158,6 +158,8 @@ FORBIDDEN_SCRIPT_TOKENS = [
 
 
 def _validate_script_safety(script: str) -> None:
+    if re.search(r"\b(?:var|let|const)\s+fields_written\b", script, flags=re.IGNORECASE):
+        raise ValueError("Business Rule script must not declare fields_written")
     for token in FORBIDDEN_SCRIPT_TOKENS:
         if token.lower() in script.lower():
             raise ValueError(f"forbidden Business Rule script token: {token}")

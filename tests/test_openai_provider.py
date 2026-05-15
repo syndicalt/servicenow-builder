@@ -107,6 +107,8 @@ def test_openai_responses_provider_posts_structured_output_request() -> None:
     assert "Business Rule" in system_prompt
     assert "current.<field>" in system_prompt
     assert "fields_written" in system_prompt
+    assert "JSON field metadata only" in system_prompt
+    assert "Do not put fields_written" in system_prompt
     assert "no changes" in system_prompt
     assert "openai-key" not in repr(request.body)
 
