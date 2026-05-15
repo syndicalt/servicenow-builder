@@ -100,7 +100,8 @@ def _rags() -> SpecializedRags:
                 source="compliance/model-boundary",
                 content=(
                     "No public AI endpoint may receive story context. Incident field "
-                    "stories stay inside the approved implementation boundary."
+                    "stories and Catalog Item requests stay inside the approved "
+                    "implementation boundary."
                 ),
                 version="test",
             ),
@@ -112,6 +113,20 @@ def _policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.DICTIONARY_FORM},
         tables={"sys_dictionary", "sys_ui_form"},
+        operations={"insert", "update"},
+        max_points=3,
+    )
+
+
+def _catalog_policy() -> AllowlistPolicy:
+    return AllowlistPolicy(
+        story_types={StoryType.DICTIONARY_FORM},
+        tables={
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+        },
         operations={"insert", "update"},
         max_points=3,
     )
@@ -158,6 +173,115 @@ def _discovery_context() -> InstanceDiscoveryContext:
             )
         ],
         evidence=["sys_dictionary:rm_story", "sys_ui_section:rm_story"],
+    )
+
+
+def _catalog_story() -> Story:
+    return Story(
+        sys_id="catalog-story-sys-id",
+        number="STRY0010025",
+        short_description="JEDI UAT: Request Temporary Visitor Badge Catalog Item",
+        description=(
+            "Target artifact type: Catalog Item\n"
+            "Artifact name: Request Temporary Visitor Badge\n"
+            "Short description: Request a temporary building access badge for a visitor.\n"
+            "Catalog: Service Catalog\n"
+            "Category: Services\n"
+            "Taxonomy: Employee\n"
+            "Employee Center topic: Technology services / Software / Access issues\n"
+            "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100; "
+            "business_justification|Business justification|multi_line_text|"
+            "mandatory=true|order=200; "
+            "sponsor|Sponsor|reference|sys_user|active=true|mandatory=true|order=300\n"
+            "Forbidden behavior: Do not create flows, approvals, catalog client scripts, "
+            "catalog UI policies, user criteria, pricing, or integrations."
+        ),
+        acceptance_criteria="Delivery is a retrieved Update Set ready for preview and commit.",
+        story_points=3,
+        priority=4,
+        state="Work in Progress",
+        data_classification=DataClassification.PUBLIC,
+    )
+
+
+def _catalog_context_bundle() -> ServiceNowSurfaceContextBundle:
+    table_context = InstanceDiscoveryContext(
+        target_table="sc_cat_item",
+        table_label="Catalog Item",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[],
+        form_sections=[],
+        evidence=["sys_db_object:sc_cat_item"],
+    )
+    return ServiceNowSurfaceContextBundle(
+        target_table="sc_cat_item",
+        required_surfaces=[
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+        ],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="catalog_definitions",
+                source_table="sc_catalog",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sc_catalog",
+                        name="Service Catalog",
+                        active=True,
+                    )
+                ],
+                evidence=["sc_catalog:active"],
+                confidence=0.95,
+            ),
+            ServiceNowSurfaceContext(
+                surface="catalog_categories",
+                source_table="sc_category",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sc_category",
+                        name="Services",
+                        active=True,
+                    )
+                ],
+                evidence=["sc_category:active"],
+                confidence=0.95,
+            ),
+            ServiceNowSurfaceContext(
+                surface="employee_center_topics",
+                source_table="topic",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="topic",
+                        name="Technology services / Software / Access issues",
+                        active=True,
+                    )
+                ],
+                evidence=["topic:active"],
+                confidence=0.95,
+            ),
+            ServiceNowSurfaceContext(
+                surface="employee_center_connected_content",
+                source_table="taxonomy_content_configuration",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="taxonomy_content_configuration",
+                        name="Catalog Item",
+                        active=True,
+                    )
+                ],
+                evidence=["taxonomy_content_configuration:active"],
+                confidence=0.95,
+            ),
+        ],
+        evidence=["sc_catalog:active", "topic:active"],
     )
 
 
@@ -839,6 +963,76 @@ def test_generate_implementation_update_set_candidate_rejects_empty_model_change
         assert "changes must be a non-empty list" in str(exc)
     else:
         raise AssertionError("empty automated model changes were accepted")
+
+
+def test_catalog_candidate_reconciles_variables_from_normalized_intent() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sc_cat_item",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "Request Temporary Visitor Badge",
+                        "short_description": (
+                            "Request a temporary building access badge for a visitor."
+                        ),
+                        "catalog": "Service Catalog",
+                        "category": "Services",
+                        "taxonomy": "Employee",
+                        "employee_center_topic": (
+                            "Technology services / Software / Access issues"
+                        ),
+                    },
+                    "sys_id": None,
+                    "rationale": "Create the catalog item.",
+                },
+                {
+                    "table": "item_option_new",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "visitor_name",
+                        "label": "",
+                        "type": "single_line_text",
+                    },
+                    "sys_id": None,
+                    "rationale": "Collect the visitor name.",
+                },
+            ],
+            "test_plan": ["Preview the retrieved Update Set."],
+            "rollback_notes": ["Back out the retrieved Update Set."],
+        }
+    )
+    bundle = _catalog_context_bundle()
+    packet = build_implementation_packet(
+        story=_catalog_story(),
+        policy=_catalog_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_catalog_policy(),
+        provider=provider,
+    )
+
+    variable_changes = [change for change in candidate.changes if change.table == "item_option_new"]
+    assert [change.fields["question_text"] for change in variable_changes] == [
+        "Visitor name",
+        "Business justification",
+        "Sponsor",
+    ]
+    assert variable_changes[2].fields["reference"] == "sys_user"
+    assert variable_changes[2].fields["reference_qualifier"] == "active=true"
+    assert {change.table for change in candidate.changes} == {
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+    }
 
 
 def test_generate_implementation_update_set_candidate_skips_provider_for_manual_review() -> None:

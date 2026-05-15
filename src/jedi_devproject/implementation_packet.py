@@ -301,6 +301,14 @@ def generate_implementation_candidate(
         allowed_sys_ids=set(),
     )
     _validate_implementation_contract(response)
+    response = _reconcile_response_with_packet(packet=packet, response=response)
+    _validate_response(
+        response,
+        allowed_tables=policy.tables,
+        allowed_operations=policy.operations,
+        allowed_sys_ids=set(),
+    )
+    _validate_implementation_contract(response)
     return response
 
 
@@ -337,6 +345,14 @@ def generate_implementation_update_set_candidate_from_packet(
     if not context_plan.should_call_model:
         return _manual_review_candidate(packet=packet)
     response = _normalize_placeholder_sys_ids(provider.generate(packet.to_model_payload()))
+    _validate_response(
+        response,
+        allowed_tables=policy.tables,
+        allowed_operations=policy.operations,
+        allowed_sys_ids=set(),
+    )
+    _validate_implementation_contract(response)
+    response = _reconcile_response_with_packet(packet=packet, response=response)
     _validate_response(
         response,
         allowed_tables=policy.tables,
@@ -388,6 +404,160 @@ def _normalize_placeholder_sys_ids(response: dict[str, Any]) -> dict[str, Any]:
 def _is_placeholder_sys_id(value: Any) -> bool:
     text = str(value or "").strip().lower()
     return text.startswith("[") and text.endswith("]") and "sys_id" in text
+
+
+def _reconcile_response_with_packet(
+    *,
+    packet: ImplementationPacket,
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    if not _packet_has_capability(packet, Capability.CATALOG_ITEM_CREATE):
+        return response
+    return {
+        **response,
+        "changes": _catalog_item_changes_from_normalized_intent(packet.normalized_intent),
+    }
+
+
+def _packet_has_capability(packet: ImplementationPacket, capability: Capability) -> bool:
+    capabilities = packet.capability_assessment.get("capabilities", [])
+    return isinstance(capabilities, list) and capability.value in {
+        str(item) for item in capabilities
+    }
+
+
+def _catalog_item_changes_from_normalized_intent(
+    intent: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not isinstance(intent, dict):
+        raise ModelResponseError("catalog item candidate requires normalized intent")
+
+    item_name = _required_intent_text(intent, "artifact_name", "catalog item name")
+    item_short_description = _required_intent_text(
+        intent,
+        "catalog_item_short_description",
+        "catalog item short description",
+    )
+    catalog = _required_intent_text(intent, "catalog_name", "catalog")
+    category = _required_intent_text(intent, "category_name", "category")
+    taxonomy = _required_intent_text(intent, "taxonomy_name", "taxonomy")
+    topic = _required_intent_text(intent, "employee_center_topic", "Employee Center topic")
+    raw_variables = intent.get("catalog_variables")
+    if not isinstance(raw_variables, list) or not raw_variables:
+        raise ModelResponseError("catalog item candidate requires normalized catalog variables")
+
+    changes: list[dict[str, Any]] = [
+        {
+            "table": "sc_cat_item",
+            "operation": "insert",
+            "fields": {
+                "name": item_name,
+                "short_description": item_short_description,
+                "description": item_short_description,
+                "catalog": catalog,
+                "category": category,
+                "taxonomy": taxonomy,
+                "employee_center_topic": topic,
+            },
+            "sys_id": None,
+            "rationale": "Create the standard catalog item from the normalized story intent.",
+        }
+    ]
+    for index, raw_variable in enumerate(raw_variables, start=1):
+        if not isinstance(raw_variable, dict):
+            raise ModelResponseError("catalog item variable intent must be an object")
+        variable_name = _required_intent_text(raw_variable, "name", "catalog variable name")
+        variable_type = _required_intent_text(
+            raw_variable,
+            "type",
+            f"catalog variable type for {variable_name}",
+        )
+        fields: dict[str, Any] = {
+            "name": variable_name,
+            "question_text": _required_intent_text(
+                raw_variable,
+                "label",
+                f"catalog variable label for {variable_name}",
+            ),
+            "type": variable_type,
+            "mandatory": bool(raw_variable.get("mandatory", False)),
+            "order": _optional_intent_order(raw_variable.get("order"), default=index * 100),
+        }
+        reference_table = _optional_intent_text(raw_variable.get("reference_table"))
+        if variable_type == "reference":
+            if reference_table is None:
+                raise ModelResponseError(
+                    f"reference catalog variable {variable_name} requires reference_table"
+                )
+            fields["reference"] = reference_table
+        reference_qualifier = _optional_intent_text(raw_variable.get("reference_qualifier"))
+        if reference_qualifier is not None:
+            fields["reference_qualifier"] = reference_qualifier
+        default_value = _optional_intent_text(raw_variable.get("default_value"))
+        if default_value is not None:
+            fields["default_value"] = default_value
+        help_text = _optional_intent_text(raw_variable.get("help_text"))
+        if help_text is not None:
+            fields["help_text"] = help_text
+        changes.append(
+            {
+                "table": "item_option_new",
+                "operation": "insert",
+                "fields": fields,
+                "sys_id": None,
+                "rationale": (
+                    f"Create the {variable_name} variable from the normalized story intent."
+                ),
+            }
+        )
+
+    changes.extend(
+        [
+            {
+                "table": "sc_cat_item_category",
+                "operation": "insert",
+                "fields": {"catalog": catalog, "category": category},
+                "sys_id": None,
+                "rationale": "Place the catalog item in the requested catalog category.",
+            },
+            {
+                "table": "m2m_connected_content",
+                "operation": "insert",
+                "fields": {
+                    "taxonomy": taxonomy,
+                    "topic": topic,
+                    "employee_center_topic": topic,
+                },
+                "sys_id": None,
+                "rationale": "Associate the catalog item with the requested Employee Center topic.",
+            },
+        ]
+    )
+    return changes
+
+
+def _required_intent_text(intent: dict[str, Any], key: str, label: str) -> str:
+    value = _optional_intent_text(intent.get(key))
+    if value is None:
+        raise ModelResponseError(f"catalog item candidate missing normalized {label}")
+    return value
+
+
+def _optional_intent_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_intent_order(value: Any, *, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        order = int(value)
+    except (TypeError, ValueError):
+        return default
+    return order if order > 0 else default
 
 
 def _code_surface_capability(packet: ImplementationPacket) -> str | None:
