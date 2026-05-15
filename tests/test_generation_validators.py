@@ -6,6 +6,7 @@ from jedi_devproject.business_rule_generation import business_rule_customer_upda
 from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.models import CandidateChange
 from jedi_devproject.script_include_generation import script_include_customer_updates
+from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
 
 
 def _business_rule_change(**field_overrides: object) -> CandidateChange:
@@ -92,6 +93,42 @@ def _script_include_change(**field_overrides: object) -> CandidateChange:
     )
 
 
+def _ui_policy_change(**field_overrides: object) -> CandidateChange:
+    fields: dict[str, object] = {
+        "short_description": "JEDI Incident Assignment Group Required",
+        "table": "incident",
+        "conditions": "category=software",
+        "reverse_if_false": True,
+        "run_scripts": False,
+    }
+    fields.update(field_overrides)
+    return CandidateChange(
+        table="sys_ui_policy",
+        operation="insert",
+        fields=fields,
+        rationale="Add the requested declarative UI Policy.",
+    )
+
+
+def _ui_policy_action_change(**field_overrides: object) -> CandidateChange:
+    fields: dict[str, object] = {
+        "policy_name": "JEDI Incident Assignment Group Required",
+        "table": "incident",
+        "field": "assignment_group",
+        "mandatory": "true",
+        "visible": "true",
+        "disabled": "ignore",
+        "cleared": False,
+    }
+    fields.update(field_overrides)
+    return CandidateChange(
+        table="sys_ui_policy_action",
+        operation="insert",
+        fields=fields,
+        rationale="Make Assignment group mandatory and visible.",
+    )
+
+
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:
     change = _business_rule_change(
         script=(
@@ -161,3 +198,107 @@ def test_script_include_validator_rejects_declared_writes_for_utility_only_profi
             changes=[change],
             remote_update_set_sys_id="remote-update-set-sys-id",
         )
+
+
+def test_ui_policy_validator_rejects_missing_policy_record() -> None:
+    with pytest.raises(ValueError, match="UI Policy handoff requires a sys_ui_policy change"):
+        ui_policy_customer_updates(
+            changes=[_ui_policy_action_change()],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_missing_action_record() -> None:
+    with pytest.raises(
+        ValueError,
+        match="UI Policy handoff requires at least one sys_ui_policy_action change",
+    ):
+        ui_policy_customer_updates(
+            changes=[_ui_policy_change()],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_policy_update_operation() -> None:
+    with pytest.raises(ValueError, match="UI Policy handoff supports policy insert only"):
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change().model_copy(update={"operation": "update"}),
+                _ui_policy_action_change(),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_action_update_operation() -> None:
+    with pytest.raises(ValueError, match="UI Policy handoff supports action insert only"):
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change(),
+                _ui_policy_action_change().model_copy(update={"operation": "update"}),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_action_table_mismatch() -> None:
+    with pytest.raises(ValueError, match="UI Policy action table must match policy table"):
+        ui_policy_customer_updates(
+            changes=[_ui_policy_change(), _ui_policy_action_change(table="problem")],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_action_policy_name_mismatch() -> None:
+    with pytest.raises(ValueError, match="UI Policy action policy_name must match policy"):
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change(),
+                _ui_policy_action_change(policy_name="Different Policy"),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_invalid_action_tristate() -> None:
+    with pytest.raises(ValueError, match="UI Policy action values must be true, false, or ignore"):
+        ui_policy_customer_updates(
+            changes=[_ui_policy_change(), _ui_policy_action_change(mandatory="sometimes")],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_rejects_forbidden_condition_tokens() -> None:
+    with pytest.raises(ValueError, match="forbidden UI Policy token"):
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change(conditions="category=software^endpoint=https://example.invalid"),
+                _ui_policy_action_change(),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+
+def test_ui_policy_validator_normalizes_false_read_only_and_clear_actions() -> None:
+    updates = ui_policy_customer_updates(
+        changes=[
+            _ui_policy_change(order="not-a-number", description="Declarative form behavior."),
+            _ui_policy_action_change(
+                mandatory=False,
+                visible=False,
+                read_only=True,
+                cleared=True,
+            ),
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    action_update = updates[1]
+    assert action_update["name"].endswith(
+        "not_required_hidden_read_only_cleared"
+    )
+    assert "<order>100</order>" in str(updates[0]["payload"])
+    assert "<mandatory>false</mandatory>" in str(action_update["payload"])
+    assert "<visible>false</visible>" in str(action_update["payload"])
+    assert "<disabled>true</disabled>" in str(action_update["payload"])
+    assert "<cleared>true</cleared>" in str(action_update["payload"])

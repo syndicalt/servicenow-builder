@@ -336,7 +336,7 @@ def test_complete_script_include_story_is_eligible_for_automated_generation() ->
     assert assessment.reasons == ["supported utility script include generation request"]
 
 
-def test_complete_ui_policy_story_routes_to_unsupported_until_generation_is_enabled() -> None:
+def test_complete_ui_policy_story_is_eligible_for_automated_generation() -> None:
     assessment = analyze_story_capabilities(
         _story(
             number="STRY0010122",
@@ -356,9 +356,9 @@ def test_complete_ui_policy_story_routes_to_unsupported_until_generation_is_enab
         )
     )
 
-    assert assessment.outcome is SuitabilityOutcome.UNSUPPORTED_CAPABILITY
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
     assert Capability.UI_POLICY_GENERATE in assessment.capabilities
-    assert assessment.unsupported_capability_names == ["ui_policy_generate"]
     assert assessment.target_table == "incident"
     assert assessment.intent is None
-    assert assessment.reasons == ["request includes unsupported pipeline capabilities"]
+    assert assessment.required_instance_context == ["table_schema", "form_layout", "ui_policies"]
+    assert assessment.reasons == ["supported declarative ui policy generation request"]

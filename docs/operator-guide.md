@@ -391,13 +391,13 @@ client callable Script Includes are not supported in the first implementation be
 
 ### UI Policy Generation Capability
 
-The Sprint 122 UI Policy Generation Profile Design defines the future `ui_policy_generate` capability. No runtime generation is enabled for UI Policies yet. The profile has `current_max_story_points=0` and `target_max_story_points=5`.
+The Sprint 122 UI Policy Generation Profile Design is implemented for the first production-hardening subset. `ui_policy_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
 
 The supported future subset is declarative, table-local UI Policy behavior only: one generated `sys_ui_policy` record and one or more generated `sys_ui_policy_action` records, an explicit target table, an explicit condition, an explicit reverse-if-false decision, and field actions limited to mandatory, visible, or read-only behavior. Generated changes must become `sys_ui_policy` and `sys_ui_policy_action` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
 
 Unsupported behavior includes run scripts, advanced scripts, Client Script behavior, `g_form` logic, Business Rule creation, Script Include creation, Flow creation, ACL changes, integration calls, cross-table behavior, data migration, role changes, system property changes, credentials, secrets, tokens, and API keys.
 
-The provider output must be structured implementation intent, not authoritative XML. Required fields include target table, policy name, condition, reverse-if-false decision, run-scripts flag, view, fields read, UI Policy actions, test plan, rollback notes, and reviewer notes. Deterministic validators must approve table context, form layout context, existing UI Policy context, condition fields, action fields, run-scripts disabled state, forbidden token checks, and parseable `sys_update_xml` before runtime generation can be enabled.
+The provider output must be structured implementation intent, not authoritative XML. Required fields include target table, policy name, condition, reverse-if-false decision, run-scripts flag, view, fields read, UI Policy actions, test plan, rollback notes, and reviewer notes. Deterministic validators approve table context, form layout context, existing UI Policy context, condition fields, action fields, run-scripts disabled state, forbidden token checks, and parseable `sys_update_xml` before a retrieved Update Set can be imported. Any forbidden UI Policy behavior fails closed before import.
 
 ## CI/CD Update Set API Capability
 

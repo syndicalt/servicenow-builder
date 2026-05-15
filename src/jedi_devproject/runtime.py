@@ -925,6 +925,8 @@ def _default_model_allowlist_policy() -> AllowlistPolicy:
             "sys_script",
             "sys_script_client",
             "sys_script_include",
+            "sys_ui_policy",
+            "sys_ui_policy_action",
         },
         operations={"insert", "update"},
         max_points=3,

@@ -86,6 +86,13 @@ SurfaceName = Literal[
     "public_docs",
 ]
 
+EMPTY_REQUIRED_SURFACE_IS_SUFFICIENT: set[SurfaceName] = {
+    "business_rules",
+    "client_scripts",
+    "ui_policies",
+    "script_includes",
+}
+
 
 class ServiceNowSurfaceRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -382,7 +389,11 @@ def discover_servicenow_surface_context(
         ),
     ]
     missing_required_surfaces = [
-        context.surface for context in surfaces if context.required and not context.records
+        context.surface
+        for context in surfaces
+        if context.required
+        and not context.records
+        and context.surface not in EMPTY_REQUIRED_SURFACE_IS_SUFFICIENT
     ]
     evidence = [
         *table_context.evidence,

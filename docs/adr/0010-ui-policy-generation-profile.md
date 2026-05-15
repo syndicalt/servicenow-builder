@@ -59,7 +59,7 @@ Each action must include:
 - `mandatory`.
 - `visible`.
 - `read_only`.
-- `clear_value`.
+- `cleared`.
 
 The builder converts validated structured output into retrieved Update Set XML. The provider must not provide raw `sys_update_xml` as the authoritative artifact.
 

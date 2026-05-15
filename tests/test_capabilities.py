@@ -154,11 +154,11 @@ def test_script_include_generation_profile_is_enabled_at_current_maturity() -> N
     assert "cross-scope access changes" in profile.unsupported_cases
 
 
-def test_ui_policy_generation_profile_is_designed_but_not_enabled() -> None:
+def test_ui_policy_generation_profile_is_enabled_at_current_maturity() -> None:
     profile = capability_profile(Capability.UI_POLICY_GENERATE)
 
-    assert profile.status == "designed"
-    assert profile.current_max_story_points == 0
+    assert profile.status == "enabled"
+    assert profile.current_max_story_points == 3
     assert profile.target_max_story_points == 5
     assert profile.supported_artifacts == ["sys_ui_policy", "sys_ui_policy_action"]
     assert profile.required_instance_context == ["table_schema", "form_layout", "ui_policies"]

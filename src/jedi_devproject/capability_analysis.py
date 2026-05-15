@@ -19,6 +19,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.CLIENT_SCRIPT_GENERATE,
     Capability.SCRIPT_INCLUDE_ANALYZE,
     Capability.SCRIPT_INCLUDE_GENERATE,
+    Capability.UI_POLICY_GENERATE,
     Capability.DICTIONARY_FIELD_CREATE,
     Capability.FIELD_LABEL_CREATE,
     Capability.FORM_LAYOUT_PLACE_FIELD,
@@ -129,6 +130,24 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
+    forbidden_ui_policy_details = _ui_policy_forbidden_details(text)
+    if Capability.UI_POLICY_GENERATE in requested and forbidden_ui_policy_details:
+        reasons.append(
+            "ui policy generation includes forbidden behavior: "
+            f"{', '.join(forbidden_ui_policy_details)}"
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
     if unsupported:
         reasons.append("request includes unsupported pipeline capabilities")
         return _assessment(
@@ -217,6 +236,22 @@ def analyze_story_capabilities(
     if Capability.SCRIPT_INCLUDE_GENERATE in requested:
         profile = capability_profile(Capability.SCRIPT_INCLUDE_GENERATE)
         reasons.append("supported utility script include generation request")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
+        )
+
+    if Capability.UI_POLICY_GENERATE in requested:
+        profile = capability_profile(Capability.UI_POLICY_GENERATE)
+        reasons.append("supported declarative ui policy generation request")
         return _assessment(
             story=story,
             outcome=SuitabilityOutcome.AUTOMATED_BUILD,
@@ -351,6 +386,8 @@ def _missing_details(text: str) -> list[str]:
         missing.append("target table")
     if _is_script_include_generation_request(text):
         missing.extend(_missing_script_include_generation_details(text))
+    if _is_ui_policy_generation_request(text):
+        missing.extend(_missing_ui_policy_generation_details(text))
     return missing
 
 
@@ -478,6 +515,42 @@ def _is_ui_policy_generation_request(text: str) -> bool:
     if any(token in text for token in ["analyze", "analysis", "existing", "determine whether"]):
         return False
     return any(token in text for token in ["create", "add", "generate", "implement", "build"])
+
+
+def _missing_ui_policy_generation_details(text: str) -> list[str]:
+    checks = [
+        ("target table", _target_table(text) is not None),
+        ("condition", "condition:" in text or "when " in text),
+        ("expected behavior", "expected behavior:" in text),
+        ("fields read", "fields read:" in text),
+        (
+            "fields affected",
+            "fields affected:" in text or "field affected:" in text or "actions:" in text,
+        ),
+        ("reverse if false decision", "reverse if false:" in text),
+    ]
+    return [label for label, present in checks if not present]
+
+
+def _ui_policy_forbidden_details(text: str) -> list[str]:
+    if not _is_ui_policy_generation_request(text):
+        return []
+    forbidden_patterns = {
+        "run scripts": ["run scripts: true", "run script", "advanced script"],
+        "Client Script behavior": ["client script", "g_form", "glideajax"],
+        "Business Rule creation": ["business rule"],
+        "Script Include creation": ["script include"],
+        "Flow creation": [" flow ", "flow designer"],
+        "ACL changes": [" acl", " role"],
+        "integration calls": ["rest", "soap", "endpoint", "api call", "http://", "https://"],
+        "credentials": ["credential", "password", "token", "api key", "secret"],
+        "cross-table behavior": ["another table", "other table", "cross-table"],
+    }
+    return [
+        label
+        for label, tokens in forbidden_patterns.items()
+        if any(token in text for token in tokens)
+    ]
 
 
 def _missing_script_include_generation_details(text: str) -> list[str]:

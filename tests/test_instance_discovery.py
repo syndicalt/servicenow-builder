@@ -248,3 +248,38 @@ def test_discover_servicenow_surface_context_marks_required_missing_surface() ->
     assert bundle.context_sufficient is False
     assert "flows" in bundle.missing_required_surfaces
     assert bundle.surface("flows").confidence == 0.0
+
+
+def test_empty_required_ui_policy_context_is_sufficient_when_query_succeeds() -> None:
+    class EmptyUiPolicyClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_ui_policy":
+                self.calls.append(
+                    {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
+                )
+                return []
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    bundle = discover_servicenow_surface_context(
+        client=EmptyUiPolicyClient(),
+        target_table="incident",
+        story_text="Create a UI Policy on the Incident table.",
+        public_doc_queries=[],
+        required_surfaces_override=["table_schema", "form_layout", "ui_policies"],
+    )
+
+    assert bundle.context_sufficient is True
+    assert bundle.missing_required_surfaces == []
+    assert bundle.surface_record_count("ui_policies") == 0

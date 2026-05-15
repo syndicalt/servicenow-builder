@@ -383,6 +383,56 @@ def _script_include_candidate() -> UpdateSetCandidate:
     )
 
 
+def _ui_policy_candidate() -> UpdateSetCandidate:
+    return UpdateSetCandidate(
+        story_number="STRY0010123",
+        name="UPD_STRY0010123_LLM_Implementation",
+        eligibility_decision="eligible",
+        eligibility_reasons=["supported declarative ui policy generation request"],
+        confidence=0.74,
+        risk_score=0.22,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange(
+                table="sys_ui_policy",
+                operation="insert",
+                fields={
+                    "short_description": "JEDI Incident Assignment Group Required",
+                    "table": "incident",
+                    "conditions": "category=software",
+                    "reverse_if_false": True,
+                    "run_scripts": False,
+                    "active": True,
+                    "on_load": False,
+                    "order": 100,
+                    "description": (
+                        "Make Assignment group mandatory when Incident category is Software."
+                    ),
+                },
+                rationale="Add the requested declarative UI Policy.",
+            ),
+            CandidateChange(
+                table="sys_ui_policy_action",
+                operation="insert",
+                fields={
+                    "policy_name": "JEDI Incident Assignment Group Required",
+                    "table": "incident",
+                    "field": "assignment_group",
+                    "mandatory": "true",
+                    "visible": "true",
+                    "disabled": "ignore",
+                    "cleared": False,
+                },
+                rationale="Make Assignment group mandatory and visible.",
+            ),
+        ],
+        reviewer_notes=[
+            "Set Incident category to Software and confirm Assignment group is mandatory."
+        ],
+        artifact_hash="e" * 64,
+    )
+
+
 def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
@@ -822,6 +872,75 @@ def test_create_update_set_handoff_rejects_client_callable_script_include() -> N
         assert "client callable Script Includes are not supported" in str(exc)
     else:
         raise AssertionError("client callable Script Include was accepted")
+
+    assert client.imports == []
+
+
+def test_create_update_set_handoff_imports_ui_policy_customer_updates() -> None:
+    client = FakeUpdateSetClient()
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010123",
+            candidate=_ui_policy_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/123",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_ui_policy_incident_jedi_incident_assignment_group_required" in imported_xml
+    assert "sys_ui_policy_action_incident_assignment_group_required" in imported_xml
+    assert "<sys_ui_policy action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<sys_ui_policy_action action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<table>incident</table>" in imported_xml
+    assert "<conditions>category=software</conditions>" in imported_xml
+    assert "<reverse_if_false>true</reverse_if_false>" in imported_xml
+    assert "<run_scripts>false</run_scripts>" in imported_xml
+    assert "<field>assignment_group</field>" in imported_xml
+    assert "<mandatory>true</mandatory>" in imported_xml
+    assert "<visible>true</visible>" in imported_xml
+    assert "<disabled>ignore</disabled>" in imported_xml
+    assert "<cleared>false</cleared>" in imported_xml
+    assert client.story_updates[-1]["fields"]["state"] == "-7"
+    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+
+
+def test_create_update_set_handoff_rejects_ui_policy_run_scripts() -> None:
+    client = FakeUpdateSetClient()
+    forbidden_fields = {
+        **_ui_policy_candidate().changes[0].fields,
+        "run_scripts": True,
+        "script_true": "g_form.setMandatory('assignment_group', true);",
+    }
+    candidate = _ui_policy_candidate().model_copy(
+        update={
+            "changes": [
+                _ui_policy_candidate().changes[0].model_copy(
+                    update={"fields": forbidden_fields}
+                ),
+                _ui_policy_candidate().changes[1],
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010123",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/123",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "UI Policy run_scripts must be false" in str(exc)
+    else:
+        raise AssertionError("UI Policy with run scripts was accepted")
 
     assert client.imports == []
 

@@ -249,6 +249,8 @@ def _policy() -> AllowlistPolicy:
             "sys_script",
             "sys_script_client",
             "sys_script_include",
+            "sys_ui_policy",
+            "sys_ui_policy_action",
         },
         operations={"insert", "update"},
         max_points=3,
@@ -1072,6 +1074,107 @@ def test_model_candidate_handler_generates_script_include_update_set_handoff() -
     imported_xml = client.imports[0]["update_set_xml"]
     assert "sys_script_include_jediincidentutils" in imported_xml
     assert "<api_name>global.JediIncidentUtils</api_name>" in imported_xml
+    updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert updated_fields["u_ai_status"] == "Ready for Testing"
+
+
+def test_model_candidate_handler_generates_ui_policy_update_set_handoff() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010123",
+            short_description="Create Incident assignment group UI Policy",
+            description=(
+                "Create a UI Policy on the Incident table. Condition: category is "
+                "software. Expected behavior: make the assignment_group field "
+                "mandatory and visible. Fields read: category. Fields affected: "
+                "assignment_group. Reverse if false: true."
+            ),
+            acceptance_criteria=(
+                "When Incident category is software, Assignment group is mandatory. "
+                "Rollback removes the generated UI Policy and UI Policy Action."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_ui_policy",
+                    "operation": "insert",
+                    "fields": {
+                        "short_description": "JEDI Incident Assignment Group Required",
+                        "table": "incident",
+                        "conditions": "category=software",
+                        "reverse_if_false": True,
+                        "run_scripts": False,
+                        "active": True,
+                        "on_load": False,
+                        "order": 100,
+                    },
+                },
+                {
+                    "table": "sys_ui_policy_action",
+                    "operation": "insert",
+                    "fields": {
+                        "policy_name": "JEDI Incident Assignment Group Required",
+                        "table": "incident",
+                        "field": "assignment_group",
+                        "mandatory": "true",
+                        "visible": "true",
+                        "disabled": "ignore",
+                        "cleared": False,
+                    },
+                },
+            ],
+            "test_plan": ["Set category to Software and confirm Assignment group is mandatory."],
+            "rollback_notes": ["Delete the generated UI Policy and action."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010123"}))
+
+    assert provider.payloads[0]["controls"]["capability_assessment"]["capabilities"] == [
+        "ui_policy_generate"
+    ]
+    assert provider.payloads[0]["controls"]["capability_assessment"][
+        "required_instance_context"
+    ] == ["table_schema", "form_layout", "ui_policies"]
+    candidate = result.artifacts[2].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["changes"][0]["table"] == "sys_ui_policy"
+    assert candidate["changes"][1]["table"] == "sys_ui_policy_action"
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/123",
+                sha256="3" * 64,
+                artifact_id=123,
+            )
+        ]
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_ui_policy_incident_jedi_incident_assignment_group_required" in imported_xml
+    assert "sys_ui_policy_action_incident_assignment_group_required" in imported_xml
     updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
     assert updated_fields["u_ai_status"] == "Ready for Testing"
 

@@ -1032,7 +1032,8 @@ def test_operator_guide_documents_ui_policy_generation_profile_design() -> None:
     assert "sys_ui_policy" in guide
     assert "sys_ui_policy_action" in guide
     assert "UI Policy Generation Profile Design" in guide
-    assert "No runtime generation is enabled" in guide
+    assert "current_max_story_points=3" in guide
+    assert "target_max_story_points=5" in guide
     assert "run scripts" in guide
 
 
@@ -1055,6 +1056,20 @@ def test_production_backlog_moves_ui_policy_generation_after_validator_hardening
     assert "Sprint 123 | UI Policy generation implementation" in backlog
     assert "ADR 0010" in backlog
     assert "ui_policy_generate" in backlog
+
+
+def test_sprint_123_change_log_documents_ui_policy_generation_implementation() -> None:
+    change_log = Path("docs/sprints/sprint-123-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 123 Change Log" in change_log
+    assert "UI Policy generation implementation" in change_log
+    assert "ui_policy_generate" in change_log
+    assert "sys_ui_policy" in change_log
+    assert "sys_ui_policy_action" in change_log
+    assert "current_max_story_points=3" in change_log
+    assert "target_max_story_points=5" in change_log
+    assert "retrieved Update Set" in change_log
+    assert "forbidden UI Policy" in change_log
 
 
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:

@@ -236,7 +236,7 @@ def _generation_profile(
 def _ui_policy_generation_profile() -> CapabilityProfile:
     return CapabilityProfile(
         capability=Capability.UI_POLICY_GENERATE,
-        status="designed",
+        status="enabled",
         supported_artifacts=["sys_ui_policy", "sys_ui_policy_action"],
         required_instance_context=["table_schema", "form_layout", "ui_policies"],
         deterministic_validators=[
@@ -268,7 +268,7 @@ def _ui_policy_generation_profile() -> CapabilityProfile:
         ],
         researcher="ui_policy_researcher",
         build_pipeline="ui_policy_update_set_pipeline",
-        current_max_story_points=0,
+        current_max_story_points=3,
         target_max_story_points=5,
         creates_update_set=True,
     )
