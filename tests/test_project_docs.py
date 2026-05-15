@@ -1463,6 +1463,16 @@ def test_sprint_138_change_log_documents_flow_preflight_guidance_work_note() -> 
     assert "no Flow XML builder" in change_log
 
 
+def test_sprint_139_change_log_documents_supported_artifact_test_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-139-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 139 Change Log" in change_log
+    assert "supported ServiceNow artifact testing" in change_log
+    assert "model payload compaction" in change_log
+    assert "Script Include" in change_log
+    assert "live UAT matrix" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
@@ -1481,6 +1491,7 @@ def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> 
     assert "Sprint 136 | Flow unsupported reason guidance" in backlog
     assert "Sprint 137 | Flow preflight guidance artifact" in backlog
     assert "Sprint 138 | Flow preflight guidance work note" in backlog
+    assert "Sprint 139 | Supported artifact UAT hardening" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

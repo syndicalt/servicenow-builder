@@ -378,6 +378,190 @@ def test_build_implementation_packet_marks_missing_required_surface_insufficient
     }
 
 
+def test_script_include_generation_does_not_require_form_layout_context() -> None:
+    table_context = InstanceDiscoveryContext(
+        target_table="global",
+        table_label="Global",
+        table_exists=False,
+        supports_custom_fields=False,
+        fields=[],
+        form_sections=[],
+        evidence=["sys_script_include:active"],
+    )
+    bundle = ServiceNowSurfaceContextBundle(
+        target_table="global",
+        required_surfaces=["script_includes"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="script_includes",
+                source_table="sys_script_include",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_script_include",
+                        name="ExistingUtils",
+                        active=True,
+                        summary="Existing utility",
+                    )
+                ],
+                evidence=["sys_script_include:active"],
+            )
+        ],
+        evidence=["sys_script_include:active"],
+    )
+    story = _story().model_copy(
+        update={
+            "short_description": "Create JediIncidentUtils Script Include",
+            "description": (
+                "Create a Script Include named JediIncidentUtils in Global scope. "
+                "Client callable: false. Expected server-side behavior: provide a "
+                "normalizeCategory(category) function that returns the category lowercased. "
+                "Tables read: none. Tables written: none. Fields read: none. Fields written: none."
+            ),
+            "acceptance_criteria": (
+                "Calling normalizeCategory('Software') returns software. "
+                "Rollback removes the generated Script Include."
+            ),
+            "affected_tables": [],
+        }
+    )
+
+    packet = build_implementation_packet(
+        story=story,
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=table_context,
+        surface_context_bundle=bundle,
+    )
+
+    assert packet.safety_decision == "automated_build"
+    assert packet.context_sufficiency["status"] == "sufficient"
+    assert packet.context_sufficiency["missing_context"] == []
+    assert packet.to_model_payload()["controls"]["context_escalation"]["should_call_model"] is True
+
+
+def test_model_payload_compacts_surface_context_to_required_surfaces() -> None:
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element=f"u_field_{index}",
+                column_label=f"Field {index}",
+                internal_type="string",
+            )
+            for index in range(80)
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id=f"element-{index}",
+                        element=f"field_{index}",
+                        position=index,
+                    )
+                    for index in range(120)
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:incident", "sys_ui_section:incident"],
+    )
+    bundle = ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "form_layout"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="table_schema",
+                source_table="sys_dictionary",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_dictionary",
+                        name=f"field_{index}",
+                        active=True,
+                        summary=f"Field {index}",
+                        metadata={"internal_type": "string"},
+                    )
+                    for index in range(100)
+                ],
+                evidence=["sys_dictionary:incident"],
+            ),
+            ServiceNowSurfaceContext(
+                surface="form_layout",
+                source_table="sys_ui_section",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_ui_section",
+                        name=f"section_{index}",
+                        active=True,
+                        summary=f"Section {index}",
+                    )
+                    for index in range(20)
+                ],
+                evidence=["sys_ui_section:incident"],
+            ),
+            ServiceNowSurfaceContext(
+                surface="ui_policies",
+                source_table="sys_ui_policy",
+                required=False,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_ui_policy",
+                        name=f"verbose policy {index}",
+                        active=True,
+                        summary="not required for this story",
+                    )
+                    for index in range(250)
+                ],
+                evidence=["sys_ui_policy:incident"],
+            ),
+        ],
+        evidence=["sys_dictionary:incident", "sys_ui_section:incident"],
+    )
+
+    packet = build_implementation_packet(
+        story=_story().model_copy(
+            update={
+                "short_description": "Add Incident Review Source field to Incident form",
+                "description": (
+                    "Add a custom string field to the Incident table. Field Name: "
+                    "u_review_source. Column label: Review Source. Field Type: String. "
+                    "Length: 120. Place the field on the default Incident form below Description."
+                ),
+                "acceptance_criteria": "The field appears on the default Incident form.",
+                "affected_tables": [],
+            }
+        ),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=table_context,
+        surface_context_bundle=bundle,
+    )
+
+    model_bundle = packet.to_model_payload()["instance_context_bundle"]
+
+    assert model_bundle["surfaces"][0]["surface"] == "table_schema"
+    assert model_bundle["surfaces"][1]["surface"] == "form_layout"
+    assert [surface["surface"] for surface in model_bundle["surfaces"]] == [
+        "table_schema",
+        "form_layout",
+    ]
+    assert len(model_bundle["surfaces"][0]["records"]) == 25
+    assert len(model_bundle["table_context"]["fields"]) == 25
+    assert len(model_bundle["table_context"]["form_sections"][0]["elements"]) == 25
+    assert "verbose policy" not in str(model_bundle)
+    assert packet.to_model_payload()["instance_context"] is None
+
+
 def test_build_implementation_packet_marks_missing_instance_context_for_retrieval() -> None:
     packet = build_implementation_packet(
         story=_story(),

@@ -589,7 +589,8 @@ def test_model_candidate_handler_builds_incident_candidate_after_instance_discov
     assert candidate["changes"][0]["fields"]["name"] == "incident"
     assert candidate["changes"][0]["fields"]["element"] == "u_antics"
     assert provider.payloads
-    assert provider.payloads[0]["instance_context"]["target_table"] == "incident"
+    assert provider.payloads[0]["instance_context"] is None
+    assert provider.payloads[0]["instance_context_bundle"]["target_table"] == "incident"
     assert {fetch["table"] for fetch in client.fetches} >= {
         "sys_db_object",
         "sys_dictionary",

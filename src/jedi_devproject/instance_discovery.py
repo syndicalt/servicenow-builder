@@ -252,7 +252,7 @@ def discover_servicenow_surface_context(
         ServiceNowSurfaceContext(
             surface="table_schema",
             source_table="sys_dictionary",
-            required=True,
+            required="table_schema" in required_surfaces,
             records=[
                 ServiceNowSurfaceRecord(
                     source_table="sys_dictionary",
@@ -276,7 +276,7 @@ def discover_servicenow_surface_context(
         ServiceNowSurfaceContext(
             surface="form_layout",
             source_table="sys_ui_section",
-            required=True,
+            required="form_layout" in required_surfaces,
             records=[
                 ServiceNowSurfaceRecord(
                     source_table="sys_ui_section",

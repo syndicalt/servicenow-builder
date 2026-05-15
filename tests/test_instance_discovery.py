@@ -448,3 +448,43 @@ def test_empty_required_ui_policy_context_is_sufficient_when_query_succeeds() ->
     assert bundle.context_sufficient is True
     assert bundle.missing_required_surfaces == []
     assert bundle.surface_record_count("ui_policies") == 0
+
+
+def test_script_include_only_context_does_not_require_table_schema_or_form_layout() -> None:
+    class GlobalScriptIncludeClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table in {"sys_db_object", "sys_dictionary", "sys_ui_section"} and lookup == {
+                "name": "global"
+            }:
+                self.calls.append(
+                    {"table": table, "lookup": lookup, "fields": fields, "limit": limit}
+                )
+                return []
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    bundle = discover_servicenow_surface_context(
+        client=GlobalScriptIncludeClient(),
+        target_table="global",
+        story_text="Create a Script Include named JediIncidentUtils in Global scope.",
+        public_doc_queries=[],
+        required_surfaces_override=["script_includes"],
+    )
+
+    assert bundle.context_sufficient is True
+    assert bundle.required_surfaces == ["script_includes"]
+    assert bundle.missing_required_surfaces == []
+    assert bundle.surface("table_schema").required is False
+    assert bundle.surface("form_layout").required is False
+    assert bundle.surface("script_includes").required is True

@@ -30,6 +30,8 @@ from jedi_devproject.rag import SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy
 
 IMPLEMENTATION_PACKET_TASK = "generate_implementation_candidate"
+MODEL_CONTEXT_RECORD_LIMIT = 25
+MODEL_CONTEXT_SECTION_LIMIT = 3
 
 
 class PacketStory(BaseModel):
@@ -79,8 +81,14 @@ class ImplementationPacket(BaseModel):
                     mode="json"
                 ),
             },
-            "instance_context": self.instance_context,
-            "instance_context_bundle": self.instance_context_bundle,
+            "instance_context": (
+                None
+                if self.instance_context_bundle is not None
+                else _compact_instance_context(self.instance_context)
+            ),
+            "instance_context_bundle": _compact_surface_context_bundle(
+                self.instance_context_bundle
+            ),
             "context": self.context_sections,
             "citations": [
                 citation.model_dump(mode="json") for citation in self.retrieval_citations
@@ -189,11 +197,23 @@ def _context_sufficiency(
             "evidence": [],
         }
     missing_context: list[str] = []
-    if not discovery_context.table_exists:
+    required_surfaces = (
+        surface_context_bundle.required_surfaces if surface_context_bundle is not None else []
+    )
+    requires_table_context = (
+        surface_context_bundle is None
+        or "table_schema" in required_surfaces
+        or "form_layout" in required_surfaces
+    )
+    if requires_table_context and not discovery_context.table_exists:
         missing_context.append("target_table")
-    if not discovery_context.supports_custom_fields:
+    if (
+        surface_context_bundle is None or "form_layout" in required_surfaces
+    ) and not discovery_context.supports_custom_fields:
         missing_context.append("custom_field_support")
-    if not discovery_context.form_sections:
+    if (
+        surface_context_bundle is None or "form_layout" in required_surfaces
+    ) and not discovery_context.form_sections:
         missing_context.append("form_sections")
     if surface_context_bundle is not None:
         missing_context.extend(surface_context_bundle.missing_required_surfaces)
@@ -208,6 +228,48 @@ def _context_sufficiency(
             if surface_context_bundle is not None
             else discovery_context.evidence
         ),
+    }
+
+
+def _compact_instance_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
+    if context is None:
+        return None
+    return {
+        **context,
+        "fields": list(context.get("fields", []))[:MODEL_CONTEXT_RECORD_LIMIT],
+        "form_sections": [
+            {
+                **section,
+                "elements": list(section.get("elements", []))[:MODEL_CONTEXT_RECORD_LIMIT],
+            }
+            for section in list(context.get("form_sections", []))[:MODEL_CONTEXT_SECTION_LIMIT]
+            if isinstance(section, dict)
+        ],
+    }
+
+
+def _compact_surface_context_bundle(
+    bundle: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if bundle is None:
+        return None
+    required_surfaces = set(str(surface) for surface in bundle.get("required_surfaces", []))
+    return {
+        **bundle,
+        "table_context": _compact_instance_context(bundle.get("table_context")),
+        "surfaces": [
+            _compact_surface_context(surface)
+            for surface in bundle.get("surfaces", [])
+            if isinstance(surface, dict) and str(surface.get("surface")) in required_surfaces
+        ],
+    }
+
+
+def _compact_surface_context(surface: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **surface,
+        "records": list(surface.get("records", []))[:MODEL_CONTEXT_RECORD_LIMIT],
+        "citations": list(surface.get("citations", []))[:MODEL_CONTEXT_RECORD_LIMIT],
     }
 
 
