@@ -16,3 +16,5 @@
 - `mypy src tests`
 - `pytest --cov=src/jedi_devproject --cov-report=term-missing`
 - Result: `794 passed`, total coverage `90.23%`.
+- UAT rerun: created corrective story `STRY0010026` with sys_id `df38eefac3348b10913fbf12b4013117`; the workflow moved it to `Ready for testing` and created retrieved Update Set `JEDI STRY0010026 - AI Candidate` with sys_id `698c49611f3dc09d0e44dd9a9c2078cc`.
+- Verified the retrieved Update Set contains six customer updates and all three generated Catalog Variable payloads include `visible_standalone=true`, `visible_bundle=true`, and `visible_summary=true`.
