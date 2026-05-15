@@ -41,6 +41,8 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 20 | Sprint 121 | Generation validator hardening | Executable ServiceNow artifact generation must fail closed on common write and scope mismatches before another mutation surface is added. | Business Rule, Client Script, and Script Include validators cover additional unsafe write/scope cases, and coverage remains above the 90% gate. |
 | 21 | Sprint 122 | UI Policy generation profile design | UI Policies are the next lower-risk ServiceNow surface, but they need an explicit declarative boundary before mutation is enabled. | ADR 0010 defines `ui_policy_generate`, supported subset, forbidden cases, output schema, deterministic validators, Update Set XML shape, UAT story shape, and confirms No runtime generation is enabled. |
 | 22 | Sprint 123 | UI Policy generation implementation | The profile is designed; implementation can add reviewed declarative form behavior without using Client Script as a workaround. | Implement `ui_policy_generate` behind deterministic validators, generate reviewed `sys_ui_policy` and `sys_ui_policy_action` / `sys_update_xml` retrieved Update Set handoff, and keep forbidden cases routed to human review. |
+| 23 | Sprint 124 | Flow Designer generation profile design | Flow Designer is graph-oriented and cannot safely be treated as a single-record generator. | ADR 0011 defines `flow_modify`, supported subset, forbidden cases, graph output schema, deterministic validators, Update Set XML evidence requirements, UAT story shape, and confirms No runtime generation is enabled. |
+| 24 | Sprint 125 | Flow graph retrieval hardening | Flow mutation must not begin until the app can retrieve and validate a complete current flow graph. | Flow context includes retrieved trigger, action, logic, input, and output records with citations, excludes runtime history tables, and fails closed when the graph is incomplete. |
 
 ## Review Gates
 
@@ -98,5 +100,7 @@ Review for:
 20. Sprint 121: Generation validator hardening.
 21. Sprint 122: UI Policy generation profile design.
 22. Sprint 123: UI Policy generation implementation.
+23. Sprint 124: Flow Designer generation profile design.
+24. Sprint 125: Flow graph retrieval hardening.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

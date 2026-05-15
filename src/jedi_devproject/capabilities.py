@@ -274,6 +274,52 @@ def _ui_policy_generation_profile() -> CapabilityProfile:
     )
 
 
+def _flow_designer_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.FLOW_MODIFY,
+        status="designed",
+        supported_artifacts=[
+            "sys_hub_flow",
+            "sys_hub_trigger_instance",
+            "sys_hub_action_instance",
+            "sys_hub_flow_logic_instance_v2",
+        ],
+        required_instance_context=["flows", "flow_graph"],
+        deterministic_validators=[
+            "target_flow_resolved",
+            "flow_graph_retrieved",
+            "structured_output_schema_valid",
+            "trigger_shape_validated",
+            "action_graph_diff_validated",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "graph rewrites",
+            "custom actions",
+            "spokes and integrations",
+            "credentials",
+            "subflows",
+            "approval orchestration",
+            "script steps",
+            "data migration",
+        ],
+        uat_story_shape=[
+            "flow name",
+            "target table or trigger",
+            "trigger condition",
+            "existing graph summary",
+            "requested action",
+            "expected record behavior",
+            "test evidence",
+        ],
+        researcher="flow_designer_researcher",
+        build_pipeline="flow_designer_update_set_pipeline",
+        current_max_story_points=0,
+        target_max_story_points=5,
+        creates_update_set=True,
+    )
+
+
 CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.DICTIONARY_FIELD_CREATE: _dictionary_form_profile(
         capability=Capability.DICTIONARY_FIELD_CREATE
@@ -348,6 +394,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
         current_max_story_points=3,
     ),
     Capability.UI_POLICY_GENERATE: _ui_policy_generation_profile(),
+    Capability.FLOW_MODIFY: _flow_designer_generation_profile(),
 }
 
 
@@ -363,6 +410,7 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
         CAPABILITY_REGISTRY[Capability.CLIENT_SCRIPT_GENERATE],
         CAPABILITY_REGISTRY[Capability.SCRIPT_INCLUDE_GENERATE],
         CAPABILITY_REGISTRY[Capability.UI_POLICY_GENERATE],
+        CAPABILITY_REGISTRY[Capability.FLOW_MODIFY],
     ]
 
 

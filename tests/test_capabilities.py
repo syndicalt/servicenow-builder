@@ -122,6 +122,7 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
         Capability.CLIENT_SCRIPT_GENERATE,
         Capability.SCRIPT_INCLUDE_GENERATE,
         Capability.UI_POLICY_GENERATE,
+        Capability.FLOW_MODIFY,
     ]
     assert all(profile.target_max_story_points == 5 for profile in profiles)
     assert all(profile.researcher for profile in profiles)
@@ -167,3 +168,23 @@ def test_ui_policy_generation_profile_is_enabled_at_current_maturity() -> None:
     assert profile.build_pipeline == "ui_policy_update_set_pipeline"
     assert "run scripts" in profile.unsupported_cases
     assert "cross-table behavior" in profile.unsupported_cases
+
+
+def test_flow_designer_generation_profile_is_designed_but_not_enabled() -> None:
+    profile = capability_profile(Capability.FLOW_MODIFY)
+
+    assert profile.status == "designed"
+    assert profile.current_max_story_points == 0
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == [
+        "sys_hub_flow",
+        "sys_hub_trigger_instance",
+        "sys_hub_action_instance",
+        "sys_hub_flow_logic_instance_v2",
+    ]
+    assert profile.required_instance_context == ["flows", "flow_graph"]
+    assert profile.creates_update_set is True
+    assert profile.researcher == "flow_designer_researcher"
+    assert profile.build_pipeline == "flow_designer_update_set_pipeline"
+    assert "graph rewrites" in profile.unsupported_cases
+    assert "custom actions" in profile.unsupported_cases

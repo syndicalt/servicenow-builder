@@ -1072,6 +1072,54 @@ def test_sprint_123_change_log_documents_ui_policy_generation_implementation() -
     assert "forbidden UI Policy" in change_log
 
 
+def test_flow_designer_generation_profile_adr_documents_graph_boundary() -> None:
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ADR 0011: Flow Designer Generation Profile" in adr
+    assert "flow_modify" in adr
+    assert "sys_hub_flow" in adr
+    assert "sys_hub_trigger_instance" in adr
+    assert "sys_hub_action_instance" in adr
+    assert "No runtime generation is enabled" in adr
+    assert "flow graph" in adr
+    assert "deterministic validators" in adr
+    assert "UAT story shape" in adr
+
+
+def test_operator_guide_documents_flow_designer_generation_profile_design() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Flow Designer Generation Capability" in guide
+    assert "flow_modify" in guide
+    assert "sys_hub_flow" in guide
+    assert "flow graph" in guide
+    assert "current_max_story_points=0" in guide
+    assert "target_max_story_points=5" in guide
+    assert "No runtime generation is enabled" in guide
+
+
+def test_sprint_124_change_log_documents_flow_designer_generation_design() -> None:
+    change_log = Path("docs/sprints/sprint-124-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 124 Change Log" in change_log
+    assert "Flow Designer generation profile design" in change_log
+    assert "ADR 0011" in change_log
+    assert "flow_modify" in change_log
+    assert "sys_hub_flow" in change_log
+    assert "No runtime generation is enabled" in change_log
+
+
+def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 124 | Flow Designer generation profile design" in backlog
+    assert "Sprint 125 | Flow graph retrieval hardening" in backlog
+    assert "ADR 0011" in backlog
+    assert "flow_modify" in backlog
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

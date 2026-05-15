@@ -343,7 +343,15 @@ The `researcher` field names the context worker responsible for gathering live S
 
 Business Rule analysis first is the next supported implementation step. Sprint 112 should retrieve and classify current `sys_script` state, decide whether a story is a Business Rule candidate, and report missing inputs or unsupported cases without creating Business Rules. Business Rule generation can follow only after that profile proves the context and validation path.
 
-Flow Designer remains context-only. Flow Designer context-only review can retrieve and summarize relevant flow records, but generated flow mutation is unsupported until a separate profile defines graph retrieval, output shape, validators, and retrieved Update Set evidence.
+### Flow Designer Generation Capability
+
+The Sprint 124 Flow Designer generation profile design defines the future `flow_modify` capability. No runtime generation is enabled for Flow Designer. The profile has `current_max_story_points=0` and `target_max_story_points=5`.
+
+Flow Designer remains context-only at runtime. Flow Designer context-only review can retrieve and summarize relevant `sys_hub_flow` records, but generated flow mutation is unsupported until flow graph retrieval, graph diff output shape, validators, and retrieved Update Set evidence are implemented.
+
+The future supported subset is one active record-triggered flow at a time, one target table or trigger context, and either one additive action or one narrow condition change. Required context includes `flows` and `flow graph` retrieval across approved `sys_hub_*` records such as `sys_hub_flow`, `sys_hub_trigger_instance`, `sys_hub_action_instance`, and `sys_hub_flow_logic_instance_v2`.
+
+Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability
 
