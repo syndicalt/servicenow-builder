@@ -184,3 +184,43 @@ def test_business_rule_story_without_target_table_needs_clarification() -> None:
 
     assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
     assert "target table" in assessment.missing_details
+
+
+def test_client_script_story_routes_to_context_analysis() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010113",
+            short_description="Analyze Incident Client Script for category behavior",
+            description=(
+                "Analyze whether the incident table needs an onChange Client Script "
+                "for category behavior."
+            ),
+            acceptance_criteria="Existing Incident Client Scripts are retrieved.",
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.CONTEXT_ANALYSIS
+    assert Capability.CLIENT_SCRIPT_ANALYZE in assessment.capabilities
+    assert assessment.target_table == "incident"
+    assert assessment.required_instance_context == ["table_schema", "client_scripts"]
+    assert "client script generation is not enabled yet" in assessment.reasons
+
+
+def test_script_include_story_routes_to_global_context_analysis() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010114",
+            short_description="Analyze AssignmentUtils Script Include",
+            description=(
+                "Analyze the AssignmentUtils Script Include to determine whether "
+                "shared assignment helper logic already exists."
+            ),
+            acceptance_criteria="Existing Script Includes are retrieved for review.",
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.CONTEXT_ANALYSIS
+    assert Capability.SCRIPT_INCLUDE_ANALYZE in assessment.capabilities
+    assert assessment.target_table == "global"
+    assert assessment.required_instance_context == ["script_includes"]
+    assert "script include generation is not enabled yet" in assessment.reasons

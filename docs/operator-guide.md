@@ -339,13 +339,19 @@ Business Rule analysis first is the next supported implementation step. Sprint 1
 
 Flow Designer remains context-only. Flow Designer context-only review can retrieve and summarize relevant flow records, but generated flow mutation is unsupported until a separate profile defines graph retrieval, output shape, validators, and retrieved Update Set evidence.
 
-### Business Rule Analysis Capability
+### Code Surface Analysis Capability
 
-The `business_rule_analyze` capability is context-only. It exists to inspect stories that appear to need Business Rule work and retrieve the current `sys_script` surface for the target table before any generation capability is approved.
+The `business_rule_analyze`, `client_script_analyze`, and `script_include_analyze` capabilities are context-only. They exist to inspect stories that appear to need ServiceNow code-surface work and retrieve the current platform records before any generation capability is approved.
 
-When selected, the runtime retrieves the target table schema and Business Rule records, redacts script-like fields, stores an `instance_context_bundle`, and stores a `business-rule-analysis-v1` artifact. The analysis names the target table, existing rule count, unsupported cases, and context sufficiency. It does not call the model and does not create a retrieved Update Set.
+Surface mappings:
 
-The story receives human-review feedback through the normal work-note path. Business Rule generation remains unsupported until a separate mutation profile defines output schema, deterministic validators, retrieved Update Set XML evidence, and UAT expectations.
+- Business Rule analysis retrieves `sys_script`.
+- Client Script analysis retrieves `sys_script_client`.
+- Script Include analysis retrieves `sys_script_include`.
+
+When selected, the runtime retrieves the required context, redacts script-like fields, stores an `instance_context_bundle`, and stores a `code-surface-analysis-v1` artifact. The analysis names the capability, surface, source table, target table or `global`, existing record count, unsupported cases, and context sufficiency. It does not call the model and does not create a retrieved Update Set.
+
+The story receives human-review feedback through the normal work-note path. Code surface generation remains unsupported until separate mutation profiles define output schema, deterministic validators, retrieved Update Set XML evidence, and UAT expectations for each artifact type.
 
 ## CI/CD Update Set API Capability
 

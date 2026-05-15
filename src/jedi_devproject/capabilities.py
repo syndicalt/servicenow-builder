@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class Capability(StrEnum):
     BUSINESS_RULE_ANALYZE = "business_rule_analyze"
+    CLIENT_SCRIPT_ANALYZE = "client_script_analyze"
+    SCRIPT_INCLUDE_ANALYZE = "script_include_analyze"
     DICTIONARY_FIELD_CREATE = "dictionary_field_create"
     FIELD_LABEL_CREATE = "field_label_create"
     FORM_LAYOUT_PLACE_FIELD = "form_layout_place_field"
@@ -107,19 +109,25 @@ class StoryCapabilityAssessment(BaseModel):
         return sorted(capability.value for capability in self.unsupported_capabilities)
 
 
-CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
-    Capability.BUSINESS_RULE_ANALYZE: CapabilityProfile(
-        capability=Capability.BUSINESS_RULE_ANALYZE,
+def _code_surface_profile(
+    *,
+    capability: Capability,
+    supported_artifact: str,
+    required_instance_context: list[str],
+    generation_label: str,
+) -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=capability,
         status="context_only",
-        supported_artifacts=["sys_script"],
-        required_instance_context=["table_schema", "business_rules"],
+        supported_artifacts=[supported_artifact],
+        required_instance_context=required_instance_context,
         deterministic_validators=[
             "target_table_present",
-            "sys_script_context_retrieved",
+            f"{supported_artifact}_context_retrieved",
             "script_bodies_redacted",
         ],
         unsupported_cases=[
-            "business rule generation",
+            f"{generation_label} generation",
             "delete rules",
             "scheduled jobs",
             "embedded credentials",
@@ -136,6 +144,27 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
         ],
         creates_update_set=False,
     )
+
+
+CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
+    Capability.BUSINESS_RULE_ANALYZE: _code_surface_profile(
+        capability=Capability.BUSINESS_RULE_ANALYZE,
+        supported_artifact="sys_script",
+        required_instance_context=["table_schema", "business_rules"],
+        generation_label="business rule",
+    ),
+    Capability.CLIENT_SCRIPT_ANALYZE: _code_surface_profile(
+        capability=Capability.CLIENT_SCRIPT_ANALYZE,
+        supported_artifact="sys_script_client",
+        required_instance_context=["table_schema", "client_scripts"],
+        generation_label="client script",
+    ),
+    Capability.SCRIPT_INCLUDE_ANALYZE: _code_surface_profile(
+        capability=Capability.SCRIPT_INCLUDE_ANALYZE,
+        supported_artifact="sys_script_include",
+        required_instance_context=["script_includes"],
+        generation_label="script include",
+    ),
 }
 
 

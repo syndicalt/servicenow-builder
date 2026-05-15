@@ -14,6 +14,8 @@ from jedi_devproject.risk import RiskInput, calculate_risk_score
 
 SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.BUSINESS_RULE_ANALYZE,
+    Capability.CLIENT_SCRIPT_ANALYZE,
+    Capability.SCRIPT_INCLUDE_ANALYZE,
     Capability.DICTIONARY_FIELD_CREATE,
     Capability.FIELD_LABEL_CREATE,
     Capability.FORM_LAYOUT_PLACE_FIELD,
@@ -79,12 +81,16 @@ def analyze_story_capabilities(
             unsupported=unsupported,
         )
 
-    if Capability.BUSINESS_RULE_ANALYZE in requested and not _is_dictionary_form_request(text):
-        profile = capability_profile(Capability.BUSINESS_RULE_ANALYZE)
+    code_surface_capability = _code_surface_capability(requested)
+    if code_surface_capability is not None and not _is_dictionary_form_request(text):
+        profile = capability_profile(code_surface_capability)
+        code_surface_label = code_surface_capability.value.removesuffix("_analyze").replace(
+            "_", " "
+        )
         reasons.extend(
             [
-                "Business Rule analysis first",
-                "business rule generation is not enabled yet",
+                "Code surface analysis first",
+                f"{code_surface_label} generation is not enabled yet",
             ]
         )
         return _assessment(
@@ -178,8 +184,10 @@ def _requested_capabilities(text: str) -> set[Capability]:
         capabilities.add(Capability.FLOW_MODIFY)
     if "business rule" in text or "server script" in text:
         capabilities.add(Capability.BUSINESS_RULE_ANALYZE)
+    if "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text:
+        capabilities.add(Capability.CLIENT_SCRIPT_ANALYZE)
     if "script include" in text:
-        capabilities.add(Capability.SCRIPT_INCLUDE_MODIFY)
+        capabilities.add(Capability.SCRIPT_INCLUDE_ANALYZE)
     if "migrat" in text:
         capabilities.add(Capability.DATA_MIGRATION)
     if "integrat" in text or "api" in text:
@@ -203,11 +211,28 @@ def _missing_details(text: str) -> list[str]:
         missing.append("field type")
     if _is_business_rule_request(text) and _target_table(text) is None:
         missing.append("target table")
+    if _is_client_script_request(text) and _target_table(text) is None:
+        missing.append("target table")
     return missing
 
 
 def _is_business_rule_request(text: str) -> bool:
     return "business rule" in text or "server script" in text
+
+
+def _is_client_script_request(text: str) -> bool:
+    return "client script" in text or "onchange" in text or "onsubmit" in text or "onload" in text
+
+
+def _code_surface_capability(requested: set[Capability]) -> Capability | None:
+    for capability in [
+        Capability.BUSINESS_RULE_ANALYZE,
+        Capability.CLIENT_SCRIPT_ANALYZE,
+        Capability.SCRIPT_INCLUDE_ANALYZE,
+    ]:
+        if capability in requested:
+            return capability
+    return None
 
 
 def _is_dictionary_form_request(text: str) -> bool:
@@ -243,6 +268,8 @@ def _field_form_intent(story: Story, text: str) -> FieldFormIntent | None:
 
 
 def _target_table(text: str) -> str | None:
+    if "script include" in text:
+        return "global"
     if "incident" in text:
         return "incident"
     if "problem" in text:

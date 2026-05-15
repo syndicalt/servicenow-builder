@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from jedi_devproject.capabilities import SuitabilityOutcome
+from jedi_devproject.capabilities import Capability, SuitabilityOutcome
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.context_escalation import plan_context_escalation
 from jedi_devproject.instance_discovery import (
@@ -322,6 +322,18 @@ def _is_placeholder_sys_id(value: Any) -> bool:
     return text.startswith("[") and text.endswith("]") and "sys_id" in text
 
 
+def _code_surface_capability(packet: ImplementationPacket) -> str | None:
+    capabilities = set(packet.capability_assessment.get("capabilities", []))
+    for capability in [
+        Capability.BUSINESS_RULE_ANALYZE.value,
+        Capability.CLIENT_SCRIPT_ANALYZE.value,
+        Capability.SCRIPT_INCLUDE_ANALYZE.value,
+    ]:
+        if capability in capabilities:
+            return capability
+    return None
+
+
 def _manual_review_candidate(
     *,
     packet: ImplementationPacket,
@@ -330,11 +342,14 @@ def _manual_review_candidate(
     eligibility_reasons = [*packet.safety_reasons, *context_plan.reasons]
     reviewer_notes = ["Model invocation skipped by deterministic safety or context gate."]
     if packet.safety_decision == SuitabilityOutcome.CONTEXT_ANALYSIS.value:
-        eligibility_reasons.insert(0, "business_rule_analysis:first")
+        eligibility_reasons.insert(0, "code_surface_analysis:first")
+        code_surface = _code_surface_capability(packet)
+        if code_surface is not None:
+            eligibility_reasons.insert(1, f"capability:{code_surface}")
         reviewer_notes = [
-            "Business Rule analysis completed without generation.",
+            "Code surface analysis completed without generation.",
             (
-                "Business Rule generation is not enabled until a mutation profile "
+                "Code surface generation is not enabled until a mutation profile "
                 "and validators are approved."
             ),
         ]

@@ -706,13 +706,17 @@ def test_sprint_one_hundred_eleven_change_log_documents_capability_design() -> N
     assert "no new mutation surface" in change_log
 
 
-def test_operator_guide_documents_business_rule_analysis_capability() -> None:
+def test_operator_guide_documents_code_surface_analysis_capability() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
-    assert "Business Rule Analysis Capability" in guide
+    assert "Code Surface Analysis Capability" in guide
     assert "business_rule_analyze" in guide
+    assert "client_script_analyze" in guide
+    assert "script_include_analyze" in guide
     assert "sys_script" in guide
-    assert "business-rule-analysis-v1" in guide
+    assert "sys_script_client" in guide
+    assert "sys_script_include" in guide
+    assert "code-surface-analysis-v1" in guide
     assert "does not create a retrieved Update Set" in guide
     assert "does not call the model" in guide
 
@@ -725,7 +729,18 @@ def test_sprint_one_hundred_twelve_change_log_documents_business_rule_analysis()
     assert "business_rule_analyze" in change_log
     assert "CapabilityProfile" in change_log
     assert "sys_script" in change_log
-    assert "business-rule-analysis-v1" in change_log
+    assert "code-surface-analysis-v1" in change_log
+    assert "No new mutation surface" in change_log
+
+
+def test_sprint_one_hundred_thirteen_change_log_documents_code_surface_analysis() -> None:
+    change_log = Path("docs/sprints/sprint-113-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 113 Change Log" in change_log
+    assert "Code surface analysis capability" in change_log
+    assert "client_script_analyze" in change_log
+    assert "script_include_analyze" in change_log
+    assert "code-surface-analysis-v1" in change_log
     assert "No new mutation surface" in change_log
 
 

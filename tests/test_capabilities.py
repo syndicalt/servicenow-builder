@@ -74,13 +74,20 @@ def test_assessment_reports_unsupported_capability() -> None:
     assert assessment.unsupported_capability_names == ["flow_modify"]
 
 
-def test_business_rule_analysis_profile_is_context_only() -> None:
-    profile = capability_profile(Capability.BUSINESS_RULE_ANALYZE)
+def test_code_surface_analysis_profiles_are_context_only() -> None:
+    expected = {
+        Capability.BUSINESS_RULE_ANALYZE: (["table_schema", "business_rules"], "sys_script"),
+        Capability.CLIENT_SCRIPT_ANALYZE: (["table_schema", "client_scripts"], "sys_script_client"),
+        Capability.SCRIPT_INCLUDE_ANALYZE: (["script_includes"], "sys_script_include"),
+    }
 
-    assert isinstance(profile, CapabilityProfile)
-    assert profile.capability is Capability.BUSINESS_RULE_ANALYZE
-    assert profile.status == "context_only"
-    assert profile.required_instance_context == ["table_schema", "business_rules"]
-    assert "sys_script" in profile.supported_artifacts
-    assert "business rule generation" in profile.unsupported_cases
-    assert profile.creates_update_set is False
+    for capability, (required_context, artifact_table) in expected.items():
+        profile = capability_profile(capability)
+
+        assert isinstance(profile, CapabilityProfile)
+        assert profile.capability is capability
+        assert profile.status == "context_only"
+        assert profile.required_instance_context == required_context
+        assert artifact_table in profile.supported_artifacts
+        assert "generation" in " ".join(profile.unsupported_cases)
+        assert profile.creates_update_set is False

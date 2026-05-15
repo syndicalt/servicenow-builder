@@ -142,13 +142,29 @@ class FakeModelClient:
                 }
             ]
         if table == "sys_script_client":
-            return []
+            return [
+                {
+                    "sys_id": "client-script-sys-id",
+                    "name": "Incident Category Guard",
+                    "active": "true",
+                    "type": "onChange",
+                    "script": "g_form.setValue('u_token', 'secret-value');",
+                }
+            ]
         if table == "sys_ui_policy":
             return []
         if table == "sys_hub_flow":
             return [{"sys_id": "flow-sys-id", "name": "Incident Triage", "active": "true"}]
         if table == "sys_script_include":
-            return []
+            return [
+                {
+                    "sys_id": "script-include-sys-id",
+                    "name": "AssignmentUtils",
+                    "active": "true",
+                    "api_name": "global.AssignmentUtils",
+                    "script": "var password = 'secret-value';",
+                }
+            ]
         if table == "cmdb_ci":
             return []
         if table == "sys_rest_message":
@@ -571,7 +587,7 @@ def test_model_candidate_handler_blocks_model_when_required_surface_context_miss
     assert "context_insufficient:flows" in result.artifacts[2].payload_json["eligibility_reasons"]
 
 
-def test_model_candidate_handler_runs_business_rule_analysis_without_model_or_update_set() -> None:
+def test_model_candidate_handler_runs_code_surface_analysis_without_model_or_update_set() -> None:
     client = FakeModelClient(
         story=Story(
             sys_id="story-sys-id",
@@ -609,7 +625,7 @@ def test_model_candidate_handler_runs_business_rule_analysis_without_model_or_up
     assert client.imports == []
     assert [artifact.artifact_kind for artifact in result.artifacts] == [
         "instance_context_bundle",
-        "business_rule_analysis",
+        "code_surface_analysis",
         "implementation_packet",
         "implementation_candidate",
     ]
@@ -624,12 +640,15 @@ def test_model_candidate_handler_runs_business_rule_analysis_without_model_or_up
     assert context_bundle["surfaces"][2]["source_table"] == "sys_script"
     assert "business-rule-sys-id" not in str(context_bundle)
     assert "secret-value" not in str(context_bundle)
+    assert analysis["capability"] == "business_rule_analyze"
+    assert analysis["surface"] == "business_rules"
+    assert analysis["source_table"] == "sys_script"
     assert analysis["target_table"] == "incident"
-    assert analysis["existing_rule_count"] == 1
+    assert analysis["existing_record_count"] == 1
     assert analysis["supported_generation"] is False
-    assert "business_rule_generation_not_enabled" in analysis["unsupported_cases"]
+    assert "business rule generation" in analysis["unsupported_cases"]
     assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
-    assert "business_rule_analysis:first" in candidate["eligibility_reasons"]
+    assert "code_surface_analysis:first" in candidate["eligibility_reasons"]
 
     assert result.after_artifacts_persisted is not None
     result.after_artifacts_persisted(
@@ -641,7 +660,7 @@ def test_model_candidate_handler_runs_business_rule_analysis_without_model_or_up
                 artifact_id=100,
             ),
             FulfillmentPersistedArtifact(
-                artifact_kind="business_rule_analysis",
+                artifact_kind="code_surface_analysis",
                 path="db://artifact_blobs/101",
                 sha256="2" * 64,
                 artifact_id=101,
@@ -663,8 +682,108 @@ def test_model_candidate_handler_runs_business_rule_analysis_without_model_or_up
 
     feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
     assert feedback_fields["u_ai_status"] == "Human Review Required"
-    assert "Business Rule analysis completed" in feedback_fields["work_notes"]
+    assert "Code surface analysis completed" in feedback_fields["work_notes"]
     assert "db://artifact_blobs/103" in feedback_fields["work_notes"]
+
+
+def test_model_candidate_handler_runs_client_script_analysis() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010113",
+            short_description="Analyze Incident Client Script for category behavior",
+            description=(
+                "Analyze whether the incident table needs an onChange Client Script "
+                "for category behavior."
+            ),
+            acceptance_criteria="Existing Incident Client Scripts are retrieved.",
+            story_points=2,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010113"}))
+
+    assert provider.payloads == []
+    assert client.imports == []
+    analysis = result.artifacts[1].payload_json
+    candidate = result.artifacts[3].payload_json
+    assert analysis is not None
+    assert candidate is not None
+    assert result.artifacts[1].artifact_kind == "code_surface_analysis"
+    assert result.artifacts[1].schema_version == "code-surface-analysis-v1"
+    assert analysis["capability"] == "client_script_analyze"
+    assert analysis["surface"] == "client_scripts"
+    assert analysis["source_table"] == "sys_script_client"
+    assert analysis["target_table"] == "incident"
+    assert analysis["existing_record_count"] == 1
+    assert "client-script-sys-id" not in str(analysis)
+    assert "secret-value" not in str(analysis)
+    assert "code_surface_analysis:first" in candidate["eligibility_reasons"]
+
+
+def test_model_candidate_handler_runs_script_include_analysis_without_target_table() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010114",
+            short_description="Analyze AssignmentUtils Script Include",
+            description=(
+                "Analyze the AssignmentUtils Script Include to determine whether "
+                "shared assignment helper logic already exists."
+            ),
+            acceptance_criteria="Existing Script Includes are retrieved for review.",
+            story_points=2,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010114"}))
+
+    assert provider.payloads == []
+    assert client.imports == []
+    context_bundle = result.artifacts[0].payload_json
+    analysis = result.artifacts[1].payload_json
+    candidate = result.artifacts[3].payload_json
+    assert context_bundle is not None
+    assert analysis is not None
+    assert candidate is not None
+    assert context_bundle["target_table"] == "global"
+    assert context_bundle["required_surfaces"] == ["script_includes"]
+    assert analysis["capability"] == "script_include_analyze"
+    assert analysis["surface"] == "script_includes"
+    assert analysis["source_table"] == "sys_script_include"
+    assert analysis["target_table"] == "global"
+    assert analysis["existing_record_count"] == 1
+    assert "script-include-sys-id" not in str(analysis)
+    assert "secret-value" not in str(analysis)
+    assert "code_surface_analysis:first" in candidate["eligibility_reasons"]
 
 
 def test_model_fulfillment_writes_needs_clarification_feedback() -> None:

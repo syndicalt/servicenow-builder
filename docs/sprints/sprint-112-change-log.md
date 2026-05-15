@@ -10,7 +10,7 @@ Business Rule analysis capability: add a read-only profile that can inspect live
 - Extended capability analysis so Business Rule stories route to context analysis instead of unsupported build generation.
 - Added target-table extraction and required context tracking for Business Rule analysis.
 - Reused ServiceNow surface discovery to retrieve the target table and `sys_script` records.
-- Added a `business-rule-analysis-v1` artifact with existing rule count, redacted rule summaries, unsupported cases, and context sufficiency.
+- Added a code surface analysis artifact with existing rule count, redacted rule summaries, unsupported cases, and context sufficiency. Sprint 113 generalized this into `code-surface-analysis-v1`.
 - Skipped model invocation for Business Rule analysis stories.
 - Skipped retrieved Update Set handoff for Business Rule analysis stories.
 - Wrote human-review work-note feedback through the existing manual review path.

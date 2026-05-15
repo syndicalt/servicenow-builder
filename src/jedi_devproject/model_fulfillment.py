@@ -4,7 +4,7 @@ from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from jedi_devproject.capabilities import Capability, SuitabilityOutcome
+from jedi_devproject.capabilities import Capability, SuitabilityOutcome, capability_profile
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.enrichment import enrich_story
 from jedi_devproject.fulfillment_worker import (
@@ -104,7 +104,7 @@ def model_candidate_fulfillment_handler(
             policy=config.policy,
             provider=config.provider,
         )
-        business_rule_analysis = _business_rule_analysis_artifact(
+        code_surface_analysis = _code_surface_analysis_artifact(
             packet=packet,
             surface_context_bundle=surface_context_bundle,
         )
@@ -126,12 +126,12 @@ def model_candidate_fulfillment_handler(
                 *(
                     [
                         FulfillmentArtifactRef(
-                            artifact_kind="business_rule_analysis",
-                            schema_version="business-rule-analysis-v1",
-                            payload_json=business_rule_analysis,
+                            artifact_kind="code_surface_analysis",
+                            schema_version="code-surface-analysis-v1",
+                            payload_json=code_surface_analysis,
                         )
                     ]
-                    if business_rule_analysis is not None
+                    if code_surface_analysis is not None
                     else []
                 ),
                 FulfillmentArtifactRef(
@@ -192,29 +192,40 @@ def _surface_context_for_story(
     )
 
 
-def _business_rule_analysis_artifact(
+CODE_SURFACE_MAP: dict[Capability, tuple[SurfaceName, str]] = {
+    Capability.BUSINESS_RULE_ANALYZE: ("business_rules", "sys_script"),
+    Capability.CLIENT_SCRIPT_ANALYZE: ("client_scripts", "sys_script_client"),
+    Capability.SCRIPT_INCLUDE_ANALYZE: ("script_includes", "sys_script_include"),
+}
+
+
+def _code_surface_analysis_artifact(
     *,
     packet: Any,
     surface_context_bundle: ServiceNowSurfaceContextBundle | None,
 ) -> dict[str, Any] | None:
     if packet.safety_decision != SuitabilityOutcome.CONTEXT_ANALYSIS.value:
         return None
-    if Capability.BUSINESS_RULE_ANALYZE.value not in packet.capability_assessment.get(
-        "capabilities", []
-    ):
+    capability = _code_surface_capability(packet)
+    if capability is None:
         return None
-    business_rules = None
+    surface_name, source_table = CODE_SURFACE_MAP[capability]
+    code_surface = None
     if surface_context_bundle is not None:
-        business_rules = surface_context_bundle.surface("business_rules")
-    records = business_rules.records if business_rules is not None else []
+        code_surface = surface_context_bundle.surface(surface_name)
+    records = code_surface.records if code_surface is not None else []
+    profile = capability_profile(capability)
     return {
-        "schema_version": "business-rule-analysis-v1",
+        "schema_version": "code-surface-analysis-v1",
         "story_number": packet.story.number,
+        "capability": capability.value,
+        "surface": surface_name,
+        "source_table": source_table,
         "target_table": (
             surface_context_bundle.target_table if surface_context_bundle is not None else "unknown"
         ),
-        "existing_rule_count": len(records),
-        "existing_rules": [
+        "existing_record_count": len(records),
+        "existing_records": [
             {
                 "name": record.name,
                 "active": record.active,
@@ -224,12 +235,20 @@ def _business_rule_analysis_artifact(
             for record in records
         ],
         "supported_generation": False,
-        "unsupported_cases": ["business_rule_generation_not_enabled"],
+        "unsupported_cases": profile.unsupported_cases,
         "required_instance_context": packet.capability_assessment.get(
             "required_instance_context", []
         ),
         "context_sufficiency": packet.context_sufficiency,
     }
+
+
+def _code_surface_capability(packet: Any) -> Capability | None:
+    capabilities = set(packet.capability_assessment.get("capabilities", []))
+    for capability in CODE_SURFACE_MAP:
+        if capability.value in capabilities:
+            return capability
+    return None
 
 
 def _public_doc_queries(story_text: str) -> list[str]:
@@ -303,8 +322,8 @@ def _manual_feedback_fields(
     else:
         status = "Human Review Required"
     lead = (
-        f"Business Rule analysis completed for {story_number}; it did not create a "
-        if "business_rule_analysis:first" in candidate.eligibility_reasons
+        f"Code surface analysis completed for {story_number}; it did not create a "
+        if "code_surface_analysis:first" in candidate.eligibility_reasons
         else f"Automated implementation candidate for {story_number} did not create a "
     )
     return {
