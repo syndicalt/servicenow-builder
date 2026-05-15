@@ -51,6 +51,7 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 30 | Sprint 131 | Flow snapshot update strategy | Flow mutation needs explicit snapshot evidence rules before any customer update builder can touch `sys_hub_flow.latest_snapshot`. | Add `flow-snapshot-update-strategy-v1`, require retrieved `latest_snapshot` evidence, reject unstable snapshot references, reject snapshot table mutation, and keep Flow XML generation disabled. |
 | 31 | Sprint 132 | Flow preview/commit review strategy | Flow mutation needs an explicit human review boundary before retrieved Update Set handoff can ever be enabled. | Add `flow-preview-commit-review-strategy-v1`, require preview before commit, require human commit, reject auto-commit, and keep Flow XML generation and retrieved Update Set handoff disabled. |
 | 32 | Sprint 133 | Flow builder readiness contract | Flow mutation needs one auditable readiness object before any future builder is considered. | Add `flow-builder-readiness-v1`, aggregate required evidence, report `missing_evidence`, keep runtime generation and retrieved Update Set handoff disabled, and keep blocked reason `Flow Designer builder is not implemented`. |
+| 33 | Sprint 134 | Flow builder plan readiness wiring | Flow preflight consumers should not be able to ignore the readiness contract. | Add readiness contract version, missing evidence, disabled readiness flags, and blocked reason to Flow builder preflight plans; keep Flow XML generation and retrieved Update Set handoff disabled. |
 
 ## Review Gates
 
@@ -118,5 +119,6 @@ Review for:
 30. Sprint 131: Flow snapshot update strategy.
 31. Sprint 132: Flow preview/commit review strategy.
 32. Sprint 133: Flow builder readiness contract.
+33. Sprint 134: Flow builder plan readiness wiring.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

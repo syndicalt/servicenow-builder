@@ -281,6 +281,11 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
     assert plan.preview_commit_review_strategy_version == (
         "flow-preview-commit-review-strategy-v1"
     )
+    assert plan.readiness_contract_version == "flow-builder-readiness-v1"
+    assert plan.ready_for_runtime_generation is False
+    assert plan.ready_for_retrieved_update_set_handoff is False
+    assert plan.readiness_blocked_reason == "Flow Designer builder is not implemented"
+    assert plan.missing_builder_evidence == []
     assert "rollback_customer_update_strategy_defined" in plan.required_builder_evidence
 
 

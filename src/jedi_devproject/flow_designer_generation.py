@@ -96,6 +96,11 @@ class FlowGraphBuilderPlan(BaseModel):
     customer_update_strategy_version: str
     snapshot_update_strategy_version: str
     preview_commit_review_strategy_version: str
+    readiness_contract_version: str
+    ready_for_runtime_generation: bool
+    ready_for_retrieved_update_set_handoff: bool
+    readiness_blocked_reason: str
+    missing_builder_evidence: list[str]
 
 
 class FlowXmlShape(BaseModel):
@@ -256,6 +261,7 @@ def plan_flow_graph_builder(
     strategy = flow_customer_update_strategy()
     snapshot_strategy = flow_snapshot_update_strategy()
     review_strategy = flow_preview_commit_review_strategy()
+    readiness = flow_builder_readiness_contract()
     return FlowGraphBuilderPlan(
         capability=intent.capability,
         flow_name=intent.flow_name,
@@ -291,6 +297,11 @@ def plan_flow_graph_builder(
         customer_update_strategy_version=strategy.version,
         snapshot_update_strategy_version=snapshot_strategy.version,
         preview_commit_review_strategy_version=review_strategy.version,
+        readiness_contract_version=readiness.version,
+        ready_for_runtime_generation=readiness.ready_for_runtime_generation,
+        ready_for_retrieved_update_set_handoff=readiness.ready_for_retrieved_update_set_handoff,
+        readiness_blocked_reason=readiness.blocked_reason,
+        missing_builder_evidence=readiness.missing_evidence,
     )
 
 

@@ -32,6 +32,8 @@ Sprint 132 adds the Flow preview/commit review strategy `flow-preview-commit-rev
 
 Sprint 133 adds the Flow builder readiness contract `flow-builder-readiness-v1`. The contract aggregates the required graph, XML shape, customer update naming, snapshot, rollback, and preview/commit evidence into one auditable readiness object with `missing_evidence`. The contract still reports `Flow Designer builder is not implemented`; it is not permission to generate XML.
 
+Sprint 134 adds Flow builder plan readiness wiring. The builder preflight plan now carries `readiness_contract_version`, `missing_builder_evidence`, `ready_for_runtime_generation=false`, `ready_for_retrieved_update_set_handoff=false`, and the readiness blocked reason. This is still no Flow XML builder and no retrieved Update Set handoff; it only makes readiness unavoidable for preflight consumers.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -152,6 +154,14 @@ The Flow builder readiness contract records:
 - `ready_for_runtime_generation=false`.
 - `ready_for_retrieved_update_set_handoff=false`.
 - blocked reason `Flow Designer builder is not implemented`.
+
+Flow builder plan readiness wiring records:
+
+- `readiness_contract_version` on each builder plan.
+- `missing_builder_evidence` on each builder plan.
+- `ready_for_runtime_generation=false`.
+- `ready_for_retrieved_update_set_handoff=false`.
+- readiness blocked reason on each builder plan.
 
 ## Deterministic Validators
 
