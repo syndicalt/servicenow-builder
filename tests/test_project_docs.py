@@ -857,6 +857,56 @@ def test_sprint_one_hundred_sixteen_change_log_documents_business_rule_generatio
     assert "forbidden Business Rule script" in change_log
 
 
+def test_client_script_generation_profile_adr_documents_mutation_boundary() -> None:
+    adr = Path("docs/adr/0008-client-script-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ADR 0008: Client Script Generation Profile" in adr
+    assert "client_script_generate" in adr
+    assert "sys_script_client" in adr
+    assert "g_form" in adr
+    assert "onLoad" in adr
+    assert "onChange" in adr
+    assert "onSubmit" in adr
+    assert "No runtime generation is enabled" in adr
+    assert "forbidden cases" in adr
+    assert "deterministic validators" in adr
+    assert "UAT story shape" in adr
+
+
+def test_operator_guide_documents_client_script_generation_profile_design() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Client Script Generation Profile Design" in guide
+    assert "client_script_generate" in guide
+    assert "sys_script_client" in guide
+    assert "g_form" in guide
+    assert "No runtime generation is enabled for Client Scripts" in guide
+    assert "DOM manipulation outside g_form APIs" in guide
+    assert "GlideAjax dependency creation" in guide
+
+
+def test_sprint_one_hundred_seventeen_change_log_documents_client_script_design() -> None:
+    change_log = Path("docs/sprints/sprint-117-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 117 Change Log" in change_log
+    assert "Client Script generation profile design" in change_log
+    assert "ADR 0008" in change_log
+    assert "client_script_generate" in change_log
+    assert "sys_script_client" in change_log
+    assert "No runtime generation is enabled" in change_log
+
+
+def test_production_backlog_moves_client_script_generation_after_design() -> None:
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "Sprint 117 | Client Script generation profile design" in backlog
+    assert "Sprint 118 | Client Script generation implementation" in backlog
+    assert "ADR 0008" in backlog
+    assert "client_script_generate" in backlog
+
+
 def test_admin_auth_config_documents_oidc_and_servicenow_oauth() -> None:
     config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 

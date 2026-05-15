@@ -277,9 +277,9 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.CLIENT_SCRIPT_GENERATE: _generation_profile(
         capability=Capability.CLIENT_SCRIPT_GENERATE,
-        status="planned",
+        status="designed",
         supported_artifact="sys_script_client",
-        required_instance_context=["table_schema", "client_scripts", "code_surface_analysis"],
+        required_instance_context=["table_schema", "client_scripts"],
         researcher="code_surface_researcher",
         build_pipeline="client_script_update_set_pipeline",
         unsupported_cases=[

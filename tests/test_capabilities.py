@@ -125,3 +125,16 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
     assert all(profile.target_max_story_points == 5 for profile in profiles)
     assert all(profile.researcher for profile in profiles)
     assert all(profile.build_pipeline for profile in profiles)
+
+
+def test_client_script_generation_profile_is_designed_but_not_enabled() -> None:
+    profile = capability_profile(Capability.CLIENT_SCRIPT_GENERATE)
+
+    assert profile.status == "designed"
+    assert profile.current_max_story_points == 0
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == ["sys_script_client"]
+    assert profile.required_instance_context == ["table_schema", "client_scripts"]
+    assert profile.creates_update_set is True
+    assert "DOM manipulation outside g_form APIs" in profile.unsupported_cases
+    assert "GlideAjax dependency creation" in profile.unsupported_cases
