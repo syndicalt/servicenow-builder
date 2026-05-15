@@ -131,5 +131,6 @@ Review for:
 37. Sprint 138: Flow preflight guidance work note.
 38. Sprint 139: Supported artifact UAT hardening.
 39. Sprint 140: Sys_id-backed lifecycle lookup.
+40. Sprint 141: Supported artifact UAT parser hardening.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.

@@ -86,11 +86,13 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
         action_insert=(
             _bool_value(fields.get("action_insert"))
             or _bool_value(fields.get("insert"))
+            or _bool_value(fields.get("operation_insert"))
             or _operation_mentions(operation_text, "insert")
         ),
         action_update=(
             _bool_value(fields.get("action_update"))
             or _bool_value(fields.get("update"))
+            or _bool_value(fields.get("operation_update"))
             or _operation_mentions(operation_text, "update")
         ),
         filter_condition=str(fields.get("filter_condition") or fields.get("condition") or ""),

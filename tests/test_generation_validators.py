@@ -578,8 +578,10 @@ def test_business_rule_validator_normalizes_model_operation_and_field_aliases() 
             _business_rule_change(
                 action_insert=False,
                 action_update=False,
-                insert=True,
-                update=True,
+                operation_insert=True,
+                operation_update=True,
+                insert=False,
+                update=False,
                 script="",
                 action_script="current.short_description = 'Inquiry needs triage';",
                 fields_read=[],

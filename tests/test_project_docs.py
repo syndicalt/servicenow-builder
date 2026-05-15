@@ -2415,3 +2415,14 @@ def test_sprint_one_forty_change_log_documents_sys_id_lifecycle_lookup() -> None
     assert "current.getUniqueValue()" in change_log
     assert "Failure writeback" in change_log
     assert "Sprint 140: Sys_id-backed lifecycle lookup" in backlog
+
+
+def test_sprint_one_forty_one_change_log_documents_parser_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-141-change-log.md").read_text(encoding="utf-8")
+    backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
+
+    assert "negative safety instructions" in change_log
+    assert "operation_insert" in change_log
+    assert "Script Include stories" in change_log
+    assert "supported-artifact UAT matrix" in change_log
+    assert "Sprint 141: Supported artifact UAT parser hardening" in backlog
