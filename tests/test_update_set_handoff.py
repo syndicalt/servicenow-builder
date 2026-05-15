@@ -980,6 +980,43 @@ def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> Non
     assert client.imports == []
 
 
+def test_create_update_set_handoff_rejects_flow_graph_diff_until_builder_exists() -> None:
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_hub_flow_graph_diff",
+                    operation="update",
+                    fields={
+                        "capability": "flow_modify",
+                        "flow_name": "Incident Triage",
+                    },
+                    rationale="Validation-only Flow graph diff.",
+                )
+            ]
+        }
+    )
+
+    try:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010126",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/126",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+    except ValueError as exc:
+        assert "unsupported retrieved Update Set table: sys_hub_flow_graph_diff" in str(exc)
+    else:
+        raise AssertionError("Flow graph diff was accepted for Update Set handoff")
+
+    assert client.imports == []
+
+
 def test_create_update_set_handoff_rejects_non_reviewable_candidate() -> None:
     client = FakeUpdateSetClient()
     candidate = _candidate().model_copy(update={"status": CandidateStatus.REJECTED})

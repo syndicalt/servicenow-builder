@@ -1141,11 +1141,40 @@ def test_sprint_125_change_log_documents_flow_graph_retrieval_hardening() -> Non
     assert "No runtime generation is enabled" in change_log
 
 
+def test_flow_designer_docs_document_graph_diff_validation_only() -> None:
+    adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(
+        encoding="utf-8"
+    )
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    for text in [adr, guide]:
+        assert "sys_hub_flow_graph_diff" in text
+        assert "add_action" in text
+        assert "update_condition" in text
+        assert "validation-only" in text
+        assert "raw XML" in text
+        assert "unretrieved node" in text
+        assert "No runtime generation is enabled" in text
+
+
+def test_sprint_126_change_log_documents_flow_graph_diff_contract() -> None:
+    change_log = Path("docs/sprints/sprint-126-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 126 Change Log" in change_log
+    assert "Flow graph diff contract" in change_log
+    assert "sys_hub_flow_graph_diff" in change_log
+    assert "add_action" in change_log
+    assert "update_condition" in change_log
+    assert "validation-only" in change_log
+    assert "retrieved Update Set handoff" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
     assert "Sprint 124 | Flow Designer generation profile design" in backlog
     assert "Sprint 125 | Flow graph retrieval hardening" in backlog
+    assert "Sprint 126 | Flow graph diff contract validation" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

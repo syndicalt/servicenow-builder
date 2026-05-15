@@ -16,6 +16,8 @@ Define the future `flow_modify` capability profile. No runtime generation is ena
 
 Sprint 125 adds read-only `flow_graph` retrieval as prerequisite context. This is not a builder and does not mutate Flow Designer records. The context worker retrieves current graph shape from approved ServiceNow metadata tables and fails closed when a required graph cannot be assembled.
 
+Sprint 126 adds a validation-only `sys_hub_flow_graph_diff` contract. This contract lets the system validate a future provider's structured graph diff before any retrieved Update Set builder exists. It does not route Flow Designer output into handoff.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -61,6 +63,11 @@ The future provider output must be a structured graph diff, not raw XML:
 - `rollback_notes`.
 - `reviewer_notes`.
 
+The validation-only pseudo-table is `sys_hub_flow_graph_diff`. Its currently allowed operations are:
+
+- `add_action`.
+- `update_condition`.
+
 The builder converts validated structured graph output into retrieved Update Set XML. The provider must not provide raw `sys_update_xml` as the authoritative artifact.
 
 ## Deterministic Validators
@@ -72,6 +79,8 @@ The `flow_modify` profile must fail closed unless all deterministic validators p
 - flow graph retrieval includes read-only citations for `sys_hub_trigger_instance`, `sys_hub_action_instance`, `sys_hub_flow_logic_instance_v2`, `sys_hub_trigger_input`, `sys_hub_trigger_output`, `sys_hub_action_input`, and `sys_hub_action_output`.
 - runtime execution history records are excluded from mutation.
 - graph diff references only retrieved nodes and edges.
+- graph diff validation rejects any unretrieved node reference.
+- graph diff validation rejects raw XML and raw `sys_update_xml`.
 - generated diff is additive or narrowly edits an allowed condition.
 - generated output has no custom action, credential, script, REST, SOAP, spoke, subflow, or approval orchestration changes.
 - generated customer updates reference only intended Flow Designer records.

@@ -353,6 +353,8 @@ The future supported subset is one active record-triggered flow at a time, one t
 
 Required `flow_graph` retrieval fails closed when the target flow list is missing or when a flow has no trigger or action graph records. Runtime history tables remain excluded from the context worker and from any future mutation boundary.
 
+Sprint 126 adds validation-only graph diff support for the pseudo-table `sys_hub_flow_graph_diff`. The only currently allowed diff operations are `add_action` and `update_condition`. The validator rejects raw XML, raw `sys_update_xml`, unretrieved node references, scripts, custom actions, spokes, credentials, tokens, subflows, approvals, and broad graph rewrites. No runtime generation is enabled and `sys_hub_flow_graph_diff` is not accepted by retrieved Update Set handoff.
+
 Unsupported behavior includes graph rewrites, custom actions, spokes and integrations, credentials, secrets, tokens, API keys, subflows, approval orchestration, script steps, data migration, runtime execution history mutation, and direct mutation of Flow runtime state outside reviewed customer updates.
 
 ### Code Surface Analysis Capability

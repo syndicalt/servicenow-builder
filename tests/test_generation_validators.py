@@ -4,6 +4,7 @@ import pytest
 
 from jedi_devproject.business_rule_generation import business_rule_customer_updates
 from jedi_devproject.client_script_generation import client_script_customer_updates
+from jedi_devproject.flow_designer_generation import validate_flow_graph_diff_candidate
 from jedi_devproject.models import CandidateChange
 from jedi_devproject.script_include_generation import script_include_customer_updates
 from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
@@ -127,6 +128,117 @@ def _ui_policy_action_change(**field_overrides: object) -> CandidateChange:
         fields=fields,
         rationale="Make Assignment group mandatory and visible.",
     )
+
+
+def _flow_graph_diff_change(**field_overrides: object) -> CandidateChange:
+    fields: dict[str, object] = {
+        "capability": "flow_modify",
+        "flow_name": "Incident Triage",
+        "flow_sys_id_or_stable_key": "flow-sys-id",
+        "target_table": "incident",
+        "trigger_summary": "When Incident category is Software",
+        "existing_graph_hash": "a" * 64,
+        "requested_graph_diff": [
+            {
+                "operation": "add_action",
+                "node_id": "new-action-node",
+                "after_node_id": "trigger-sys-id",
+                "action_type": "set_field_value",
+                "summary": "Set assignment group to Service Desk",
+                "inputs": {"field": "assignment_group", "value": "Service Desk"},
+            }
+        ],
+        "affected_nodes": ["trigger-sys-id"],
+        "affected_edges": ["trigger-sys-id:new-action-node"],
+        "customer_update_records": [],
+        "test_plan": ["Create a Software incident and confirm assignment group is set."],
+        "rollback_notes": ["Remove the added Flow Designer action."],
+        "reviewer_notes": ["Graph diff only; no Update Set XML generated in this sprint."],
+    }
+    fields.update(field_overrides)
+    return CandidateChange(
+        table="sys_hub_flow_graph_diff",
+        operation="update",
+        fields=fields,
+        rationale="Describe a narrow Flow Designer graph diff.",
+    )
+
+
+def _retrieved_flow_nodes() -> set[str]:
+    return {"flow-sys-id", "trigger-sys-id", "action-sys-id", "logic-sys-id"}
+
+
+def test_flow_graph_diff_validator_accepts_narrow_add_action_diff() -> None:
+    intent = validate_flow_graph_diff_candidate(
+        changes=[_flow_graph_diff_change()],
+        retrieved_node_ids=_retrieved_flow_nodes(),
+    )
+
+    assert intent.capability == "flow_modify"
+    assert intent.flow_name == "Incident Triage"
+    assert intent.target_table == "incident"
+    assert intent.requested_graph_diff[0].operation == "add_action"
+    assert intent.customer_update_records == []
+
+
+def test_flow_graph_diff_validator_rejects_raw_update_xml() -> None:
+    with pytest.raises(ValueError, match="Flow graph diff must not include raw XML"):
+        validate_flow_graph_diff_candidate(
+            changes=[
+                _flow_graph_diff_change(
+                    customer_update_records=[
+                        {"name": "sys_hub_action_instance_bad", "payload": "<record_update/>"}
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+
+def test_flow_graph_diff_validator_rejects_unretrieved_affected_node() -> None:
+    with pytest.raises(ValueError, match="Flow graph diff references unretrieved node"):
+        validate_flow_graph_diff_candidate(
+            changes=[_flow_graph_diff_change(affected_nodes=["unknown-node"])],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+
+def test_flow_graph_diff_validator_rejects_unsupported_graph_rewrite() -> None:
+    with pytest.raises(ValueError, match="unsupported Flow graph diff operation"):
+        validate_flow_graph_diff_candidate(
+            changes=[
+                _flow_graph_diff_change(
+                    requested_graph_diff=[
+                        {
+                            "operation": "rewrite_graph",
+                            "node_id": "trigger-sys-id",
+                            "summary": "Replace the full flow graph",
+                        }
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+
+def test_flow_graph_diff_validator_rejects_forbidden_flow_tokens() -> None:
+    with pytest.raises(ValueError, match="forbidden Flow graph diff token"):
+        validate_flow_graph_diff_candidate(
+            changes=[
+                _flow_graph_diff_change(
+                    requested_graph_diff=[
+                        {
+                            "operation": "add_action",
+                            "node_id": "new-action-node",
+                            "after_node_id": "trigger-sys-id",
+                            "action_type": "custom REST credential step",
+                            "summary": "Call https://example.invalid with a token",
+                        }
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
 
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:
