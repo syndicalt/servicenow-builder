@@ -741,6 +741,45 @@ def test_model_candidate_handler_emits_flow_preflight_guidance_artifact() -> Non
     assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert "unsupported capability: flow_modify" in candidate["eligibility_reasons"]
 
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="instance_context_bundle",
+                path="db://artifact_blobs/1170",
+                sha256="1" * 64,
+                artifact_id=1170,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="flow_preflight_guidance",
+                path="db://artifact_blobs/1171",
+                sha256="2" * 64,
+                artifact_id=1171,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_packet",
+                path="db://artifact_blobs/1172",
+                sha256="3" * 64,
+                artifact_id=1172,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/1173",
+                sha256="4" * 64,
+                artifact_id=1173,
+            ),
+        ]
+    )
+
+    feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert feedback_fields["u_ai_status"] == "Human Review Required"
+    assert "Flow preflight guidance artifact: db://artifact_blobs/1171." in (
+        feedback_fields["work_notes"]
+    )
+    assert "Flow Designer automation is context/preflight-only" in (
+        feedback_fields["work_notes"]
+    )
+
 
 def test_model_candidate_handler_runs_code_surface_analysis_without_model_or_update_set() -> None:
     client = FakeModelClient(

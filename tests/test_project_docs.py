@@ -1443,6 +1443,26 @@ def test_sprint_137_change_log_documents_flow_preflight_guidance_artifact() -> N
     assert "no Flow XML builder" in change_log
 
 
+def test_flow_designer_docs_document_preflight_guidance_work_note() -> None:
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "Flow preflight guidance work note" in guide
+    assert "Flow preflight guidance artifact" in guide
+    assert "Human Review Required" in guide
+    assert "route_to_human_review" in guide
+    assert "no retrieved Update Set" in guide
+
+
+def test_sprint_138_change_log_documents_flow_preflight_guidance_work_note() -> None:
+    change_log = Path("docs/sprints/sprint-138-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 138 Change Log" in change_log
+    assert "Flow preflight guidance work note" in change_log
+    assert "flow_preflight_guidance" in change_log
+    assert "Human Review Required" in change_log
+    assert "no Flow XML builder" in change_log
+
+
 def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> None:
     backlog = Path("docs/production-hardening-backlog.md").read_text(encoding="utf-8")
 
@@ -1460,6 +1480,7 @@ def test_production_backlog_moves_flow_designer_after_ui_policy_generation() -> 
     assert "Sprint 135 | Flow unsupported reason codes" in backlog
     assert "Sprint 136 | Flow unsupported reason guidance" in backlog
     assert "Sprint 137 | Flow preflight guidance artifact" in backlog
+    assert "Sprint 138 | Flow preflight guidance work note" in backlog
     assert "ADR 0011" in backlog
     assert "flow_modify" in backlog
 

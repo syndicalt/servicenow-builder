@@ -164,6 +164,10 @@ def model_candidate_fulfillment_handler(
                 story_number=job.story_number,
                 candidate=candidate,
                 candidate_artifact_ref=_candidate_artifact_ref(artifacts),
+                flow_preflight_guidance_ref=_artifact_ref(
+                    artifacts,
+                    artifact_kind="flow_preflight_guidance",
+                ),
                 instance_url=config.instance_url,
                 apply_update_set_changes=config.apply_update_set_changes,
                 update_set_user_name=config.update_set_user_name,
@@ -302,6 +306,7 @@ def _create_handoff_after_persist(
     story_number: str,
     candidate: Any,
     candidate_artifact_ref: str,
+    flow_preflight_guidance_ref: str | None,
     instance_url: str,
     apply_update_set_changes: bool,
     update_set_user_name: str | None,
@@ -314,6 +319,7 @@ def _create_handoff_after_persist(
             story_number=story_number,
             candidate=candidate,
             candidate_artifact_ref=candidate_artifact_ref,
+            flow_preflight_guidance_ref=flow_preflight_guidance_ref,
         )
         return
 
@@ -336,6 +342,7 @@ def _write_manual_review_required(
     story_number: str,
     candidate: UpdateSetCandidate,
     candidate_artifact_ref: str,
+    flow_preflight_guidance_ref: str | None,
 ) -> None:
     client.update_story_fields(
         story_sys_id,
@@ -343,6 +350,7 @@ def _write_manual_review_required(
             story_number=story_number,
             candidate=candidate,
             candidate_artifact_ref=candidate_artifact_ref,
+            flow_preflight_guidance_ref=flow_preflight_guidance_ref,
         ),
     )
 
@@ -352,6 +360,7 @@ def _manual_feedback_fields(
     story_number: str,
     candidate: UpdateSetCandidate,
     candidate_artifact_ref: str,
+    flow_preflight_guidance_ref: str | None = None,
 ) -> dict[str, object]:
     reasons = _candidate_reasons(candidate)
     if any(reason.startswith("missing detail:") for reason in candidate.eligibility_reasons):
@@ -369,10 +378,29 @@ def _manual_feedback_fields(
             f"{lead}"
             "retrieved Update Set. "
             f"Candidate artifact: {candidate_artifact_ref}. "
+            f"{_flow_preflight_guidance_note(candidate, flow_preflight_guidance_ref)}"
             f"{_missing_context_note(candidate)}"
             f"Reasons: {reasons}."
         ),
     }
+
+
+def _flow_preflight_guidance_note(
+    candidate: UpdateSetCandidate,
+    flow_preflight_guidance_ref: str | None,
+) -> str:
+    if flow_preflight_guidance_ref is None:
+        return ""
+    if "unsupported capability: flow_modify" not in candidate.eligibility_reasons:
+        return ""
+    readiness = flow_builder_readiness_contract()
+    work_notes = " ".join(
+        guidance.work_note for guidance in readiness.unsupported_reason_guidance
+    )
+    return (
+        f"Flow preflight guidance artifact: {flow_preflight_guidance_ref}. "
+        f"{work_notes} "
+    )
 
 
 def _missing_context_note(candidate: UpdateSetCandidate) -> str:
@@ -397,3 +425,10 @@ def _candidate_artifact_ref(artifacts: list[Any]) -> str:
         if artifact.artifact_kind == "implementation_candidate":
             return str(artifact.path)
     raise RuntimeError("implementation candidate artifact was not persisted")
+
+
+def _artifact_ref(artifacts: list[Any], *, artifact_kind: str) -> str | None:
+    for artifact in artifacts:
+        if artifact.artifact_kind == artifact_kind:
+            return str(artifact.path)
+    return None

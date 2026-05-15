@@ -55,6 +55,7 @@ Post-101 work is production hardening. The rule for this phase is **No new mutat
 | 34 | Sprint 135 | Flow unsupported reason codes | Flow orchestration should not parse human blocker text to route unsupported work. | Add `unsupported_reason_codes` to the readiness contract and builder preflight plan; include `flow_builder_not_implemented`, `runtime_generation_disabled`, and `retrieved_update_set_handoff_disabled`; keep Flow XML generation and handoff disabled. |
 | 35 | Sprint 136 | Flow unsupported reason guidance | Operators need stable next-step guidance for unsupported Flow work without duplicating prose across worker and admin surfaces. | Add `unsupported_reason_guidance` with stable summaries, `route_to_human_review`, and ServiceNow work note text for every unsupported reason code; keep Flow XML generation and handoff disabled. |
 | 36 | Sprint 137 | Flow preflight guidance artifact | Flow guidance should be available in persisted fulfillment evidence, not only validator module metadata. | Add a `flow_preflight_guidance` artifact with schema `flow-preflight-guidance-v1`, disabled readiness flags, unsupported reason codes, and `route_to_human_review` guidance whenever runtime sees `flow_modify`; keep Flow XML generation and handoff disabled. |
+| 37 | Sprint 138 | Flow preflight guidance work note | ServiceNow users need actionable Flow routing feedback without opening the DB artifact store first. | Include the `flow_preflight_guidance` artifact reference and readiness-contract work-note guidance in manual-review ServiceNow work notes for unsupported `flow_modify`; keep Flow XML generation and handoff disabled. |
 
 ## Review Gates
 
@@ -126,5 +127,6 @@ Review for:
 34. Sprint 135: Flow unsupported reason codes.
 35. Sprint 136: Flow unsupported reason guidance.
 36. Sprint 137: Flow preflight guidance artifact.
+37. Sprint 138: Flow preflight guidance work note.
 
 The later slop/security review should not wait for every future feature. It should run once the authentication boundary, webhook boundary, and context retrieval boundary are hardened enough that findings are about production quality rather than known MVP gaps.
