@@ -285,6 +285,11 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
     assert plan.ready_for_runtime_generation is False
     assert plan.ready_for_retrieved_update_set_handoff is False
     assert plan.readiness_blocked_reason == "Flow Designer builder is not implemented"
+    assert plan.unsupported_reason_codes == [
+        "flow_builder_not_implemented",
+        "runtime_generation_disabled",
+        "retrieved_update_set_handoff_disabled",
+    ]
     assert plan.missing_builder_evidence == []
     assert "rollback_customer_update_strategy_defined" in plan.required_builder_evidence
 
@@ -510,6 +515,11 @@ def test_flow_builder_readiness_contract_reports_all_required_evidence() -> None
     assert readiness.ready_for_runtime_generation is False
     assert readiness.ready_for_retrieved_update_set_handoff is False
     assert readiness.blocked_reason == "Flow Designer builder is not implemented"
+    assert readiness.unsupported_reason_codes == [
+        "flow_builder_not_implemented",
+        "runtime_generation_disabled",
+        "retrieved_update_set_handoff_disabled",
+    ]
     assert readiness.required_evidence == [
         "retrieved_graph_hash_matches_existing_graph_hash",
         "diff_references_only_retrieved_nodes",

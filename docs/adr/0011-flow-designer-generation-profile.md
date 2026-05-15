@@ -34,6 +34,8 @@ Sprint 133 adds the Flow builder readiness contract `flow-builder-readiness-v1`.
 
 Sprint 134 adds Flow builder plan readiness wiring. The builder preflight plan now carries `readiness_contract_version`, `missing_builder_evidence`, `ready_for_runtime_generation=false`, `ready_for_retrieved_update_set_handoff=false`, and the readiness blocked reason. This is still no Flow XML builder and no retrieved Update Set handoff; it only makes readiness unavoidable for preflight consumers.
 
+Sprint 135 adds Flow unsupported reason codes. The readiness contract and builder preflight plan now expose `unsupported_reason_codes` so callers can route unsupported Flow work without parsing human-readable blocker text. Current codes are `flow_builder_not_implemented`, `runtime_generation_disabled`, and `retrieved_update_set_handoff_disabled`.
+
 The first supported subset should be limited to:
 
 - modifying one active flow at a time.
@@ -162,6 +164,14 @@ Flow builder plan readiness wiring records:
 - `ready_for_runtime_generation=false`.
 - `ready_for_retrieved_update_set_handoff=false`.
 - readiness blocked reason on each builder plan.
+
+Flow unsupported reason codes record:
+
+- `unsupported_reason_codes` on the readiness contract.
+- `unsupported_reason_codes` on each builder plan.
+- `flow_builder_not_implemented`.
+- `runtime_generation_disabled`.
+- `retrieved_update_set_handoff_disabled`.
 
 ## Deterministic Validators
 

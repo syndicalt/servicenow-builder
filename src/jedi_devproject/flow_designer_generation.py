@@ -100,6 +100,7 @@ class FlowGraphBuilderPlan(BaseModel):
     ready_for_runtime_generation: bool
     ready_for_retrieved_update_set_handoff: bool
     readiness_blocked_reason: str
+    unsupported_reason_codes: list[str]
     missing_builder_evidence: list[str]
 
 
@@ -219,6 +220,7 @@ class FlowBuilderReadinessContract(BaseModel):
     ready_for_runtime_generation: bool
     ready_for_retrieved_update_set_handoff: bool
     blocked_reason: str
+    unsupported_reason_codes: list[str]
 
 
 def validate_flow_graph_diff_candidate(
@@ -301,6 +303,7 @@ def plan_flow_graph_builder(
         ready_for_runtime_generation=readiness.ready_for_runtime_generation,
         ready_for_retrieved_update_set_handoff=readiness.ready_for_retrieved_update_set_handoff,
         readiness_blocked_reason=readiness.blocked_reason,
+        unsupported_reason_codes=readiness.unsupported_reason_codes,
         missing_builder_evidence=readiness.missing_evidence,
     )
 
@@ -432,6 +435,11 @@ def flow_builder_readiness_contract(
         ready_for_runtime_generation=False,
         ready_for_retrieved_update_set_handoff=False,
         blocked_reason="Flow Designer builder is not implemented",
+        unsupported_reason_codes=[
+            "flow_builder_not_implemented",
+            "runtime_generation_disabled",
+            "retrieved_update_set_handoff_disabled",
+        ],
     )
 
 
