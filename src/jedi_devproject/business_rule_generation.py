@@ -75,7 +75,9 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
     if change.operation != "insert":
         raise ValueError("Business Rule handoff supports insert only")
     fields = dict(change.fields)
-    script = str(fields.get("script") or "")
+    script = str(
+        fields.get("script") or fields.get("action_script") or fields.get("script_body") or ""
+    )
     return BusinessRuleIntent(
         target_table=str(fields.get("collection") or fields.get("table") or ""),
         rule_name=str(fields.get("name") or ""),

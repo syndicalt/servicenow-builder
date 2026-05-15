@@ -580,7 +580,8 @@ def test_business_rule_validator_normalizes_model_operation_and_field_aliases() 
                 action_update=False,
                 insert=True,
                 update=True,
-                script="current.short_description = 'Inquiry needs triage';",
+                script="",
+                action_script="current.short_description = 'Inquiry needs triage';",
                 fields_read=[],
                 fields_written=[],
             )
@@ -592,6 +593,30 @@ def test_business_rule_validator_normalizes_model_operation_and_field_aliases() 
     assert "<action_insert>true</action_insert>" in payload
     assert "<action_update>true</action_update>" in payload
     assert "current.short_description" in payload
+
+
+def test_script_include_validator_infers_public_methods_from_script() -> None:
+    updates = script_include_customer_updates(
+        changes=[
+            _script_include_change(
+                name="JediUatStringUtil",
+                api_name="global.JediUatStringUtil",
+                public_methods=[],
+                script=(
+                    "var JediUatStringUtil = Class.create();\n"
+                    "JediUatStringUtil.prototype = {\n"
+                    "    initialize: function() {},\n"
+                    "    normalizeText: function(value) { return ''; },\n"
+                    "    type: 'JediUatStringUtil'\n"
+                    "};"
+                ),
+            )
+        ],
+        remote_update_set_sys_id="remote-update-set-sys-id",
+    )
+
+    assert updates[0]["target_name"] == "JediUatStringUtil"
+    assert "normalizeText" in updates[0]["payload"]
 
 
 def test_client_script_validator_rejects_undeclared_clear_value_write() -> None:
@@ -627,7 +652,16 @@ def test_script_include_validator_rejects_non_global_scope_until_scoped_xml_is_s
 
 
 def test_script_include_validator_requires_public_methods() -> None:
-    change = _script_include_change(public_methods=[])
+    change = _script_include_change(
+        public_methods=[],
+        script=(
+            "var JediIncidentUtils = Class.create();\n"
+            "JediIncidentUtils.prototype = {\n"
+            "    initialize: function() {},\n"
+            "    type: 'JediIncidentUtils'\n"
+            "};"
+        ),
+    )
 
     with pytest.raises(
         ValueError,

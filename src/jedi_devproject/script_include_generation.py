@@ -78,6 +78,7 @@ def _script_include_intent(change: CandidateChange) -> ScriptIncludeIntent:
     if change.operation != "insert":
         raise ValueError("Script Include handoff supports insert only")
     fields = dict(change.fields)
+    script = str(fields.get("script") or fields.get("script_body") or "")
     return ScriptIncludeIntent(
         name=str(fields.get("name") or fields.get("script_include_name") or ""),
         api_name=str(fields.get("api_name") or ""),
@@ -85,8 +86,10 @@ def _script_include_intent(change: CandidateChange) -> ScriptIncludeIntent:
         client_callable=_bool_value(fields.get("client_callable")),
         active=_bool_value(fields.get("active"), default=True),
         description=str(fields.get("description") or ""),
-        script=str(fields.get("script") or fields.get("script_body") or ""),
-        public_methods=_string_list(fields.get("public_methods")),
+        script=script,
+        public_methods=(
+            _string_list(fields.get("public_methods")) or _public_methods_from_script(script)
+        ),
         tables_read=_string_list(fields.get("tables_read")),
         tables_written=_string_list(fields.get("tables_written")),
         fields_read=_string_list(fields.get("fields_read")),
@@ -145,6 +148,15 @@ def _validate_script_safety(*, script: str, name: str) -> None:
 def _validate_identifier(value: str) -> None:
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", value) is None:
         raise ValueError("Script Include name must be a valid identifier")
+
+
+def _public_methods_from_script(script: str) -> list[str]:
+    methods = {
+        match
+        for match in re.findall(r"\b([A-Za-z][A-Za-z0-9_]*)\s*:\s*function\s*\(", script)
+        if match not in {"initialize", "type"}
+    }
+    return sorted(methods)
 
 
 def _slug(value: str) -> str:
