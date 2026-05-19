@@ -2440,6 +2440,17 @@ def test_sprint_one_fifty_six_change_log_documents_context_dossier_boundary() ->
     assert "builder maturity is below the automated handoff threshold" in guide
 
 
+def test_sprint_one_fifty_seven_change_log_documents_general_rewrite_feedback() -> None:
+    change_log = Path("docs/sprints/sprint-157-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "general automation feedback" in change_log
+    assert "`suggested_story`" in change_log
+    assert "Suggested rewrite:" in guide
+    assert "capability-agnostic" in guide
+    assert "target artifact type" in guide
+
+
 def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> None:
     change_log = Path("docs/sprints/sprint-93-change-log.md").read_text(encoding="utf-8")
 

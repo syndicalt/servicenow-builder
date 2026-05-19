@@ -930,3 +930,48 @@ def test_structured_form_section_rename_does_not_route_to_removal_pipeline() -> 
     assert assessment.capabilities == {Capability.UNKNOWN}
     assert assessment.unsupported_capabilities == {Capability.UNKNOWN}
     assert "request includes unsupported pipeline capabilities" in assessment.reasons
+
+
+def test_non_automated_story_includes_general_rewrite_guidance() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010111",
+            short_description="Configure CMDB reconciliation rules",
+            description=(
+                "As a ServiceNow Configuration Manager, I want serial number to be "
+                "configured as the primary unique identifier in all reconciliation "
+                "rules so that devices are accurately matched across SCCM, Intune, "
+                "Workspace ONE, Azure Arc, and ServiceNow."
+            ),
+            acceptance_criteria=(
+                "Devices from all discovery sources are matched by serial number."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.UNSUPPORTED_CAPABILITY
+    assert assessment.capabilities == {Capability.UNKNOWN}
+    assert assessment.operator_feedback
+    assert assessment.suggested_story is not None
+    assert "Target artifact type:" in assessment.suggested_story
+    assert "Decision needed:" in assessment.suggested_story
+    assert "Acceptance criteria:" in assessment.suggested_story
+
+
+def test_missing_details_story_suggests_required_story_fields() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            short_description="Add a new field",
+            description="Add a string field named Comments below Description.",
+            acceptance_criteria="The field is visible on the form.",
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
+    assert "target table" in assessment.missing_details
+    assert assessment.operator_feedback == [
+        "Add the missing automation details to the story: target table."
+    ]
+    assert assessment.suggested_story is not None
+    assert "Target table:" in assessment.suggested_story
