@@ -34,6 +34,7 @@ class BootstrapApplyResult(BaseModel):
     applied: bool
     created_fields: list[str]
     updated_writable_fields: list[str] = []
+    platform_readonly_records: list[str] = []
     form_layout_changes: list[str]
     reasons: list[str]
 
@@ -182,6 +183,8 @@ REQUIRED_BOOTSTRAP_FIELDS = [
     ),
 ]
 
+BOOTSTRAP_READONLY_UI_POLICY_NAME = "Jedi DevProject read-only automation metadata"
+
 
 def plan_bootstrap_fields(
     dictionary_fields: list[StoryDictionaryField],
@@ -243,13 +246,47 @@ def apply_bootstrap_fields(
         )
         updated_writable_fields.append(element)
 
+    platform_readonly_records = apply_platform_readonly_policy(client)
+
     return BootstrapApplyResult(
-        applied=bool(created_fields or updated_writable_fields),
+        applied=bool(created_fields or updated_writable_fields or platform_readonly_records),
         created_fields=created_fields,
         updated_writable_fields=updated_writable_fields,
+        platform_readonly_records=platform_readonly_records,
         form_layout_changes=[],
         reasons=[],
     )
+
+
+def apply_platform_readonly_policy(client: BootstrapClient) -> list[str]:
+    script_true = _bootstrap_readonly_ui_policy_script()
+    client.upsert_table_record(
+        table="sys_ui_policy",
+        lookup={
+            "table": BOOTSTRAP_TABLE,
+            "short_description": BOOTSTRAP_READONLY_UI_POLICY_NAME,
+        },
+        fields={
+            "table": BOOTSTRAP_TABLE,
+            "short_description": BOOTSTRAP_READONLY_UI_POLICY_NAME,
+            "active": "true",
+            "global": "true",
+            "on_load": "true",
+            "reverse_if_false": "false",
+            "conditions": "",
+            "run_scripts": "true",
+            "script_true": script_true,
+            "script_false": "function onCondition() {\n}",
+        },
+    )
+    return [f"sys_ui_policy:{BOOTSTRAP_READONLY_UI_POLICY_NAME}"]
+
+
+def _bootstrap_readonly_ui_policy_script() -> str:
+    read_only_lines = "\n".join(
+        f"    g_form.setReadOnly('{field.element}', true);" for field in REQUIRED_BOOTSTRAP_FIELDS
+    )
+    return f"function onCondition() {{\n{read_only_lines}\n}}"
 
 
 def build_lifecycle_business_rule_spec(

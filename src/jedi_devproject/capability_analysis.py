@@ -30,6 +30,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.DICTIONARY_FIELD_CREATE,
     Capability.FIELD_LABEL_CREATE,
     Capability.FORM_LAYOUT_PLACE_FIELD,
+    Capability.FORM_SECTION_REMOVE,
 }
 
 FULL_MATURITY_MAX_AUTOMATED_POINTS = 5
@@ -281,6 +282,22 @@ def analyze_story_capabilities(
             required_instance_context=profile.required_instance_context,
         )
 
+    if Capability.FORM_SECTION_REMOVE in requested:
+        profile = capability_profile(Capability.FORM_SECTION_REMOVE)
+        reasons.append("supported form section removal request")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
+        )
+
     reasons.append("supported low-complexity dictionary/form request")
     return _assessment(
         story=story,
@@ -302,6 +319,7 @@ AUTOMATED_INTENT_REASONS = {
     Capability.SCRIPT_INCLUDE_GENERATE: "supported utility script include generation request",
     Capability.UI_POLICY_GENERATE: "supported declarative ui policy generation request",
     Capability.DICTIONARY_FIELD_CREATE: "supported low-complexity dictionary/form request",
+    Capability.FORM_SECTION_REMOVE: "supported form section removal request",
 }
 
 
@@ -403,6 +421,23 @@ def _assess_automation_intent(
             reasons=reasons,
             missing_details=automation_intent.missing_details,
             unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    if automation_intent.capability is Capability.FORM_SECTION_REMOVE:
+        profile = capability_profile(Capability.FORM_SECTION_REMOVE)
+        reasons.append(AUTOMATED_INTENT_REASONS[Capability.FORM_SECTION_REMOVE])
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
             automation_intent=automation_intent,
         )
 
@@ -553,6 +588,8 @@ def _requested_capabilities(text: str) -> set[Capability]:
                 Capability.FORM_LAYOUT_PLACE_FIELD,
             }
         )
+    if _is_form_section_request(text):
+        capabilities.add(Capability.FORM_SECTION_REMOVE)
     if "acl" in text or "only admins" in text or "only admin" in text:
         capabilities.add(Capability.ACL_MODIFY)
     if "workflow" in text or "flow designer" in text:
@@ -592,6 +629,11 @@ def _missing_details(text: str) -> list[str]:
         missing.append("field label or field name")
     if _is_dictionary_form_request(text) and _field_type(text) is None:
         missing.append("field type")
+    if _is_form_section_request(text):
+        if _target_table(text) is None:
+            missing.append("target table")
+        if not _form_section_names(text):
+            missing.append("sections")
     if _is_business_rule_generation_request(text):
         missing.extend(_missing_business_rule_generation_details(text))
     elif _is_business_rule_request(text) and _target_table(text) is None:
@@ -872,9 +914,49 @@ def _is_dictionary_form_request(text: str) -> bool:
         or "script include" in text
         or "ui policy" in text
         or "ui policies" in text
+        or _is_form_section_request(text)
     ):
         return False
     return ("field" in text or "column" in text) and re.search(r"\bform\b", text) is not None
+
+
+def _is_form_section_request(text: str) -> bool:
+    if _is_client_script_request(text) or "ui policy" in text or "ui policies" in text:
+        return False
+    form_surface = bool(
+        re.search(
+            r"\bform\s+layout\b|\bform\s+sections?\b|\bform\s+tabs?\b|\btabs?\b|\bsections?\b",
+            text,
+        )
+    )
+    removal_action = bool(
+        re.search(
+            r"\bhide\b|\bhidden\b|\bremove\b|\bremoved\b|\bnot\s+display\b|"
+            r"\bwill\s+not\s+display\b|\bdo\s+not\s+display\b",
+            text,
+        )
+    )
+    return form_surface and removal_action
+
+
+def _form_section_names(text: str) -> list[str]:
+    candidates: list[str] = []
+    match = re.search(r"(?:hide|remove|not display|will not display) the (.+?) tabs?", text)
+    if match:
+        candidates.extend(_split_section_labels(match.group(1)))
+    for match in re.finditer(r"\b([a-z][a-z0-9 ]+?) tab\b", text):
+        candidates.extend(_split_section_labels(match.group(1)))
+    return [candidate for candidate in candidates if candidate]
+
+
+def _split_section_labels(raw_value: str) -> list[str]:
+    cleaned = re.sub(r"\b(?:from|on|in) the .*$", "", raw_value).strip(" .:-")
+    labels = re.split(r",|\band\b", cleaned)
+    return [
+        _title_label(label)
+        for label in labels
+        if label.strip() and label.strip().lower() not in {"the", "tabs", "tab"}
+    ]
 
 
 def _field_form_intent(story: Story, text: str) -> FieldFormIntent | None:
@@ -912,6 +994,8 @@ def _target_table(text: str) -> str | None:
         return "incident"
     if "problem" in text:
         return "problem"
+    if "dmn_demand" in text or "demand record" in text or "demand form" in text:
+        return "dmn_demand"
     if "rm_story" in text or "story form" in text or "story table" in text:
         return "rm_story"
     match = re.search(r"table named ([a-zA-Z0-9_]+)", text)

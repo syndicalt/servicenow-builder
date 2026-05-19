@@ -116,6 +116,27 @@ class FakeModelClient:
             ]
         if table == "sys_ui_section":
             target_table = lookup["name"]
+            if target_table == "dmn_demand":
+                return [
+                    {
+                        "sys_id": "dmn_demand-main-section",
+                        "name": target_table,
+                        "caption": "",
+                        "view": {"display_value": "Default view", "value": "default"},
+                    },
+                    {
+                        "sys_id": "dmn_demand-assessment-section",
+                        "name": target_table,
+                        "caption": "Assessment Data",
+                        "view": {"display_value": "Default view", "value": "default"},
+                    },
+                    {
+                        "sys_id": "dmn_demand-financials-section",
+                        "name": target_table,
+                        "caption": "Financials",
+                        "view": {"display_value": "Default view", "value": "default"},
+                    },
+                ]
             return [
                 {
                     "sys_id": f"{target_table}-main-section",
@@ -318,13 +339,14 @@ def _policy() -> AllowlistPolicy:
         tables={
             "sys_dictionary",
             "sys_ui_form",
+            "sys_ui_section",
             "sys_script",
             "sys_script_client",
             "sys_script_include",
             "sys_ui_policy",
             "sys_ui_policy_action",
         },
-        operations={"insert", "update"},
+        operations={"insert", "update", "delete"},
         max_points=3,
     )
 
@@ -737,7 +759,24 @@ def test_model_candidate_handler_blocks_model_when_required_surface_context_miss
             data_classification=DataClassification.PUBLIC,
         )
     )
-    provider = RecordingModelProvider()
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_ui_section",
+                    "operation": "delete",
+                    "fields": {
+                        "table": "dmn_demand",
+                        "sections": ["Assessment Data", "Financials"],
+                        "view": "Default view",
+                    },
+                    "rationale": "Remove the requested Demand form sections.",
+                }
+            ],
+            "test_plan": ["Confirm the Demand tabs are no longer displayed."],
+            "rollback_notes": ["Restore the removed Demand form sections."],
+        }
+    )
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
@@ -876,6 +915,130 @@ def test_model_candidate_handler_emits_flow_preflight_guidance_artifact() -> Non
     assert "Flow Designer automation is context/preflight-only" in (
         feedback_fields["work_notes"]
     )
+
+
+def test_model_candidate_handler_emits_form_section_context_artifact() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010011",
+            short_description="DMND: Hide Tabs on Demand record",
+            description=(
+                "As a Demand Manager, I want the Assessment and Financials tabs "
+                "hidden on the Demand record, so that users are not confused about "
+                "its usage and the process is not delayed."
+            ),
+            acceptance_criteria=(
+                "Given the Demand record's tabs are configured, when the record is "
+                "accessed, then system will not display the Assessment and "
+                "Financials tabs."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_ui_section",
+                    "operation": "delete",
+                    "fields": {
+                        "table": "dmn_demand",
+                        "sections": ["Assessment Data", "Financials"],
+                        "view": "Default view",
+                    },
+                    "rationale": "Remove the requested Demand form sections.",
+                }
+            ],
+            "test_plan": ["Confirm the Demand tabs are no longer displayed."],
+            "rollback_notes": ["Restore the removed Demand form sections."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010011"}))
+
+    assert provider.payloads
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "form_layout_analysis",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    analysis = result.artifacts[1].payload_json
+    candidate = result.artifacts[3].payload_json
+    assert analysis is not None
+    assert candidate is not None
+    assert result.artifacts[1].schema_version == "form-layout-analysis-v1"
+    assert analysis["capability"] == "form_section_remove"
+    assert analysis["target_table"] == "dmn_demand"
+    assert analysis["supported_generation"] is True
+    assert analysis["existing_sections"][0]["sys_id"] == "dmn_demand-main-section"
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert candidate["changes"] == [
+        {
+            "table": "sys_ui_section",
+            "operation": "delete",
+            "fields": {
+                "table": "dmn_demand",
+                "sections": ["Assessment Data", "Financials"],
+                "view": "Default view",
+            },
+            "sys_id": None,
+            "rationale": "Remove the requested Demand form sections.",
+        }
+    ]
+    assert "builder maturity below automated handoff threshold: sys_ui_section=0.30" in (
+        candidate["eligibility_reasons"]
+    )
+    assert "code_surface_analysis:first" not in candidate["eligibility_reasons"]
+
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="instance_context_bundle",
+                path="db://artifact_blobs/209",
+                sha256="1" * 64,
+                artifact_id=209,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="form_layout_analysis",
+                path="db://artifact_blobs/210",
+                sha256="2" * 64,
+                artifact_id=210,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_packet",
+                path="db://artifact_blobs/211",
+                sha256="3" * 64,
+                artifact_id=211,
+            ),
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/212",
+                sha256="4" * 64,
+                artifact_id=212,
+            ),
+        ]
+    )
+
+    feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert feedback_fields["u_ai_status"] == "Human Review Required"
+    assert "did not create a retrieved Update Set" in feedback_fields["work_notes"]
+    assert client.imports == []
 
 
 def test_model_candidate_handler_runs_code_surface_analysis_without_model_or_update_set() -> None:
@@ -1049,8 +1212,11 @@ def test_model_candidate_handler_generates_business_rule_update_set_handoff() ->
     ]
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert candidate["changes"][0]["table"] == "sys_script"
+    assert "builder maturity below automated handoff threshold: sys_script=0.00" in (
+        candidate["eligibility_reasons"]
+    )
 
     assert result.after_artifacts_persisted is not None
     result.after_artifacts_persisted(
@@ -1064,11 +1230,10 @@ def test_model_candidate_handler_generates_business_rule_update_set_handoff() ->
         ]
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_incident_jedi_incident_priority_note" in imported_xml
-    assert "<collection>incident</collection>" in imported_xml
+    assert client.imports == []
     updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
-    assert updated_fields["u_ai_status"] == "Ready for Testing"
+    assert updated_fields["u_ai_status"] == "Human Review Required"
+    assert "did not create a retrieved Update Set" in updated_fields["work_notes"]
 
 
 def test_model_candidate_handler_generates_structured_business_rule_from_uat_story() -> None:
@@ -1163,7 +1328,7 @@ def test_model_candidate_handler_generates_structured_business_rule_from_uat_sto
     assert payload["controls"]["normalized_intent"]["missing_details"] == []
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert candidate["changes"][0]["table"] == "sys_script"
 
     assert result.after_artifacts_persisted is not None
@@ -1178,11 +1343,9 @@ def test_model_candidate_handler_generates_structured_business_rule_from_uat_sto
         ]
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_incident_jedi_uat_default_inquiry_short_description" in imported_xml
-    assert "<action_insert>true</action_insert>" in imported_xml
-    assert "<action_update>true</action_update>" in imported_xml
-    assert "<when>before</when>" in imported_xml
+    assert client.imports == []
+    updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert updated_fields["u_ai_status"] == "Human Review Required"
 
 
 def test_model_candidate_handler_runs_client_script_analysis() -> None:
@@ -1304,7 +1467,7 @@ def test_model_candidate_handler_generates_client_script_update_set_handoff() ->
     ]
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert candidate["changes"][0]["table"] == "sys_script_client"
 
     assert result.after_artifacts_persisted is not None
@@ -1319,11 +1482,9 @@ def test_model_candidate_handler_generates_client_script_update_set_handoff() ->
         ]
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_client_incident_jedi_incident_category_ci_message" in imported_xml
-    assert "<table>incident</table>" in imported_xml
+    assert client.imports == []
     updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
-    assert updated_fields["u_ai_status"] == "Ready for Testing"
+    assert updated_fields["u_ai_status"] == "Human Review Required"
 
 
 def test_model_candidate_handler_runs_script_include_analysis_without_target_table() -> None:
@@ -1453,7 +1614,7 @@ def test_model_candidate_handler_generates_script_include_update_set_handoff() -
     ]
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert candidate["changes"][0]["table"] == "sys_script_include"
 
     assert result.after_artifacts_persisted is not None
@@ -1468,11 +1629,9 @@ def test_model_candidate_handler_generates_script_include_update_set_handoff() -
         ]
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_include_jediincidentutils" in imported_xml
-    assert "<api_name>global.JediIncidentUtils</api_name>" in imported_xml
+    assert client.imports == []
     updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
-    assert updated_fields["u_ai_status"] == "Ready for Testing"
+    assert updated_fields["u_ai_status"] == "Human Review Required"
 
 
 def test_model_candidate_handler_generates_structured_script_include_from_uat_story() -> None:
@@ -1570,7 +1729,7 @@ def test_model_candidate_handler_generates_structured_script_include_from_uat_st
     assert payload["controls"]["normalized_intent"]["missing_details"] == []
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert candidate["changes"][0]["table"] == "sys_script_include"
 
     assert result.after_artifacts_persisted is not None
@@ -1585,9 +1744,9 @@ def test_model_candidate_handler_generates_structured_script_include_from_uat_st
         ]
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "<api_name>global.JediUatIncidentTextUtils</api_name>" in imported_xml
-    assert "sys_script_include_jediuatincidenttextutils" in imported_xml
+    assert client.imports == []
+    updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert updated_fields["u_ai_status"] == "Human Review Required"
 
 
 def test_model_candidate_handler_scopes_incomplete_structured_script_include_context() -> None:
@@ -1717,7 +1876,7 @@ def test_model_candidate_handler_generates_ui_policy_update_set_handoff() -> Non
     ] == ["table_schema", "form_layout", "ui_policies"]
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
     assert candidate["changes"][0]["table"] == "sys_ui_policy"
     assert candidate["changes"][1]["table"] == "sys_ui_policy_action"
 
@@ -1733,11 +1892,9 @@ def test_model_candidate_handler_generates_ui_policy_update_set_handoff() -> Non
         ]
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_ui_policy_incident_jedi_incident_assignment_group_required" in imported_xml
-    assert "sys_ui_policy_action_incident_assignment_group_required" in imported_xml
+    assert client.imports == []
     updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
-    assert updated_fields["u_ai_status"] == "Ready for Testing"
+    assert updated_fields["u_ai_status"] == "Human Review Required"
 
 
 def test_model_fulfillment_writes_needs_clarification_feedback() -> None:

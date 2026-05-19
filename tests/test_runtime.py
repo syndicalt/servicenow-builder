@@ -278,6 +278,21 @@ def _ready_event_payload() -> dict[str, str]:
     }
 
 
+def _complete_event_payload() -> dict[str, str]:
+    payload = _ready_event_payload()
+    payload.update(
+        {
+            "event_id": "evt-complete-001",
+            "story_number": "STRY0010013",
+            "story_sys_id": "story-sys-id",
+            "previous_state": "Ready for Testing",
+            "current_state": "Complete",
+            "correlation_id": "STRY0010013-ReadyForTesting-Complete-20260516T150000Z",
+        }
+    )
+    return payload
+
+
 def _transport_for_successful_claim() -> RecordingTransport:
     return RecordingTransport(
         [
@@ -762,6 +777,41 @@ def test_create_runtime_api_wires_store_factory(tmp_path: Path) -> None:
     assert database_urls == ["postgresql://jedi:secret@localhost:5432/jedi"]
     assert store.recorded_events == ["evt-001"]
     assert store.enqueued_jobs == [("evt-001", "STRY0010013")]
+
+
+def test_runtime_complete_event_updates_ai_status_without_enqueueing_worker(
+    tmp_path: Path,
+) -> None:
+    store = FakeRuntimeStore()
+    transport = RecordingTransport(
+        [
+            HttpResponse(status_code=200, json_body={"access_token": "token-123"}),
+            HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+        ]
+    )
+    client = TestClient(
+        create_runtime_api(
+            settings=_settings(tmp_path),
+            store_factory=lambda _database_url: store,
+            transport=transport,
+        )
+    )
+
+    response = client.post("/lifecycle/events", json=_complete_event_payload())
+
+    assert response.status_code == 202
+    assert response.json()["lifecycle_action"] == "close_story"
+    assert store.enqueued_jobs == []
+    assert store.closed_story_jobs == [("STRY0010013", "evt-complete-001")]
+    assert [request.method for request in transport.requests] == ["POST", "PATCH"]
+    assert transport.requests[-1].url.endswith("/api/now/table/rm_story/story-sys-id")
+    assert transport.requests[-1].body == {
+        "u_ai_status": "Complete",
+        "work_notes": (
+            "Automation loop closed after ServiceNow marked the story Complete. "
+            "Lifecycle event: evt-complete-001."
+        ),
+    }
 
 
 def test_artifact_read_requires_admin_bearer_token(tmp_path: Path) -> None:

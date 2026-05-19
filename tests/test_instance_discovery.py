@@ -498,6 +498,26 @@ def test_required_flow_graph_context_collects_graph_records_with_citations() -> 
     assert "secret-value" not in bundle.model_dump_json()
 
 
+def test_required_form_section_context_collects_section_records() -> None:
+    bundle = discover_servicenow_surface_context(
+        client=FakeDiscoveryClient(),
+        target_table="incident",
+        story_text="Remove tabs from the Incident form.",
+        public_doc_queries=[],
+        required_surfaces_override=["form_sections", "form_layout"],
+    )
+
+    assert bundle.context_sufficient is True
+    assert bundle.required_surfaces == ["form_sections", "form_layout"]
+    assert bundle.surface_record_count("form_sections") == 1
+    assert bundle.surface("form_sections").required is True
+    assert bundle.surface("form_sections").records[0].metadata == {
+        "caption": "",
+        "view_name": "Default view",
+        "element_count": "1",
+    }
+
+
 def test_required_flow_graph_context_fails_closed_when_graph_is_incomplete() -> None:
     class IncompleteFlowGraphClient(FakeDiscoveryClient):
         def fetch_table_records(

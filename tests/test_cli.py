@@ -3006,6 +3006,7 @@ def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
     assert "applied=True" in captured.out
     assert "created_fields=4" in captured.out
     assert "updated_writable_fields=0" in captured.out
+    assert "platform_readonly_records=1" in captured.out
     assert "form_layout_changes=0" in captured.out
     assert [field["element"] for field in fake_client.created_dictionary_fields] == [
         "u_ai_status",
@@ -3014,6 +3015,7 @@ def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
         "u_ai_artifact_reference",
     ]
     assert all(field["read_only"] is False for field in fake_client.created_dictionary_fields)
+    assert [record["table"] for record in fake_client.upserted_table_records] == ["sys_ui_policy"]
     assert audit["created_fields"] == [
         "u_ai_status",
         "u_ai_handoff_type",
@@ -3021,6 +3023,9 @@ def test_cli_apply_bootstrap_fields_creates_missing_fields_and_writes_audit(
         "u_ai_artifact_reference",
     ]
     assert audit["updated_writable_fields"] == []
+    assert audit["platform_readonly_records"] == [
+        "sys_ui_policy:Jedi DevProject read-only automation metadata",
+    ]
     assert audit["form_layout_changes"] == []
     assert "state" not in json.dumps(audit)
     assert "client-secret" not in captured.out

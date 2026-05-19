@@ -19,6 +19,7 @@ class AutomationIntentSource(StrEnum):
 class AutomationIntentType(StrEnum):
     CATALOG_ITEM = "catalog_item"
     DICTIONARY_FORM = "dictionary_form"
+    FORM_SECTION = "form_section"
     BUSINESS_RULE = "business_rule"
     CLIENT_SCRIPT = "client_script"
     SCRIPT_INCLUDE = "script_include"
@@ -61,6 +62,8 @@ class AutomationIntent(BaseModel):
     max_length: int | None = None
     placement_anchor: str | None = None
     placement_position: str | None = None
+    form_view: str | None = None
+    form_sections: list[str] = Field(default_factory=list)
     catalog_item_short_description: str | None = None
     catalog_name: str | None = None
     category_name: str | None = None
@@ -106,6 +109,26 @@ ARTIFACT_TYPE_ALIASES: dict[str, tuple[AutomationIntentType, Capability]] = {
     "form field": (
         AutomationIntentType.DICTIONARY_FORM,
         Capability.DICTIONARY_FIELD_CREATE,
+    ),
+    "form section removal": (
+        AutomationIntentType.FORM_SECTION,
+        Capability.FORM_SECTION_REMOVE,
+    ),
+    "form section": (
+        AutomationIntentType.FORM_SECTION,
+        Capability.FORM_SECTION_REMOVE,
+    ),
+    "form tab removal": (
+        AutomationIntentType.FORM_SECTION,
+        Capability.FORM_SECTION_REMOVE,
+    ),
+    "form tabs": (
+        AutomationIntentType.FORM_SECTION,
+        Capability.FORM_SECTION_REMOVE,
+    ),
+    "form layout section removal": (
+        AutomationIntentType.FORM_SECTION,
+        Capability.FORM_SECTION_REMOVE,
     ),
     "field": (
         AutomationIntentType.DICTIONARY_FORM,
@@ -165,6 +188,12 @@ STRUCTURED_KEY_ALIASES = {
     "placement": "placement",
     "placement anchor": "placement_anchor",
     "placement position": "placement_position",
+    "view": "form_view",
+    "form view": "form_view",
+    "sections": "form_sections",
+    "section": "form_sections",
+    "tabs": "form_sections",
+    "tab": "form_sections",
     "condition": "condition",
     "actions": "expected_behavior",
     "expected behavior": "expected_behavior",
@@ -203,7 +232,7 @@ def extract_automation_intent(story: Story) -> AutomationIntent:
 
 
 def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
-    intent_type, capability = _artifact_type(fields.get("artifact_type", ""))
+    intent_type, capability = _structured_artifact_type(fields)
     fields_read = _field_list(fields.get("fields_read"))
     fields_written = _field_list(fields.get("fields_written"))
     fields_affected = _field_list(fields.get("fields_affected"))
@@ -248,6 +277,8 @@ def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
         placement_position=_placement_position(
             fields.get("placement_position") or fields.get("placement")
         ),
+        form_view=_clean_preserved_text(fields.get("form_view")),
+        form_sections=_preserved_list(fields.get("form_sections")),
         catalog_item_short_description=_clean_preserved_text(
             fields.get("catalog_item_short_description")
         ),
@@ -292,11 +323,40 @@ def _artifact_type(raw_value: str) -> tuple[AutomationIntentType, Capability]:
     )
 
 
+def _structured_artifact_type(fields: dict[str, str]) -> tuple[AutomationIntentType, Capability]:
+    raw_artifact_type = fields.get("artifact_type", "")
+    cleaned = _clean_text(raw_artifact_type)
+    normalized = "" if cleaned is None else cleaned.lower().replace("-", " ")
+    if normalized in {"form section", "form tabs"}:
+        if _structured_form_section_removal_action(fields):
+            return AutomationIntentType.FORM_SECTION, Capability.FORM_SECTION_REMOVE
+        return AutomationIntentType.FORM_SECTION, Capability.UNKNOWN
+    return _artifact_type(raw_artifact_type)
+
+
+def _structured_form_section_removal_action(fields: dict[str, str]) -> bool:
+    action = _clean_text(fields.get("expected_behavior"))
+    if action is None:
+        return False
+    lowered = action.lower()
+    if re.search(r"\b(?:do not|don't|should not|must not)\s+(?:remove|hide)\b", lowered):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:remove|hide)\b|\bhidden\b|\bnot\s+display\b|"
+            r"\bwill\s+not\s+display\b|\bdo\s+not\s+display\b",
+            lowered,
+        )
+    )
+
+
 def _required_context(capability: Capability) -> list[str]:
     if capability is Capability.UNKNOWN:
         return []
     if capability is Capability.DICTIONARY_FIELD_CREATE:
         return capability_profile(Capability.DICTIONARY_FIELD_CREATE).required_instance_context
+    if capability is Capability.FORM_SECTION_REMOVE:
+        return capability_profile(Capability.FORM_SECTION_REMOVE).required_instance_context
     if capability in {
         Capability.ACL_MODIFY,
         Capability.DATA_MIGRATION,
@@ -417,6 +477,15 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
             ]
             if not present
         ]
+    if intent.intent_type is AutomationIntentType.FORM_SECTION:
+        return [
+            label
+            for label, present in [
+                ("target table", bool(intent.target_table)),
+                ("sections", bool(intent.form_sections)),
+            ]
+            if not present
+        ]
     return []
 
 
@@ -508,6 +577,19 @@ def _field_list(raw_value: str | None) -> list[str]:
         _clean_field_name(value)
         for value in values
         if _clean_field_name(value)
+    ]
+
+
+def _preserved_list(raw_value: str | None) -> list[str]:
+    cleaned = _clean_text(raw_value)
+    if cleaned is None:
+        return []
+    if cleaned.lower() in {"none", "n/a", "not applicable"}:
+        return []
+    return [
+        item.strip()
+        for item in re.split(r",|\band\b", cleaned)
+        if item.strip()
     ]
 
 

@@ -877,3 +877,56 @@ def test_structured_dictionary_field_and_form_placement_story_is_automated() -> 
     assert assessment.intent.reference_qualifier == "vendor=true"
     assert assessment.intent.placement_anchor == "description"
     assert assessment.intent.placement_position == "below"
+
+
+def test_demand_tab_removal_story_routes_to_form_section_automated_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010011",
+            short_description="*DMND: Hide Tabs on Demand record",
+            description=(
+                "As a Demand Manager, I want the Assessment and Financials tabs "
+                "hidden on the Demand record, so that users are not confused about "
+                "its usage and the process is not delayed."
+            ),
+            acceptance_criteria=(
+                "Given the Demand record's tabs are configured, when the record is "
+                "accessed, then system will not display the Assessment and "
+                "Financials tabs."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.FORM_SECTION_REMOVE}
+    assert assessment.target_table == "dmn_demand"
+    assert assessment.required_instance_context == ["form_sections", "form_layout"]
+    assert assessment.missing_details == []
+    assert "supported form section removal request" in assessment.reasons
+
+
+def test_structured_form_section_rename_does_not_route_to_removal_pipeline() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010099",
+            short_description="DMND: Rename Demand form tab",
+            description=(
+                "Target artifact type: Form Section\n"
+                "Target table: dmn_demand\n"
+                "View: Default view\n"
+                "Sections: Financials\n"
+                "Actions: Rename the Financials tab to Budget Details."
+            ),
+            acceptance_criteria=(
+                "Given a Demand record is opened, then the old Financials tab label "
+                "is replaced with Budget Details."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.UNSUPPORTED_CAPABILITY
+    assert assessment.capabilities == {Capability.UNKNOWN}
+    assert assessment.unsupported_capabilities == {Capability.UNKNOWN}
+    assert "request includes unsupported pipeline capabilities" in assessment.reasons

@@ -18,6 +18,16 @@ from jedi_devproject.operational_store import FulfillmentJobRecord, LifecycleEve
 from jedi_devproject.rate_limit import InMemoryRateLimiter
 
 
+class LifecycleCompleteNotifier(Protocol):
+    def __call__(
+        self,
+        *,
+        story_number: str,
+        story_sys_id: str | None,
+        event_id: str,
+    ) -> None: ...
+
+
 class LifecycleEventStore(Protocol):
     def record_lifecycle_event(
         self,
@@ -79,6 +89,7 @@ LifecycleWebhookAuthMode = Literal[
 def create_lifecycle_api(
     *,
     store: LifecycleEventStore,
+    complete_notifier: LifecycleCompleteNotifier | None = None,
     webhook_auth_mode: LifecycleWebhookAuthMode = "disabled",
     webhook_secret: str | None = None,
     runtime_environment: str = "development",
@@ -160,6 +171,12 @@ def create_lifecycle_api(
                 event_id=event.event_id,
             )
             job_id = closeout_job.job_id if closeout_job is not None else None
+            if complete_notifier is not None:
+                complete_notifier(
+                    story_number=event.story_number,
+                    story_sys_id=event.story_sys_id,
+                    event_id=event.event_id,
+                )
         elif plan.lifecycle_action == "rework_requested":
             rework_job = store.record_rework_requested_for_story(
                 story_number=event.story_number,
