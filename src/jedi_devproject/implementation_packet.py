@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -28,10 +29,16 @@ from jedi_devproject.providers import (
 )
 from jedi_devproject.rag import SpecializedRags
 from jedi_devproject.safety import AllowlistPolicy
+from jedi_devproject.surface_planning import (
+    SurfaceOperationKind,
+    SurfaceOperationStatus,
+    plan_surface_operations,
+)
 
 IMPLEMENTATION_PACKET_TASK = "generate_implementation_candidate"
 MODEL_CONTEXT_RECORD_LIMIT = 25
 MODEL_CONTEXT_SECTION_LIMIT = 3
+AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75
 
 
 class PacketStory(BaseModel):
@@ -56,8 +63,10 @@ class ImplementationPacket(BaseModel):
     allowed_operations: list[str]
     capability_assessment: dict[str, Any] = Field(default_factory=dict)
     normalized_intent: dict[str, Any] | None = None
+    surface_operation_plan: dict[str, Any] | None = None
     instance_context: dict[str, Any] | None = None
     instance_context_bundle: dict[str, Any] | None = None
+    context_dossier: dict[str, Any] = Field(default_factory=dict)
     context_sufficiency: dict[str, Any] = Field(default_factory=dict)
     context_sections: dict[str, str]
     retrieval_citations: list[RetrievalCitation]
@@ -76,6 +85,7 @@ class ImplementationPacket(BaseModel):
                 "allowed_operations": self.allowed_operations,
                 "capability_assessment": self.capability_assessment,
                 "normalized_intent": self.normalized_intent,
+                "surface_operation_plan": self.surface_operation_plan,
                 "context_sufficiency": self.context_sufficiency,
                 "context_escalation": plan_context_escalation(self.context_sufficiency).model_dump(
                     mode="json"
@@ -89,6 +99,7 @@ class ImplementationPacket(BaseModel):
             "instance_context_bundle": _compact_surface_context_bundle(
                 self.instance_context_bundle
             ),
+            "context_dossier": _compact_context_dossier(self.context_dossier),
             "context": self.context_sections,
             "citations": [
                 citation.model_dump(mode="json") for citation in self.retrieval_citations
@@ -134,6 +145,16 @@ def build_implementation_packet(
         for domain, results in retrieved.items()
     }
     citations = [result.citation for results in retrieved.values() for result in results]
+    surface_operation_plan = plan_surface_operations(assessment.automation_intent)
+    surface_operation_plan_payload = (
+        surface_operation_plan.model_dump(mode="json")
+        if surface_operation_plan.operations
+        else None
+    )
+    context_sufficiency = _context_sufficiency(
+        discovery_context=discovery_context,
+        surface_context_bundle=surface_context_bundle,
+    )
 
     return ImplementationPacket(
         task=IMPLEMENTATION_PACKET_TASK,
@@ -163,6 +184,7 @@ def build_implementation_packet(
                 else None
             )
         ),
+        surface_operation_plan=surface_operation_plan_payload,
         instance_context=(
             discovery_context.model_dump(mode="json") if discovery_context is not None else None
         ),
@@ -171,16 +193,23 @@ def build_implementation_packet(
             if surface_context_bundle is not None
             else None
         ),
-        context_sufficiency=_context_sufficiency(
+        context_dossier=_context_dossier(
+            story=story,
+            assessment=assessment.model_dump(mode="json"),
             discovery_context=discovery_context,
             surface_context_bundle=surface_context_bundle,
+            context_sufficiency=context_sufficiency,
+            surface_operation_plan=surface_operation_plan_payload,
         ),
+        context_sufficiency=context_sufficiency,
         context_sections=context_sections,
         retrieval_citations=citations,
         output_contract={
-            "format": "structured_update_set_candidate",
+            "format": "structured_candidate_change_only",
             "must_return_manual_review_when_uncertain": True,
             "must_not_invent_tables_fields_sys_ids": True,
+            "must_not_output_raw_xml": True,
+            "xml_shape_references_are_read_only": True,
             "must_include_test_plan": True,
             "must_include_rollback_notes": True,
             "capabilities": sorted(capability.value for capability in assessment.capabilities),
@@ -279,6 +308,138 @@ def _compact_surface_context(surface: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_context_dossier(dossier: dict[str, Any]) -> dict[str, Any]:
+    if not dossier:
+        return {}
+    compacted = dict(dossier)
+    bundle = compacted.get("instance_context_bundle")
+    if isinstance(bundle, dict):
+        compacted["instance_context_bundle"] = _compact_surface_context_bundle(bundle)
+    context = compacted.get("instance_context")
+    if isinstance(context, dict):
+        compacted["instance_context"] = _compact_instance_context(context)
+    return compacted
+
+
+def _context_dossier(
+    *,
+    story: Story,
+    assessment: dict[str, Any],
+    discovery_context: InstanceDiscoveryContext | None,
+    surface_context_bundle: ServiceNowSurfaceContextBundle | None,
+    context_sufficiency: dict[str, Any],
+    surface_operation_plan: dict[str, Any] | None,
+) -> dict[str, Any]:
+    target_table = (
+        surface_context_bundle.target_table
+        if surface_context_bundle is not None
+        else discovery_context.target_table
+        if discovery_context is not None
+        else (story.affected_tables[0] if story.affected_tables else "")
+    )
+    required_surfaces = (
+        surface_context_bundle.required_surfaces if surface_context_bundle is not None else []
+    )
+    return {
+        "story": PacketStory(
+            number=story.number,
+            short_description=story.short_description,
+            description=story.description,
+            acceptance_criteria=story.acceptance_criteria,
+            story_points=story.story_points,
+            priority=story.priority,
+            state=story.state,
+            affected_tables=story.affected_tables,
+        ).model_dump(),
+        "target": {
+            "table": target_table,
+            "required_surfaces": list(required_surfaces),
+        },
+        "capability_assessment": assessment,
+        "surface_operation_plan": surface_operation_plan,
+        "context_sufficiency": context_sufficiency,
+        "instance_context": (
+            discovery_context.model_dump(mode="json") if discovery_context is not None else None
+        ),
+        "instance_context_bundle": (
+            surface_context_bundle.model_dump(mode="json")
+            if surface_context_bundle is not None
+            else None
+        ),
+        "xml_shape_references": _xml_shape_references(
+            required_surfaces=required_surfaces,
+            surface_operation_plan=surface_operation_plan,
+        ),
+        "builder_maturity": _builder_maturity_context(required_surfaces=required_surfaces),
+    }
+
+
+def _xml_shape_references(
+    *,
+    required_surfaces: Sequence[str],
+    surface_operation_plan: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    references: list[dict[str, Any]] = []
+    planned_kinds = {
+        str(operation.get("kind"))
+        for operation in (surface_operation_plan or {}).get("operations", [])
+        if isinstance(operation, dict)
+    }
+    if "form_layout" in required_surfaces or "form_layout.section.remove" in planned_kinds:
+        references.append(
+            {
+                "surface": "form_layout",
+                "record_type": "sys_ui_section",
+                "operation": "delete",
+                "required_records": ["sys_ui_section", "sys_ui_element"],
+                "important_fields": [
+                    "sys_id",
+                    "caption",
+                    "name",
+                    "view",
+                    "sys_update_name",
+                ],
+                "notes": (
+                    "Reference only. Use this to reason about structured changes; "
+                    "do not output raw XML."
+                ),
+            }
+        )
+    return references
+
+
+def _builder_maturity_context(*, required_surfaces: Sequence[str]) -> list[dict[str, Any]]:
+    surfaces = list(dict.fromkeys(required_surfaces))
+    if not surfaces:
+        return []
+    return [
+        {
+            "surface": surface,
+            "score": _builder_maturity_for_surface(surface),
+            "notes": (
+                "Builder maturity adjusts confidence and routing; "
+                "it does not suppress reasoning."
+            ),
+        }
+        for surface in surfaces
+    ]
+
+
+def _builder_maturity_for_surface(surface: str) -> float:
+    if surface in {"table_schema", "form_layout"}:
+        return 0.95
+    if surface == "form_sections":
+        return 0.30
+    if surface in {
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    }:
+        return 0.60
+    return 0.0
+
+
 def generate_implementation_candidate(
     *,
     story: Story,
@@ -344,6 +505,8 @@ def generate_implementation_update_set_candidate_from_packet(
     context_plan = plan_context_escalation(packet.context_sufficiency)
     if not context_plan.should_call_model:
         return _manual_review_candidate(packet=packet)
+    if _surface_operation_reasons(packet):
+        return _manual_review_candidate(packet=packet)
     response = _normalize_placeholder_sys_ids(provider.generate(packet.to_model_payload()))
     _validate_response(
         response,
@@ -376,8 +539,57 @@ def generate_implementation_update_set_candidate_from_packet(
             *[f"Rollback: {item}" for item in response["rollback_notes"]],
         ],
     )
+    candidate = _route_candidate_by_builder_maturity(candidate)
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
+
+
+def _route_candidate_by_builder_maturity(candidate: UpdateSetCandidate) -> UpdateSetCandidate:
+    maturity = _builder_maturity_for_changes(candidate.changes)
+    if maturity >= AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD:
+        return candidate.model_copy(update={"confidence": min(candidate.confidence, maturity)})
+    tables = ",".join(sorted({change.table for change in candidate.changes})) or "none"
+    reason = f"builder maturity below automated handoff threshold: {tables}={maturity:.2f}"
+    return candidate.model_copy(
+        update={
+            "eligibility_decision": "manual_review",
+            "eligibility_reasons": [*candidate.eligibility_reasons, reason],
+            "confidence": maturity,
+            "status": CandidateStatus.MANUAL_BUILD,
+            "assumptions": [
+                *candidate.assumptions,
+                (
+                    "Structured candidate preserved for review; deterministic retrieved "
+                    "Update Set handoff is blocked until the builder is mature."
+                ),
+            ],
+            "reviewer_notes": [
+                *candidate.reviewer_notes,
+                (
+                    "Automated handoff skipped because the deterministic builder maturity "
+                    f"score is {maturity:.2f}."
+                ),
+            ],
+        }
+    )
+
+
+def _builder_maturity_for_changes(changes: list[CandidateChange]) -> float:
+    tables = {change.table for change in changes}
+    if tables and tables.issubset({"sys_dictionary", "sys_ui_form"}):
+        return 0.95
+    if tables == {"sys_ui_section"}:
+        return 0.30
+    if tables and tables.issubset(
+        {
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+        }
+    ):
+        return 0.60
+    return 0.0
 
 
 def _normalize_placeholder_sys_ids(response: dict[str, Any]) -> dict[str, Any]:
@@ -572,25 +784,47 @@ def _code_surface_capability(packet: ImplementationPacket) -> str | None:
     return None
 
 
+def _form_layout_capability(packet: ImplementationPacket) -> str | None:
+    capabilities = set(packet.capability_assessment.get("capabilities", []))
+    if Capability.FORM_SECTION_REMOVE.value in capabilities:
+        return Capability.FORM_SECTION_REMOVE.value
+    return None
+
+
 def _manual_review_candidate(
     *,
     packet: ImplementationPacket,
 ) -> UpdateSetCandidate:
     context_plan = plan_context_escalation(packet.context_sufficiency)
-    eligibility_reasons = [*packet.safety_reasons, *context_plan.reasons]
+    eligibility_reasons = [
+        *packet.safety_reasons,
+        *_surface_operation_reasons(packet),
+        *context_plan.reasons,
+    ]
     reviewer_notes = ["Model invocation skipped by deterministic safety or context gate."]
     if packet.safety_decision == SuitabilityOutcome.CONTEXT_ANALYSIS.value:
-        eligibility_reasons.insert(0, "code_surface_analysis:first")
         code_surface = _code_surface_capability(packet)
         if code_surface is not None:
+            eligibility_reasons.insert(0, "code_surface_analysis:first")
             eligibility_reasons.insert(1, f"capability:{code_surface}")
-        reviewer_notes = [
-            "Code surface analysis completed without generation.",
-            (
-                "Code surface generation is not enabled until a mutation profile "
-                "and validators are approved."
-            ),
-        ]
+            reviewer_notes = [
+                "Code surface analysis completed without generation.",
+                (
+                    "Code surface generation is not enabled until a mutation profile "
+                    "and validators are approved."
+                ),
+            ]
+        form_layout = _form_layout_capability(packet)
+        if form_layout is not None:
+            eligibility_reasons.insert(0, "form_layout_analysis:first")
+            eligibility_reasons.insert(1, f"capability:{form_layout}")
+            reviewer_notes = [
+                "Form layout analysis completed without generation.",
+                (
+                    "Form section generation is not enabled until retrieved Update "
+                    "Set XML shape evidence and validators are approved."
+                ),
+            ]
     candidate = UpdateSetCandidate(
         story_number=packet.story.number,
         name=f"UPD_{packet.story.number}_Manual_Build",
@@ -604,6 +838,26 @@ def _manual_review_candidate(
     )
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
+
+
+def _surface_operation_reasons(packet: ImplementationPacket) -> list[str]:
+    plan = packet.surface_operation_plan
+    if not isinstance(plan, dict):
+        return []
+    operations = plan.get("operations")
+    if not isinstance(operations, list):
+        return []
+    reasons: list[str] = []
+    for operation in operations:
+        if not isinstance(operation, dict):
+            continue
+        if operation.get("status") != SurfaceOperationStatus.UNSUPPORTED.value:
+            continue
+        kind = str(operation.get("kind") or SurfaceOperationKind.UNKNOWN.value)
+        reasons.append(f"unsupported surface operation: {kind}")
+        for code in operation.get("reason_codes") or []:
+            reasons.append(f"surface operation reason: {code}")
+    return reasons
 
 
 def _build_allowed_packet(
@@ -651,7 +905,26 @@ def _validate_implementation_contract(response: dict[str, Any]) -> None:
     changes = response.get("changes")
     if not isinstance(changes, list) or not changes:
         raise ModelResponseError("changes must be a non-empty list")
+    _validate_no_raw_xml(response)
     for field_name in ["test_plan", "rollback_notes"]:
         value = response.get(field_name)
         if not isinstance(value, list) or not value:
             raise ModelResponseError(f"{field_name} must be a non-empty list")
+
+
+def _validate_no_raw_xml(value: Any) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if str(key).strip().lower() in {"payload", "xml", "update_xml", "raw_xml"}:
+                raise ModelResponseError("model response must not include raw XML fields")
+            _validate_no_raw_xml(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _validate_no_raw_xml(item)
+        return
+    if isinstance(value, str) and any(
+        token in value.lower()
+        for token in ["<record_update", "<sys_update_xml", "<unload", "payload><![cdata"]
+    ):
+        raise ModelResponseError("model response must not include raw XML content")

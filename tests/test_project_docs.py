@@ -2393,7 +2393,51 @@ def test_operator_guide_documents_capability_based_gate() -> None:
     assert "table names are metadata" in guide
     assert "`dictionary_field_create`" in guide
     assert "`form_layout_place_field`" in guide
+    assert "`form_section_remove`" in guide
+    assert "form-layout-analysis-v1" in guide
     assert "STRY0010001" in guide
+
+
+def test_sprint_one_fifty_three_change_log_documents_form_section_context() -> None:
+    change_log = Path("docs/sprints/sprint-153-change-log.md").read_text(encoding="utf-8")
+
+    assert "`form_section_remove`" in change_log
+    assert "dmn_demand" in change_log
+    assert "`form_sections`" in change_log
+    assert "form-layout-analysis-v1" in change_log
+    assert "Enabled deterministic retrieved Update Set handoff" in change_log
+
+
+def test_sprint_one_fifty_four_change_log_documents_form_section_gate_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-154-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "`Form Section`" in change_log
+    assert "`Form Section Removal`" in change_log
+    assert "rename/add/reorder" in change_log
+    assert "not treated as deletion requests" in guide
+
+
+def test_sprint_one_fifty_five_change_log_documents_surface_operation_planner() -> None:
+    change_log = Path("docs/sprints/sprint-155-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "`surface_planning`" in change_log
+    assert "`form_layout.section.remove`" in change_log
+    assert "`form_layout.section.rename`" in change_log
+    assert "surface-operation planning boundary" in guide
+    assert "Builder maturity only affects confidence and fulfillment routing" in guide
+
+
+def test_sprint_one_fifty_six_change_log_documents_context_dossier_boundary() -> None:
+    change_log = Path("docs/sprints/sprint-156-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "`context_dossier`" in change_log
+    assert "`structured_candidate_change_only`" in change_log
+    assert "read-only XML shape references" in guide
+    assert "raw XML fields or raw Update Set XML content" in guide
+    assert "builder maturity is below the automated handoff threshold" in guide
 
 
 def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> None:

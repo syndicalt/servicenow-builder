@@ -1065,6 +1065,7 @@ def main(argv: list[str] | None = None) -> int:
             f"applied={bootstrap_result.applied} "
             f"created_fields={len(bootstrap_result.created_fields)} "
             f"updated_writable_fields={len(bootstrap_result.updated_writable_fields)} "
+            f"platform_readonly_records={len(bootstrap_result.platform_readonly_records)} "
             f"form_layout_changes={len(bootstrap_result.form_layout_changes)} "
             f"{reasons}".strip()
         )

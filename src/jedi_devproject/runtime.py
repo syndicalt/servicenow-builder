@@ -31,6 +31,7 @@ from jedi_devproject.fulfillment_worker import (
 )
 from jedi_devproject.implementation_packet import IMPLEMENTATION_PACKET_TASK
 from jedi_devproject.lifecycle_api import (
+    LifecycleCompleteNotifier,
     LifecycleEventStore,
     LifecycleWebhookAuthMode,
     create_lifecycle_api,
@@ -225,6 +226,7 @@ def create_runtime_api(
     *,
     settings: RuntimeSettings,
     store_factory: StoreFactory = DEFAULT_STORE_FACTORY,
+    transport: HttpTransport | None = None,
     lifecycle_rate_limiter: InMemoryRateLimiter | None = None,
     admin_rate_limiter: InMemoryRateLimiter | None = None,
 ) -> FastAPI:
@@ -238,8 +240,14 @@ def create_runtime_api(
         window_seconds=settings.admin_rate_limit_window_seconds,
     )
     store = store_factory(settings.database_url)
+    request_transport = transport or UrllibTransport()
+    servicenow_client = _servicenow_client_from_settings(
+        settings=settings,
+        transport=request_transport,
+    )
     app = create_lifecycle_api(
         store=store,
+        complete_notifier=_servicenow_complete_notifier(client=servicenow_client),
         webhook_auth_mode=settings.lifecycle_webhook_auth_mode,
         webhook_secret=settings.lifecycle_webhook_secret,
         runtime_environment=settings.runtime_environment,
@@ -338,6 +346,29 @@ def create_runtime_api(
         return HTMLResponse(_admin_artifact_html(artifact))
 
     return app
+
+
+def _servicenow_complete_notifier(*, client: ServiceNowClient) -> LifecycleCompleteNotifier:
+    def notify(
+        *,
+        story_number: str,
+        story_sys_id: str | None,
+        event_id: str,
+    ) -> None:
+        if story_sys_id is None:
+            raise RuntimeError(f"story_sys_id missing for completed story: {story_number}")
+        client.update_story_fields(
+            story_sys_id,
+            {
+                "u_ai_status": "Complete",
+                "work_notes": (
+                    "Automation loop closed after ServiceNow marked the story Complete. "
+                    f"Lifecycle event: {event_id}."
+                ),
+            },
+        )
+
+    return notify
 
 
 def _require_admin_token(
@@ -931,12 +962,13 @@ def _default_model_allowlist_policy() -> AllowlistPolicy:
             "sys_script_include",
             "sys_ui_policy",
             "sys_ui_policy_action",
+            "sys_ui_section",
             "sc_cat_item",
             "item_option_new",
             "sc_cat_item_category",
             "m2m_connected_content",
         },
-        operations={"insert", "update"},
+        operations={"delete", "insert", "update"},
         max_points=3,
     )
 

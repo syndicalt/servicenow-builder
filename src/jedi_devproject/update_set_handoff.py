@@ -7,17 +7,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
-from jedi_devproject.business_rule_generation import business_rule_customer_updates
-from jedi_devproject.catalog_item_generation import catalog_item_customer_updates
-from jedi_devproject.client_script_generation import client_script_customer_updates
 from jedi_devproject.generic_dictionary_form import (
     DictionaryFormIntent,
     dictionary_form_customer_updates,
 )
 from jedi_devproject.models import CandidateChange, CandidateStatus, UpdateSetCandidate
-from jedi_devproject.script_include_generation import script_include_customer_updates
 from jedi_devproject.servicenow import StoryStateChoice
-from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
 from jedi_devproject.writeback import build_state_mapping_from_choices
 
 
@@ -253,40 +248,7 @@ def _customer_updates_for_candidate(
     if not candidate.changes:
         raise ValueError("retrieved Update Set handoff requires at least one candidate change")
     tables = {change.table for change in candidate.changes}
-    if tables == {"sys_script"}:
-        updates = business_rule_customer_updates(
-            changes=candidate.changes,
-            remote_update_set_sys_id=remote_update_set_sys_id,
-        )
-    elif tables == {"sys_script_client"}:
-        updates = client_script_customer_updates(
-            changes=candidate.changes,
-            remote_update_set_sys_id=remote_update_set_sys_id,
-        )
-    elif tables == {"sys_script_include"}:
-        updates = script_include_customer_updates(
-            changes=candidate.changes,
-            remote_update_set_sys_id=remote_update_set_sys_id,
-        )
-    elif tables == {"sys_ui_policy", "sys_ui_policy_action"}:
-        updates = ui_policy_customer_updates(
-            changes=candidate.changes,
-            remote_update_set_sys_id=remote_update_set_sys_id,
-        )
-    elif "sc_cat_item" in tables and tables.issubset(
-        {
-            "sc_cat_item",
-            "item_option_new",
-            "sc_cat_item_category",
-            "m2m_connected_content",
-        }
-    ):
-        updates = catalog_item_customer_updates(
-            client=client,
-            changes=candidate.changes,
-            remote_update_set_sys_id=remote_update_set_sys_id,
-        )
-    elif tables.issubset({"sys_dictionary", "sys_ui_form"}):
+    if tables.issubset({"sys_dictionary", "sys_ui_form"}):
         intent = _dictionary_form_intent(candidate.changes)
         updates = dictionary_form_customer_updates(
             client=client,
@@ -294,22 +256,10 @@ def _customer_updates_for_candidate(
             remote_update_set_sys_id=remote_update_set_sys_id,
         )
     else:
-        unsupported_tables = tables - {
-            "sys_dictionary",
-            "sys_ui_form",
-            "sys_script",
-            "sys_script_client",
-            "sys_script_include",
-            "sys_ui_policy",
-            "sys_ui_policy_action",
-            "sc_cat_item",
-            "item_option_new",
-            "sc_cat_item_category",
-            "m2m_connected_content",
-        }
-        if not unsupported_tables:
-            raise ValueError("retrieved Update Set candidate mixes unsupported change types")
-        raise ValueError(f"unsupported retrieved Update Set table: {sorted(unsupported_tables)[0]}")
+        raise ValueError(
+            "no mature deterministic retrieved Update Set builder for candidate tables: "
+            f"{', '.join(sorted(tables))}"
+        )
     if not updates:
         raise ValueError("retrieved Update Set handoff requires at least one customer update")
     return updates

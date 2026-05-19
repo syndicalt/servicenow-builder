@@ -78,6 +78,7 @@ class InstanceDiscoveryContext(BaseModel):
 
 SurfaceName = Literal[
     "table_schema",
+    "form_sections",
     "form_layout",
     "catalog_definitions",
     "catalog_categories",
@@ -384,6 +385,34 @@ def discover_servicenow_surface_context(
                     "record_count": "1",
                 }
                 for query in public_doc_queries
+            ],
+        ),
+        ServiceNowSurfaceContext(
+            surface="form_sections",
+            source_table="sys_ui_section",
+            required="form_sections" in required_surfaces,
+            records=[
+                ServiceNowSurfaceRecord(
+                    source_table="sys_ui_section",
+                    name=section.name,
+                    active=True,
+                    summary=section.caption,
+                    metadata={
+                        "caption": section.caption,
+                        "view_name": section.view_name,
+                        "element_count": str(len(section.elements)),
+                    },
+                )
+                for section in table_context.form_sections
+            ],
+            evidence=[f"sys_ui_section:{target_table}"],
+            confidence=1.0 if table_context.form_sections else 0.0,
+            citations=[
+                {
+                    "source_table": "sys_ui_section",
+                    "query": f"name={target_table}",
+                    "record_count": str(len(table_context.form_sections)),
+                }
             ],
         ),
         _catalog_definitions_surface(

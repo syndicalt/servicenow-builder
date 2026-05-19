@@ -285,6 +285,88 @@ def _catalog_context_bundle() -> ServiceNowSurfaceContextBundle:
     )
 
 
+def _form_section_story() -> Story:
+    return Story(
+        sys_id="form-section-story-sys-id",
+        number="STRY0010011",
+        short_description="DMND: Hide Demand form tabs",
+        description=(
+            "Target artifact type: Form Section Removal\n"
+            "Target table: dmn_demand\n"
+            "View: Default view\n"
+            "Sections: Assessment, Financials\n"
+            "Actions: Hide the Assessment and Financials tabs."
+        ),
+        acceptance_criteria="The Demand form does not display the Assessment and Financials tabs.",
+        story_points=3,
+        priority=4,
+        state="Work in Progress",
+        data_classification=DataClassification.PUBLIC,
+    )
+
+
+def _form_section_context_bundle() -> ServiceNowSurfaceContextBundle:
+    table_context = InstanceDiscoveryContext(
+        target_table="dmn_demand",
+        table_label="Demand",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="demand-main-section",
+                name="dmn_demand",
+                elements=[],
+            ),
+            DiscoveredFormSection(
+                sys_id="demand-assessment-section",
+                name="dmn_demand",
+                caption="Assessment Data",
+                view_name="Default view",
+                elements=[],
+            ),
+            DiscoveredFormSection(
+                sys_id="demand-financials-section",
+                name="dmn_demand",
+                caption="Financials",
+                view_name="Default view",
+                elements=[],
+            ),
+        ],
+        evidence=["sys_ui_section:dmn_demand"],
+    )
+    return ServiceNowSurfaceContextBundle(
+        target_table="dmn_demand",
+        required_surfaces=["form_sections", "form_layout"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="form_sections",
+                source_table="sys_ui_section",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_ui_section",
+                        name="Assessment Data",
+                        active=True,
+                        summary="Demand Assessment Data section",
+                    )
+                ],
+                evidence=["sys_ui_section:dmn_demand"],
+            ),
+            ServiceNowSurfaceContext(
+                surface="form_layout",
+                source_table="sys_ui_element",
+                required=True,
+                records=[],
+                evidence=["sys_ui_element:dmn_demand"],
+            ),
+        ],
+        missing_required_surfaces=[],
+        evidence=["sys_ui_section:dmn_demand", "sys_ui_element:dmn_demand"],
+    )
+
+
 def test_build_implementation_packet_contains_grounded_context_and_controls() -> None:
     packet = build_implementation_packet(
         story=_story(),
@@ -686,6 +768,56 @@ def test_model_payload_compacts_surface_context_to_required_surfaces() -> None:
     assert packet.to_model_payload()["instance_context"] is None
 
 
+def test_model_payload_includes_structured_context_dossier_with_xml_shape_references() -> None:
+    bundle = _form_section_context_bundle()
+
+    packet = build_implementation_packet(
+        story=_form_section_story(),
+        policy=AllowlistPolicy(
+            story_types={StoryType.DICTIONARY_FORM},
+            tables={"sys_ui_section"},
+            operations={"delete"},
+            max_points=3,
+        ),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    payload = packet.to_model_payload()
+    dossier = payload["context_dossier"]
+
+    assert dossier["story"]["number"] == "STRY0010011"
+    assert dossier["target"]["table"] == "dmn_demand"
+    assert dossier["context_sufficiency"]["status"] == "sufficient"
+    assert dossier["xml_shape_references"] == [
+        {
+            "surface": "form_layout",
+            "record_type": "sys_ui_section",
+            "operation": "delete",
+            "required_records": ["sys_ui_section", "sys_ui_element"],
+            "important_fields": [
+                "sys_id",
+                "caption",
+                "name",
+                "view",
+                "sys_update_name",
+            ],
+            "notes": (
+                "Reference only. Use this to reason about structured changes; "
+                "do not output raw XML."
+            ),
+        }
+    ]
+    assert payload["output_contract"]["format"] == "structured_candidate_change_only"
+    assert payload["output_contract"]["must_not_output_raw_xml"] is True
+    assert payload["output_contract"]["xml_shape_references_are_read_only"] is True
+    assert "<record_update" not in str(payload)
+    assert "<sys_update_xml" not in str(payload)
+    assert "payload><![CDATA" not in str(payload)
+
+
 def test_packet_uses_typed_intent_for_structured_client_script_story() -> None:
     story = _story().model_copy(
         update={
@@ -1033,6 +1165,126 @@ def test_catalog_candidate_reconciles_variables_from_normalized_intent() -> None
         "sc_cat_item_category",
         "m2m_connected_content",
     }
+
+
+def test_form_section_remove_candidate_uses_model_output_and_routes_manual() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sys_ui_section",
+                    "operation": "delete",
+                    "fields": {
+                        "table": "dmn_demand",
+                        "sections": ["Assessment Data", "Financials"],
+                        "view": "Default view",
+                    },
+                    "rationale": "Remove the requested Demand form sections.",
+                }
+            ],
+            "test_plan": ["Preview Demand default view and confirm the tabs are gone."],
+            "rollback_notes": ["Restore the removed Demand form sections."],
+        }
+    )
+    bundle = _form_section_context_bundle()
+    packet = build_implementation_packet(
+        story=_form_section_story(),
+        policy=AllowlistPolicy(
+            story_types={StoryType.DICTIONARY_FORM},
+            tables={"sys_ui_section"},
+            operations={"delete"},
+            max_points=3,
+        ),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=AllowlistPolicy(
+            story_types={StoryType.DICTIONARY_FORM},
+            tables={"sys_ui_section"},
+            operations={"delete"},
+            max_points=3,
+        ),
+        provider=provider,
+    )
+
+    assert provider.payloads
+    assert packet.surface_operation_plan is not None
+    assert packet.surface_operation_plan["surface"] == "form_layout"
+    assert packet.surface_operation_plan["operations"][0]["kind"] == (
+        "form_layout.section.remove"
+    )
+    assert packet.surface_operation_plan["operations"][0]["status"] == "supported"
+    assert candidate.status is CandidateStatus.MANUAL_BUILD
+    assert candidate.eligibility_decision == "manual_review"
+    assert "builder maturity below automated handoff threshold: sys_ui_section=0.30" in (
+        candidate.eligibility_reasons
+    )
+    assert candidate.confidence == 0.3
+    assert candidate.changes[0].table == "sys_ui_section"
+    assert candidate.changes[0].operation == "delete"
+    assert candidate.changes[0].fields == {
+        "table": "dmn_demand",
+        "sections": ["Assessment Data", "Financials"],
+        "view": "Default view",
+    }
+
+
+def test_unsupported_form_layout_surface_operation_routes_to_manual_review() -> None:
+    bundle = _form_section_context_bundle()
+    story = _form_section_story().model_copy(
+        update={
+            "number": "STRY0010099",
+            "short_description": "DMND: Rename Demand form tab",
+            "description": (
+                "Target artifact type: Form Section\n"
+                "Target table: dmn_demand\n"
+                "View: Default view\n"
+                "Sections: Financials\n"
+                "Actions: Rename the Financials tab to Budget Details."
+            ),
+            "acceptance_criteria": "The Demand form shows Budget Details instead of Financials.",
+        }
+    )
+
+    packet = build_implementation_packet(
+        story=story,
+        policy=AllowlistPolicy(
+            story_types={StoryType.DICTIONARY_FORM},
+            tables={"sys_ui_section"},
+            operations={"delete"},
+            max_points=3,
+        ),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=AllowlistPolicy(
+            story_types={StoryType.DICTIONARY_FORM},
+            tables={"sys_ui_section"},
+            operations={"delete"},
+            max_points=3,
+        ),
+        provider=FailingImplementationProvider(),
+    )
+
+    assert packet.surface_operation_plan is not None
+    assert packet.surface_operation_plan["operations"][0]["kind"] == (
+        "form_layout.section.rename"
+    )
+    assert packet.surface_operation_plan["operations"][0]["status"] == "unsupported"
+    assert candidate.status is CandidateStatus.MANUAL_BUILD
+    assert candidate.changes == []
+    assert "unsupported surface operation: form_layout.section.rename" in (
+        candidate.eligibility_reasons
+    )
 
 
 def test_generate_implementation_update_set_candidate_skips_provider_for_manual_review() -> None:

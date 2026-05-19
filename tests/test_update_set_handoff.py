@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from jedi_devproject.form_section_generation import form_section_customer_updates
 from jedi_devproject.models import (
     CandidateChange,
     CandidateStatus,
@@ -78,6 +79,30 @@ class FakeUpdateSetClient:
                     "sys_id": "problem-main-section-sys-id",
                     "name": "problem",
                     "caption": "",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+            ]
+        if table == "sys_ui_section" and lookup == {"name": "dmn_demand"}:
+            return [
+                {
+                    "sys_id": "demand-main-section-sys-id",
+                    "name": "dmn_demand",
+                    "caption": "",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "demand-assessment-section-sys-id",
+                    "name": "dmn_demand",
+                    "caption": "Assessment Data",
+                    "view": {"display_value": "Default view", "value": "Default view"},
+                    "sys_user": "",
+                },
+                {
+                    "sys_id": "demand-financials-section-sys-id",
+                    "name": "dmn_demand",
+                    "caption": "Financials",
                     "view": {"display_value": "Default view", "value": "Default view"},
                     "sys_user": "",
                 },
@@ -553,6 +578,35 @@ def _ui_policy_candidate() -> UpdateSetCandidate:
     )
 
 
+def _form_section_removal_candidate() -> UpdateSetCandidate:
+    return UpdateSetCandidate(
+        story_number="STRY0010011",
+        name="UPD_STRY0010011_Form_Section_Removal",
+        eligibility_decision="eligible",
+        eligibility_reasons=["supported form section removal request"],
+        confidence=0.72,
+        risk_score=0.24,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange(
+                table="sys_ui_section",
+                operation="delete",
+                fields={
+                    "table": "dmn_demand",
+                    "sections": ["Assessment", "Financials"],
+                    "view": "Default view",
+                },
+                rationale="Remove the requested Demand form sections from the default view.",
+            )
+        ],
+        reviewer_notes=[
+            "Preview the retrieved Update Set and confirm the Demand form no longer "
+            "shows the Assessment and Financials tabs."
+        ],
+        artifact_hash="f" * 64,
+    )
+
+
 def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
@@ -715,33 +769,142 @@ def test_create_update_set_handoff_normalizes_minimal_model_shape() -> None:
     assert "sys_ui_section_default-main-section-sys-id" in imported_xml
 
 
-def test_create_update_set_handoff_imports_catalog_item_updates() -> None:
+def test_form_section_customer_updates_respects_non_default_view() -> None:
     client = FakeUpdateSetClient()
 
-    create_update_set_handoff(
+    updates = form_section_customer_updates(
         client=client,
-        request=UpdateSetHandoffRequest(
-            story_sys_id="story-sys-id",
-            story_number="STRY0010101",
-            candidate=_catalog_item_candidate(),
-            candidate_artifact_ref="db://artifact_blobs/201",
-            instance_url="https://dev205693.service-now.com",
-        ),
+        changes=[
+            CandidateChange(
+                table="sys_ui_section",
+                operation="delete",
+                fields={"table": "rm_story", "sections": "Notes", "view": "Scrum"},
+                rationale="Remove the Notes section from the Scrum view.",
+            )
+        ],
+        remote_update_set_sys_id="remote-sys-id",
     )
 
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sc_cat_item_" in imported_xml
-    assert "item_option_new_" in imported_xml
-    assert "sc_cat_item_category_" in imported_xml
-    assert "m2m_connected_content_" in imported_xml
-    assert "<name>Request Temporary Badge</name>" in imported_xml
-    assert "<question_text>Visitor name</question_text>" in imported_xml
-    assert "<visible_standalone>true</visible_standalone>" in imported_xml
-    assert "<visible_bundle>true</visible_bundle>" in imported_xml
-    assert "<visible_summary>true</visible_summary>" in imported_xml
-    assert '<topic display_value="Technology services / Software / Access issues">' in imported_xml
-    assert "catalog-item-content-type-sys-id" in imported_xml
-    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+    assert len(updates) == 1
+    assert updates[0]["name"] == "sys_ui_section_notes-section-sys-id"
+    assert updates[0]["target_name"] == "Rm Story.Notes"
+    assert '<view display_value="Scrum" name="NULL">scrum-view-sys-id</view>' in str(
+        updates[0]["payload"]
+    )
+
+
+def test_form_section_customer_updates_fail_closed_for_invalid_requests() -> None:
+    client = FakeUpdateSetClient()
+    invalid_change_cases = [
+        ([], "form section removal requires exactly one candidate change"),
+        (
+            [
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="update",
+                    fields={"table": "dmn_demand", "sections": ["Assessment"]},
+                    rationale="Wrong operation.",
+                )
+            ],
+            "form section removal requires one sys_ui_section delete change",
+        ),
+        (
+            [
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={"sections": ["Assessment"]},
+                    rationale="Missing table.",
+                )
+            ],
+            "form section removal missing required field: table",
+        ),
+        (
+            [
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={"table": "dmn_demand", "sections": []},
+                    rationale="Missing section.",
+                )
+            ],
+            "form section removal requires at least one section",
+        ),
+        (
+            [
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={"table": "dmn_demand", "sections": ["Unknown"]},
+                    rationale="Unknown section.",
+                )
+            ],
+            "form section not found: Unknown",
+        ),
+    ]
+
+    for changes, expected_message in invalid_change_cases:
+        try:
+            form_section_customer_updates(
+                client=client,
+                changes=changes,
+                remote_update_set_sys_id="remote-sys-id",
+            )
+        except ValueError as exc:
+            assert expected_message in str(exc)
+        else:
+            raise AssertionError(f"invalid form section request was accepted: {changes}")
+
+
+def test_form_section_customer_updates_rejects_ambiguous_section_match() -> None:
+    class AmbiguousSectionClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_ui_section" and lookup == {"name": "dmn_demand"}:
+                return [
+                    {
+                        "sys_id": "assessment-a",
+                        "name": "dmn_demand",
+                        "caption": "Assessment Data",
+                        "view": {"display_value": "Default view", "value": "Default view"},
+                    },
+                    {
+                        "sys_id": "assessment-b",
+                        "name": "dmn_demand",
+                        "caption": "Assessment Summary",
+                        "view": {"display_value": "Default view", "value": "Default view"},
+                    },
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    try:
+        form_section_customer_updates(
+            client=AmbiguousSectionClient(),
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={"table": "dmn_demand", "sections": ["Assessment"]},
+                    rationale="Ambiguous section.",
+                )
+            ],
+            remote_update_set_sys_id="remote-sys-id",
+        )
+    except ValueError as exc:
+        assert "form section match is ambiguous: Assessment" in str(exc)
+    else:
+        raise AssertionError("ambiguous form section request was accepted")
 
 
 def test_create_update_set_handoff_accepts_table_aliases_and_position_hints() -> None:
@@ -845,149 +1008,35 @@ def test_create_update_set_handoff_preserves_reference_field_metadata() -> None:
     assert "<reference_qual_condition>vendor=true</reference_qual_condition>" in imported_xml
 
 
-def test_create_update_set_handoff_imports_business_rule_customer_update() -> None:
+def test_create_update_set_handoff_blocks_non_dictionary_candidates_until_builder_matures() -> None:
     client = FakeUpdateSetClient()
 
-    create_update_set_handoff(
-        client=client,
-        request=UpdateSetHandoffRequest(
-            story_sys_id="story-sys-id",
-            story_number="STRY0010116",
-            candidate=_business_rule_candidate(),
-            candidate_artifact_ref="db://artifact_blobs/116",
-            instance_url="https://dev205693.service-now.com",
-        ),
-    )
-
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_incident_jedi_incident_priority_note" in imported_xml
-    assert "<sys_script action=\"INSERT_OR_UPDATE\">" in imported_xml
-    assert "<collection>incident</collection>" in imported_xml
-    assert "<when>before</when>" in imported_xml
-    assert "<action_update>true</action_update>" in imported_xml
-    assert "current.priority.changesTo" in imported_xml
-    assert client.story_updates[-1]["fields"]["state"] == "-7"
-    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
-
-
-def test_create_update_set_handoff_rejects_forbidden_business_rule_script() -> None:
-    client = FakeUpdateSetClient()
-    forbidden_fields = {
-        **_business_rule_candidate().changes[0].fields,
-        "script": "new GlideRecord('sys_user').query();",
-    }
-    candidate = _business_rule_candidate().model_copy(
-        update={
-            "changes": [
-                _business_rule_candidate().changes[0].model_copy(
-                    update={"fields": forbidden_fields}
-                )
-            ]
-        }
-    )
-
-    try:
-        create_update_set_handoff(
-            client=client,
-            request=UpdateSetHandoffRequest(
-                story_sys_id="story-sys-id",
-                story_number="STRY0010116",
-                candidate=candidate,
-                candidate_artifact_ref="db://artifact_blobs/116",
-                instance_url="https://dev205693.service-now.com",
-            ),
-        )
-    except ValueError as exc:
-        assert "forbidden Business Rule script token: GlideRecord" in str(exc)
-    else:
-        raise AssertionError("forbidden Business Rule script was accepted")
+    for candidate in [
+        _business_rule_candidate(),
+        _catalog_item_candidate(),
+        _form_section_removal_candidate(),
+        _client_script_candidate(),
+        _script_include_candidate(),
+        _ui_policy_candidate(),
+    ]:
+        try:
+            create_update_set_handoff(
+                client=client,
+                request=UpdateSetHandoffRequest(
+                    story_sys_id="story-sys-id",
+                    story_number=candidate.story_number,
+                    candidate=candidate,
+                    candidate_artifact_ref="db://artifact_blobs/900",
+                    instance_url="https://dev205693.service-now.com",
+                ),
+            )
+        except ValueError as exc:
+            assert "no mature deterministic retrieved Update Set builder" in str(exc)
+        else:
+            raise AssertionError(f"non-dictionary candidate was handed off: {candidate.name}")
 
     assert client.imports == []
-
-
-def test_create_update_set_handoff_imports_client_script_customer_update() -> None:
-    client = FakeUpdateSetClient()
-
-    create_update_set_handoff(
-        client=client,
-        request=UpdateSetHandoffRequest(
-            story_sys_id="story-sys-id",
-            story_number="STRY0010118",
-            candidate=_client_script_candidate(),
-            candidate_artifact_ref="db://artifact_blobs/118",
-            instance_url="https://dev205693.service-now.com",
-        ),
-    )
-
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_client_incident_jedi_incident_category_ci_message" in imported_xml
-    assert "<sys_script_client action=\"INSERT_OR_UPDATE\">" in imported_xml
-    assert "<table>incident</table>" in imported_xml
-    assert "<type>onChange</type>" in imported_xml
-    assert "<field>category</field>" in imported_xml
-    assert "g_form.addInfoMessage" in imported_xml
-    assert client.story_updates[-1]["fields"]["state"] == "-7"
-    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
-
-
-def test_create_update_set_handoff_rejects_forbidden_client_script_browser_api() -> None:
-    client = FakeUpdateSetClient()
-    forbidden_fields = {
-        **_client_script_candidate().changes[0].fields,
-        "script": "fetch('https://example.com');",
-    }
-    candidate = _client_script_candidate().model_copy(
-        update={
-            "changes": [
-                _client_script_candidate().changes[0].model_copy(
-                    update={"fields": forbidden_fields}
-                )
-            ]
-        }
-    )
-
-    try:
-        create_update_set_handoff(
-            client=client,
-            request=UpdateSetHandoffRequest(
-                story_sys_id="story-sys-id",
-                story_number="STRY0010118",
-                candidate=candidate,
-                candidate_artifact_ref="db://artifact_blobs/118",
-                instance_url="https://dev205693.service-now.com",
-            ),
-        )
-    except ValueError as exc:
-        assert "forbidden Client Script token: fetch" in str(exc)
-    else:
-        raise AssertionError("forbidden Client Script was accepted")
-
-    assert client.imports == []
-
-
-def test_create_update_set_handoff_imports_script_include_customer_update() -> None:
-    client = FakeUpdateSetClient()
-
-    create_update_set_handoff(
-        client=client,
-        request=UpdateSetHandoffRequest(
-            story_sys_id="story-sys-id",
-            story_number="STRY0010120",
-            candidate=_script_include_candidate(),
-            candidate_artifact_ref="db://artifact_blobs/120",
-            instance_url="https://dev205693.service-now.com",
-        ),
-    )
-
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_script_include_jediincidentutils" in imported_xml
-    assert "<sys_script_include action=\"INSERT_OR_UPDATE\">" in imported_xml
-    assert "<name>JediIncidentUtils</name>" in imported_xml
-    assert "<api_name>global.JediIncidentUtils</api_name>" in imported_xml
-    assert "<client_callable>false</client_callable>" in imported_xml
-    assert "normalizeCategory" in imported_xml
-    assert client.story_updates[-1]["fields"]["state"] == "-7"
-    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+    assert client.story_updates == []
 
 
 def test_create_update_set_handoff_rejects_empty_candidate_changes_before_table_routing() -> None:
@@ -1009,110 +1058,6 @@ def test_create_update_set_handoff_rejects_empty_candidate_changes_before_table_
         assert "at least one candidate change" in str(exc)
     else:
         raise AssertionError("empty candidate changes reached table-specific handoff")
-
-
-def test_create_update_set_handoff_rejects_client_callable_script_include() -> None:
-    client = FakeUpdateSetClient()
-    forbidden_fields = {
-        **_script_include_candidate().changes[0].fields,
-        "client_callable": True,
-    }
-    candidate = _script_include_candidate().model_copy(
-        update={
-            "changes": [
-                _script_include_candidate().changes[0].model_copy(
-                    update={"fields": forbidden_fields}
-                )
-            ]
-        }
-    )
-
-    try:
-        create_update_set_handoff(
-            client=client,
-            request=UpdateSetHandoffRequest(
-                story_sys_id="story-sys-id",
-                story_number="STRY0010120",
-                candidate=candidate,
-                candidate_artifact_ref="db://artifact_blobs/120",
-                instance_url="https://dev205693.service-now.com",
-            ),
-        )
-    except ValueError as exc:
-        assert "client callable Script Includes are not supported" in str(exc)
-    else:
-        raise AssertionError("client callable Script Include was accepted")
-
-    assert client.imports == []
-
-
-def test_create_update_set_handoff_imports_ui_policy_customer_updates() -> None:
-    client = FakeUpdateSetClient()
-
-    create_update_set_handoff(
-        client=client,
-        request=UpdateSetHandoffRequest(
-            story_sys_id="story-sys-id",
-            story_number="STRY0010123",
-            candidate=_ui_policy_candidate(),
-            candidate_artifact_ref="db://artifact_blobs/123",
-            instance_url="https://dev205693.service-now.com",
-        ),
-    )
-
-    imported_xml = client.imports[0]["update_set_xml"]
-    assert "sys_ui_policy_incident_jedi_incident_assignment_group_required" in imported_xml
-    assert "sys_ui_policy_action_incident_assignment_group_required" in imported_xml
-    assert "<sys_ui_policy action=\"INSERT_OR_UPDATE\">" in imported_xml
-    assert "<sys_ui_policy_action action=\"INSERT_OR_UPDATE\">" in imported_xml
-    assert "<table>incident</table>" in imported_xml
-    assert "<conditions>category=software</conditions>" in imported_xml
-    assert "<reverse_if_false>true</reverse_if_false>" in imported_xml
-    assert "<run_scripts>false</run_scripts>" in imported_xml
-    assert "<field>assignment_group</field>" in imported_xml
-    assert "<mandatory>true</mandatory>" in imported_xml
-    assert "<visible>true</visible>" in imported_xml
-    assert "<disabled>ignore</disabled>" in imported_xml
-    assert "<cleared>false</cleared>" in imported_xml
-    assert client.story_updates[-1]["fields"]["state"] == "-7"
-    assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
-
-
-def test_create_update_set_handoff_rejects_ui_policy_run_scripts() -> None:
-    client = FakeUpdateSetClient()
-    forbidden_fields = {
-        **_ui_policy_candidate().changes[0].fields,
-        "run_scripts": True,
-        "script_true": "g_form.setMandatory('assignment_group', true);",
-    }
-    candidate = _ui_policy_candidate().model_copy(
-        update={
-            "changes": [
-                _ui_policy_candidate().changes[0].model_copy(
-                    update={"fields": forbidden_fields}
-                ),
-                _ui_policy_candidate().changes[1],
-            ]
-        }
-    )
-
-    try:
-        create_update_set_handoff(
-            client=client,
-            request=UpdateSetHandoffRequest(
-                story_sys_id="story-sys-id",
-                story_number="STRY0010123",
-                candidate=candidate,
-                candidate_artifact_ref="db://artifact_blobs/123",
-                instance_url="https://dev205693.service-now.com",
-            ),
-        )
-    except ValueError as exc:
-        assert "UI Policy run_scripts must be false" in str(exc)
-    else:
-        raise AssertionError("UI Policy with run scripts was accepted")
-
-    assert client.imports == []
 
 
 def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> None:
@@ -1143,46 +1088,9 @@ def test_create_update_set_handoff_rejects_unsupported_candidate_tables() -> Non
             ),
         )
     except ValueError as exc:
-        assert "retrieved Update Set candidate mixes unsupported change types" in str(exc)
+        assert "no mature deterministic retrieved Update Set builder" in str(exc)
     else:
         raise AssertionError("unsupported candidate table was accepted")
-
-    assert client.imports == []
-
-
-def test_create_update_set_handoff_rejects_flow_graph_diff_until_builder_exists() -> None:
-    client = FakeUpdateSetClient()
-    candidate = _candidate().model_copy(
-        update={
-            "changes": [
-                CandidateChange(
-                    table="sys_hub_flow_graph_diff",
-                    operation="update",
-                    fields={
-                        "capability": "flow_modify",
-                        "flow_name": "Incident Triage",
-                    },
-                    rationale="Validation-only Flow graph diff.",
-                )
-            ]
-        }
-    )
-
-    try:
-        create_update_set_handoff(
-            client=client,
-            request=UpdateSetHandoffRequest(
-                story_sys_id="story-sys-id",
-                story_number="STRY0010126",
-                candidate=candidate,
-                candidate_artifact_ref="db://artifact_blobs/126",
-                instance_url="https://dev205693.service-now.com",
-            ),
-        )
-    except ValueError as exc:
-        assert "unsupported retrieved Update Set table: sys_hub_flow_graph_diff" in str(exc)
-    else:
-        raise AssertionError("Flow graph diff was accepted for Update Set handoff")
 
     assert client.imports == []
 

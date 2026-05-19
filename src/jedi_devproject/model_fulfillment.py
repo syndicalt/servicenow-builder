@@ -109,6 +109,10 @@ def model_candidate_fulfillment_handler(
             packet=packet,
             surface_context_bundle=surface_context_bundle,
         )
+        form_layout_analysis = _form_layout_analysis_artifact(
+            packet=packet,
+            surface_context_bundle=surface_context_bundle,
+        )
         flow_preflight_guidance = _flow_preflight_guidance_artifact(packet=packet)
 
         return FulfillmentExecutionResult(
@@ -134,6 +138,17 @@ def model_candidate_fulfillment_handler(
                         )
                     ]
                     if code_surface_analysis is not None
+                    else []
+                ),
+                *(
+                    [
+                        FulfillmentArtifactRef(
+                            artifact_kind="form_layout_analysis",
+                            schema_version="form-layout-analysis-v1",
+                            payload_json=form_layout_analysis,
+                        )
+                    ]
+                    if form_layout_analysis is not None
                     else []
                 ),
                 *(
@@ -283,6 +298,55 @@ def _code_surface_capability(packet: Any) -> Capability | None:
     return None
 
 
+def _form_layout_analysis_artifact(
+    *,
+    packet: Any,
+    surface_context_bundle: ServiceNowSurfaceContextBundle | None,
+) -> dict[str, Any] | None:
+    capabilities = set(packet.capability_assessment.get("capabilities", []))
+    if Capability.FORM_SECTION_REMOVE.value not in capabilities:
+        return None
+    profile = capability_profile(Capability.FORM_SECTION_REMOVE)
+    sections = (
+        surface_context_bundle.table_context.form_sections
+        if surface_context_bundle is not None
+        else []
+    )
+    return {
+        "schema_version": "form-layout-analysis-v1",
+        "story_number": packet.story.number,
+        "capability": Capability.FORM_SECTION_REMOVE.value,
+        "target_table": (
+            surface_context_bundle.target_table if surface_context_bundle is not None else "unknown"
+        ),
+        "existing_section_count": len(sections),
+        "existing_sections": [
+            {
+                "sys_id": section.sys_id,
+                "name": section.name,
+                "caption": section.caption,
+                "view_name": section.view_name,
+                "element_count": len(section.elements),
+                "elements": [
+                    {
+                        "sys_id": element.sys_id,
+                        "element": element.element,
+                        "position": element.position,
+                    }
+                    for element in section.elements
+                ],
+            }
+            for section in sections
+        ],
+        "supported_generation": True,
+        "unsupported_cases": profile.unsupported_cases,
+        "required_instance_context": packet.capability_assessment.get(
+            "required_instance_context", []
+        ),
+        "context_sufficiency": packet.context_sufficiency,
+    }
+
+
 def _flow_preflight_guidance_artifact(*, packet: Any) -> dict[str, Any] | None:
     capabilities = set(packet.capability_assessment.get("capabilities", []))
     if Capability.FLOW_MODIFY.value not in capabilities:
@@ -385,6 +449,8 @@ def _manual_feedback_fields(
     lead = (
         f"Code surface analysis completed for {story_number}; it did not create a "
         if "code_surface_analysis:first" in candidate.eligibility_reasons
+        else f"Form layout analysis completed for {story_number}; it did not create a "
+        if "form_layout_analysis:first" in candidate.eligibility_reasons
         else f"Automated implementation candidate for {story_number} did not create a "
     )
     return {

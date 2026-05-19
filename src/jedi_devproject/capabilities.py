@@ -19,6 +19,7 @@ class Capability(StrEnum):
     DICTIONARY_FIELD_CREATE = "dictionary_field_create"
     FIELD_LABEL_CREATE = "field_label_create"
     FORM_LAYOUT_PLACE_FIELD = "form_layout_place_field"
+    FORM_SECTION_REMOVE = "form_section_remove"
     CHOICE_VALUES_CREATE = "choice_values_create"
     ACL_MODIFY = "acl_modify"
     FLOW_MODIFY = "flow_modify"
@@ -188,6 +189,40 @@ def _dictionary_form_profile(*, capability: Capability) -> CapabilityProfile:
         ],
         researcher="dictionary_form_researcher",
         build_pipeline="dictionary_form_update_set_pipeline",
+        current_max_story_points=3,
+        target_max_story_points=5,
+        creates_update_set=True,
+    )
+
+
+def _form_section_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.FORM_SECTION_REMOVE,
+        status="enabled",
+        supported_artifacts=["sys_ui_section", "sys_ui_element"],
+        required_instance_context=["form_sections", "form_layout"],
+        deterministic_validators=[
+            "target_table_present",
+            "form_sections_retrieved",
+            "requested_sections_resolved",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "multi-view section removal in one story",
+            "UI Policy behavior",
+            "Client Script behavior",
+            "role-based visibility",
+            "workspace or UI Builder page changes",
+        ],
+        uat_story_shape=[
+            "target table",
+            "form view",
+            "section or tab captions to remove",
+            "acceptance criteria",
+            "test evidence",
+        ],
+        researcher="form_layout_researcher",
+        build_pipeline="form_section_update_set_pipeline",
         current_max_story_points=3,
         target_max_story_points=5,
         creates_update_set=True,
@@ -385,6 +420,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.FORM_LAYOUT_PLACE_FIELD: _dictionary_form_profile(
         capability=Capability.FORM_LAYOUT_PLACE_FIELD
     ),
+    Capability.FORM_SECTION_REMOVE: _form_section_profile(),
     Capability.CATALOG_ITEM_CREATE: _catalog_item_generation_profile(),
     Capability.BUSINESS_RULE_ANALYZE: _code_surface_profile(
         capability=Capability.BUSINESS_RULE_ANALYZE,
@@ -465,6 +501,7 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
     return [
         CAPABILITY_REGISTRY[Capability.DICTIONARY_FIELD_CREATE],
         CAPABILITY_REGISTRY[Capability.FORM_LAYOUT_PLACE_FIELD],
+        CAPABILITY_REGISTRY[Capability.FORM_SECTION_REMOVE],
         CAPABILITY_REGISTRY[Capability.CATALOG_ITEM_CREATE],
         CAPABILITY_REGISTRY[Capability.BUSINESS_RULE_GENERATE],
         CAPABILITY_REGISTRY[Capability.CLIENT_SCRIPT_GENERATE],

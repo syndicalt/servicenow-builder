@@ -118,6 +118,7 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
     assert [profile.capability for profile in profiles] == [
         Capability.DICTIONARY_FIELD_CREATE,
         Capability.FORM_LAYOUT_PLACE_FIELD,
+        Capability.FORM_SECTION_REMOVE,
         Capability.CATALOG_ITEM_CREATE,
         Capability.BUSINESS_RULE_GENERATE,
         Capability.CLIENT_SCRIPT_GENERATE,
@@ -214,3 +215,16 @@ def test_catalog_item_generation_profile_is_enabled_for_simple_catalog_items() -
     assert profile.build_pipeline == "catalog_item_update_set_pipeline"
     assert "Record Producers" in profile.unsupported_cases
     assert "fulfillment flow or workflow creation" in profile.unsupported_cases
+
+
+def test_form_section_generation_profile_is_enabled_for_retrieved_update_sets() -> None:
+    profile = capability_profile(Capability.FORM_SECTION_REMOVE)
+
+    assert profile.status == "enabled"
+    assert profile.current_max_story_points == 3
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == ["sys_ui_section", "sys_ui_element"]
+    assert profile.required_instance_context == ["form_sections", "form_layout"]
+    assert profile.creates_update_set is True
+    assert profile.researcher == "form_layout_researcher"
+    assert profile.build_pipeline == "form_section_update_set_pipeline"

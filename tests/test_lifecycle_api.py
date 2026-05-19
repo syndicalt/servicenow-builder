@@ -120,6 +120,20 @@ class FakeOperationalStore:
         )
 
 
+class FakeCompleteNotifier:
+    def __init__(self) -> None:
+        self.completed: list[tuple[str, str | None, str]] = []
+
+    def __call__(
+        self,
+        *,
+        story_number: str,
+        story_sys_id: str | None,
+        event_id: str,
+    ) -> None:
+        self.completed.append((story_number, story_sys_id, event_id))
+
+
 def _ready_event_payload() -> dict[str, str]:
     return {
         "event_id": "evt-20260513-001",
@@ -141,6 +155,7 @@ def _complete_event_payload() -> dict[str, str]:
         {
             "event_id": "evt-20260514-uat-complete",
             "story_number": "STRY0010002",
+            "story_sys_id": "story-sys-id-0002",
             "previous_state": "Ready for Testing",
             "current_state": "Complete",
             "occurred_at": "2026-05-14T18:45:00Z",
@@ -502,7 +517,8 @@ def test_lifecycle_webhook_auth_requires_configured_secret_before_recording() ->
 
 def test_lifecycle_webhook_records_complete_event_and_closes_related_job() -> None:
     store = FakeOperationalStore()
-    client = TestClient(create_lifecycle_api(store=store))
+    complete_notifier = FakeCompleteNotifier()
+    client = TestClient(create_lifecycle_api(store=store, complete_notifier=complete_notifier))
 
     response = client.post("/lifecycle/events", json=_complete_event_payload())
 
@@ -521,6 +537,9 @@ def test_lifecycle_webhook_records_complete_event_and_closes_related_job() -> No
     assert store.closed_story_jobs == [("STRY0010002", "evt-20260514-uat-complete")]
     assert store.rework_story_jobs == []
     assert store.rejected_story_jobs == []
+    assert complete_notifier.completed == [
+        ("STRY0010002", "story-sys-id-0002", "evt-20260514-uat-complete")
+    ]
 
 
 def test_lifecycle_webhook_records_rework_event_without_enqueueing_build() -> None:

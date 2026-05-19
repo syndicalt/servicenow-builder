@@ -329,6 +329,75 @@ def test_extracts_dictionary_field_and_form_placement_intent() -> None:
     assert intent.missing_details == []
 
 
+def test_extracts_structured_form_section_removal_intent() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010011",
+            short_description="DMND: Hide Demand form tabs",
+            description=(
+                "Target artifact type: Form Section Removal\n"
+                "Target table: dmn_demand\n"
+                "View: Default view\n"
+                "Sections: Assessment, Financials\n"
+                "Actions: Remove the Assessment and Financials tabs from the "
+                "default Demand form layout.\n"
+                "Forbidden behavior: Do not create UI Policies, Client Scripts, "
+                "Business Rules, ACLs, or Flow changes."
+            ),
+        )
+    )
+
+    assert intent.source is AutomationIntentSource.STRUCTURED
+    assert intent.intent_type is AutomationIntentType.FORM_SECTION
+    assert intent.capability is Capability.FORM_SECTION_REMOVE
+    assert intent.target_table == "dmn_demand"
+    assert intent.form_view == "Default view"
+    assert intent.form_sections == ["Assessment", "Financials"]
+    assert intent.required_instance_context == ["form_sections", "form_layout"]
+    assert intent.missing_details == []
+
+
+def test_extracts_generic_form_section_intent_only_when_action_is_removal() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010011",
+            short_description="DMND: Hide Demand form tabs",
+            description=(
+                "Target artifact type: Form Section\n"
+                "Target table: dmn_demand\n"
+                "View: Default view\n"
+                "Sections: Assessment, Financials\n"
+                "Actions: Hide the Assessment and Financials tabs."
+            ),
+        )
+    )
+
+    assert intent.intent_type is AutomationIntentType.FORM_SECTION
+    assert intent.capability is Capability.FORM_SECTION_REMOVE
+    assert intent.form_sections == ["Assessment", "Financials"]
+
+
+def test_rejects_generic_form_section_intent_without_removal_action() -> None:
+    intent = extract_automation_intent(
+        _story(
+            number="STRY0010099",
+            short_description="DMND: Rename Demand form tab",
+            description=(
+                "Target artifact type: Form Section\n"
+                "Target table: dmn_demand\n"
+                "View: Default view\n"
+                "Sections: Financials\n"
+                "Actions: Rename the Financials tab to Budget Details."
+            ),
+        )
+    )
+
+    assert intent.intent_type is AutomationIntentType.FORM_SECTION
+    assert intent.capability is Capability.UNKNOWN
+    assert intent.form_sections == ["Financials"]
+    assert intent.missing_details == []
+
+
 def test_extracts_structured_catalog_item_intent_with_variables_and_topic() -> None:
     intent = extract_automation_intent(
         _story(

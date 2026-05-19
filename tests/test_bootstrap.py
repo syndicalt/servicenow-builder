@@ -1,3 +1,5 @@
+from typing import Any
+
 from jedi_devproject.bootstrap import (
     apply_bootstrap_fields,
     apply_lifecycle_webhook_records,
@@ -17,7 +19,7 @@ class FakeBootstrapClient:
     def __init__(self, fields: list[StoryDictionaryField]) -> None:
         self.fields = fields
         self.created_fields: list[dict[str, object]] = []
-        self.upserted_records: list[dict[str, object]] = []
+        self.upserted_records: list[dict[str, Any]] = []
 
     def fetch_story_dictionary_fields(self) -> list[StoryDictionaryField]:
         return self.fields
@@ -208,12 +210,25 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
     ]
     assert all(field["read_only"] is False for field in client.created_fields)
     assert result.updated_writable_fields == []
-    assert client.upserted_records == []
+    assert result.platform_readonly_records == [
+        "sys_ui_policy:Jedi DevProject read-only automation metadata",
+    ]
+    assert [record["table"] for record in client.upserted_records] == ["sys_ui_policy"]
+    assert client.upserted_records[0]["fields"]["table"] == "rm_story"
+    assert client.upserted_records[0]["fields"]["active"] == "true"
+    assert client.upserted_records[0]["fields"]["global"] == "true"
+    assert client.upserted_records[0]["fields"]["run_scripts"] == "true"
+    assert "g_form.setReadOnly('u_ai_status', true);" in str(
+        client.upserted_records[0]["fields"]["script_true"]
+    )
+    assert "g_form.setReadOnly('u_ai_artifact_reference', true);" in str(
+        client.upserted_records[0]["fields"]["script_true"]
+    )
     assert "state" not in result.created_fields
     assert result.form_layout_changes == []
 
 
-def test_apply_bootstrap_fields_patches_existing_operational_fields_writable() -> None:
+def test_apply_bootstrap_fields_adds_platform_readonly_policy() -> None:
     client = FakeBootstrapClient(
         [
             StoryDictionaryField(
@@ -221,7 +236,7 @@ def test_apply_bootstrap_fields_patches_existing_operational_fields_writable() -
                 column_label="AI Status",
                 internal_type="string",
                 active=True,
-                read_only=True,
+                read_only=False,
             ),
             StoryDictionaryField(
                 element="u_ai_handoff_type",
@@ -255,15 +270,12 @@ def test_apply_bootstrap_fields_patches_existing_operational_fields_writable() -
 
     assert result.applied is True
     assert result.created_fields == []
-    assert result.updated_writable_fields == ["u_ai_status"]
+    assert result.updated_writable_fields == []
     assert client.created_fields == []
-    assert client.upserted_records == [
-        {
-            "table": "sys_dictionary",
-            "lookup": {"name": "rm_story", "element": "u_ai_status"},
-            "fields": {"read_only": "false"},
-        }
+    assert result.platform_readonly_records == [
+        "sys_ui_policy:Jedi DevProject read-only automation metadata",
     ]
+    assert [record["table"] for record in client.upserted_records] == ["sys_ui_policy"]
 
 
 def test_lifecycle_business_rule_spec_emits_ready_and_complete_events() -> None:
