@@ -461,6 +461,7 @@ def _manual_feedback_fields(
             f"Candidate artifact: {candidate_artifact_ref}. "
             f"{_flow_preflight_guidance_note(candidate, flow_preflight_guidance_ref)}"
             f"{_missing_context_note(candidate)}"
+            f"{_reviewer_notes_note(candidate)}"
             f"Reasons: {reasons}."
         ),
     }
@@ -493,6 +494,22 @@ def _missing_context_note(candidate: UpdateSetCandidate) -> str:
     if not missing:
         return ""
     return f"Missing ServiceNow context: {', '.join(missing)}. "
+
+
+def _reviewer_notes_note(candidate: UpdateSetCandidate) -> str:
+    notes = [note.strip() for note in getattr(candidate, "reviewer_notes", []) if note.strip()]
+    actionable = [
+        note
+        for note in notes
+        if note.startswith("Suggested rewrite:")
+        or note.startswith("Add the missing automation details")
+        or note.startswith("The current request includes capabilities")
+        or note.startswith("Split the request")
+        or note.startswith("Rewrite the story")
+    ]
+    if not actionable:
+        return ""
+    return " ".join(actionable) + " "
 
 
 def _candidate_reasons(candidate: UpdateSetCandidate) -> str:

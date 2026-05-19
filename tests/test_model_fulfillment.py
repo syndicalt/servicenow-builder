@@ -1972,6 +1972,63 @@ def test_model_fulfillment_work_note_names_missing_surface_context() -> None:
     assert "Missing ServiceNow context: flows" in fields["work_notes"]
 
 
+def test_model_fulfillment_work_note_includes_story_rewrite_guidance() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010111",
+            short_description="Configure CMDB reconciliation rules",
+            description=(
+                "As a ServiceNow Configuration Manager, I want serial number to be "
+                "configured as the primary unique identifier in all reconciliation "
+                "rules so that devices are accurately matched across SCCM, Intune, "
+                "Workspace ONE, Azure Arc, and ServiceNow."
+            ),
+            acceptance_criteria=(
+                "Devices from all discovery sources are matched by serial number."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010111"}))
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/211",
+                sha256="d" * 64,
+                artifact_id=211,
+            )
+        ]
+    )
+
+    assert provider.payloads == []
+    feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert feedback_fields["u_ai_status"] == "Human Review Required"
+    assert "The current request includes capabilities outside the automated build pipeline" in (
+        feedback_fields["work_notes"]
+    )
+    assert "Suggested rewrite:" in feedback_fields["work_notes"]
+    assert "Target artifact type:" in feedback_fields["work_notes"]
+    assert "Decision needed:" in feedback_fields["work_notes"]
+
+
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(
     tmp_path: Path,
 ) -> None:

@@ -109,6 +109,8 @@ class StoryCapabilityAssessment(BaseModel):
     missing_details: list[str] = Field(default_factory=list)
     unsupported_capabilities: set[Capability] = Field(default_factory=set)
     automation_intent: dict[str, Any] | None = None
+    operator_feedback: list[str] = Field(default_factory=list)
+    suggested_story: str | None = None
     risk_score: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
 

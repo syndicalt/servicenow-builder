@@ -801,7 +801,10 @@ def _manual_review_candidate(
         *_surface_operation_reasons(packet),
         *context_plan.reasons,
     ]
-    reviewer_notes = ["Model invocation skipped by deterministic safety or context gate."]
+    reviewer_notes = [
+        "Model invocation skipped by deterministic safety or context gate.",
+        *_automation_feedback_notes(packet),
+    ]
     if packet.safety_decision == SuitabilityOutcome.CONTEXT_ANALYSIS.value:
         code_surface = _code_surface_capability(packet)
         if code_surface is not None:
@@ -813,6 +816,7 @@ def _manual_review_candidate(
                     "Code surface generation is not enabled until a mutation profile "
                     "and validators are approved."
                 ),
+                *_automation_feedback_notes(packet),
             ]
         form_layout = _form_layout_capability(packet)
         if form_layout is not None:
@@ -824,6 +828,7 @@ def _manual_review_candidate(
                     "Form section generation is not enabled until retrieved Update "
                     "Set XML shape evidence and validators are approved."
                 ),
+                *_automation_feedback_notes(packet),
             ]
     candidate = UpdateSetCandidate(
         story_number=packet.story.number,
@@ -838,6 +843,21 @@ def _manual_review_candidate(
     )
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
+
+
+def _automation_feedback_notes(packet: ImplementationPacket) -> list[str]:
+    assessment = packet.capability_assessment
+    if not isinstance(assessment, dict):
+        return []
+    notes = [
+        str(note).strip()
+        for note in assessment.get("operator_feedback", [])
+        if str(note).strip()
+    ]
+    suggested_story = assessment.get("suggested_story")
+    if isinstance(suggested_story, str) and suggested_story.strip():
+        notes.append(f"Suggested rewrite:\n{suggested_story.strip()}")
+    return notes
 
 
 def _surface_operation_reasons(packet: ImplementationPacket) -> list[str]:
