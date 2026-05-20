@@ -233,7 +233,9 @@ Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject
 - `SERVICENOW_CLIENT_SECRET`
 - `JEDI_AUDIT_ROOT`
 
-Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, `JEDI_BUILD_CLAIM_STATE`, `JEDI_ADMIN_API_TOKEN`, `JEDI_ENVIRONMENT`, `JEDI_ADMIN_AUTH_MODE`, `JEDI_ADMIN_CONSOLE_USERNAME`, and `JEDI_ADMIN_CONSOLE_PASSWORD`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
+Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, `JEDI_BUILD_CLAIM_STATE`, `JEDI_CLASSIFIER_GATE`, `JEDI_ADMIN_API_TOKEN`, `JEDI_ENVIRONMENT`, `JEDI_ADMIN_AUTH_MODE`, `JEDI_ADMIN_CONSOLE_USERNAME`, and `JEDI_ADMIN_CONSOLE_PASSWORD`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
+
+`JEDI_CLASSIFIER_GATE` defaults to `true`. When `true`, the worker keeps the normal fail-closed classifier gate: unknown or unsupported story surfaces do not call the model and receive human-review feedback. Setting `JEDI_CLASSIFIER_GATE=false` is an experimental development control that lets unknown classifier outcomes call the model for exploratory structured reasoning. It does not enable automatic retrieved Update Set handoff for those stories; non-automated classifier outcomes remain `Human Review Required`.
 
 For ServiceNow Table API integrations, prefer state values over labels. In the current PDI, `Ready` is `1` and `Work in progress` is `2`, so the Railway worker uses `JEDI_BUILD_CLAIM_FROM_STATE=1` and `JEDI_BUILD_CLAIM_STATE=2`.
 

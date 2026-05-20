@@ -379,6 +379,7 @@ def test_load_runtime_settings_accepts_env_file(tmp_path: Path) -> None:
                 "JEDI_WORKER_ID=worker-1",
                 f"JEDI_AUDIT_ROOT={tmp_path}",
                 "JEDI_BUILD_CLAIM_APPLY=true",
+                "JEDI_CLASSIFIER_GATE=false",
             ]
         ),
         encoding="utf-8",
@@ -390,7 +391,28 @@ def test_load_runtime_settings_accepts_env_file(tmp_path: Path) -> None:
     assert settings.worker_id == "worker-1"
     assert settings.audit_root == tmp_path
     assert settings.build_claim_apply is True
+    assert settings.classifier_gate is False
     assert settings.model_provider is None
+
+
+def test_load_runtime_settings_defaults_classifier_gate_enabled(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.classifier_gate is True
 
 
 def test_load_runtime_settings_accepts_build_claim_state_values(tmp_path: Path) -> None:

@@ -96,6 +96,7 @@ class RuntimeSettings(BaseModel):
     admin_rate_limit_window_seconds: int = 60
     update_set_apply: bool = False
     update_set_user_name: str | None = None
+    classifier_gate: bool = True
 
 
 class RuntimeStore(LifecycleEventStore, FulfillmentWorkerStore, Protocol):
@@ -183,6 +184,7 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         ),
         update_set_apply=_truthy(values.get("JEDI_UPDATE_SET_APPLY")),
         update_set_user_name=_optional_str(values.get("JEDI_UPDATE_SET_USER_NAME")),
+        classifier_gate=_truthy(values.get("JEDI_CLASSIFIER_GATE"), default=True),
     )
 
 
@@ -826,6 +828,7 @@ def _runtime_handler(
             instance_url=settings.servicenow_instance_url,
             apply_update_set_changes=settings.update_set_apply,
             update_set_user_name=settings.update_set_user_name,
+            classifier_gate=settings.classifier_gate,
         ),
     )
 
@@ -1093,8 +1096,11 @@ def _redact_url_password(url: str) -> str:
     return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
-def _truthy(value: str | None) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+def _truthy(value: str | None, *, default: bool = False) -> bool:
+    text = str(value or "").strip().lower()
+    if text == "":
+        return default
+    return text in {"1", "true", "yes", "on"}
 
 
 def _int_value(value: str | None, *, default: int) -> int:

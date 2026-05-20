@@ -76,6 +76,7 @@ class ModelCandidateFulfillmentConfig(BaseModel):
     instance_url: str
     apply_update_set_changes: bool = False
     update_set_user_name: str | None = None
+    classifier_gate: bool = True
 
 
 def model_candidate_fulfillment_handler(
@@ -104,6 +105,7 @@ def model_candidate_fulfillment_handler(
             packet=packet,
             policy=config.policy,
             provider=config.provider,
+            classifier_gate=config.classifier_gate,
         )
         code_surface_analysis = _code_surface_analysis_artifact(
             packet=packet,

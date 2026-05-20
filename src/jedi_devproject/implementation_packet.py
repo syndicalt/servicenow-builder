@@ -480,6 +480,7 @@ def generate_implementation_update_set_candidate(
     provider_policy: ProviderPolicy,
     rags: SpecializedRags,
     provider: ModelProvider,
+    classifier_gate: bool = True,
 ) -> UpdateSetCandidate:
     packet = _build_allowed_packet(
         story=story,
@@ -491,6 +492,7 @@ def generate_implementation_update_set_candidate(
         packet=packet,
         policy=policy,
         provider=provider,
+        classifier_gate=classifier_gate,
     )
 
 
@@ -499,11 +501,16 @@ def generate_implementation_update_set_candidate_from_packet(
     packet: ImplementationPacket,
     policy: AllowlistPolicy,
     provider: ModelProvider,
+    classifier_gate: bool = True,
 ) -> UpdateSetCandidate:
-    if packet.safety_decision != SuitabilityOutcome.AUTOMATED_BUILD.value:
+    classifier_gate_disabled = not classifier_gate
+    if (
+        packet.safety_decision != SuitabilityOutcome.AUTOMATED_BUILD.value
+        and not classifier_gate_disabled
+    ):
         return _manual_review_candidate(packet=packet)
     context_plan = plan_context_escalation(packet.context_sufficiency)
-    if not context_plan.should_call_model:
+    if not context_plan.should_call_model and not classifier_gate_disabled:
         return _manual_review_candidate(packet=packet)
     if _surface_operation_reasons(packet):
         return _manual_review_candidate(packet=packet)
@@ -527,7 +534,14 @@ def generate_implementation_update_set_candidate_from_packet(
         story_number=packet.story.number,
         name=f"UPD_{packet.story.number}_LLM_Implementation",
         eligibility_decision=_candidate_decision(packet.safety_decision),
-        eligibility_reasons=packet.safety_reasons,
+        eligibility_reasons=[
+            *packet.safety_reasons,
+            *(
+                ["classifier gate disabled for exploratory model reasoning"]
+                if classifier_gate_disabled
+                else []
+            ),
+        ],
         confidence=0.75,
         risk_score=packet.risk_score,
         status=CandidateStatus.READY_FOR_REVIEW,
@@ -539,9 +553,31 @@ def generate_implementation_update_set_candidate_from_packet(
             *[f"Rollback: {item}" for item in response["rollback_notes"]],
         ],
     )
+    if packet.safety_decision != SuitabilityOutcome.AUTOMATED_BUILD.value:
+        candidate = _route_candidate_to_manual_review(candidate)
     candidate = _route_candidate_by_builder_maturity(candidate)
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
+
+
+def _route_candidate_to_manual_review(candidate: UpdateSetCandidate) -> UpdateSetCandidate:
+    return candidate.model_copy(
+        update={
+            "eligibility_decision": "manual_review",
+            "status": CandidateStatus.MANUAL_BUILD,
+            "assumptions": [
+                *candidate.assumptions,
+                (
+                    "Structured candidate preserved for review because classifier "
+                    "gate bypass is exploratory."
+                ),
+            ],
+            "reviewer_notes": [
+                *candidate.reviewer_notes,
+                "Automated handoff skipped because the classifier did not approve the story.",
+            ],
+        }
+    )
 
 
 def _route_candidate_by_builder_maturity(candidate: UpdateSetCandidate) -> UpdateSetCandidate:
