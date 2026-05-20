@@ -2451,6 +2451,17 @@ def test_sprint_one_fifty_seven_change_log_documents_general_rewrite_feedback() 
     assert "target artifact type" in guide
 
 
+def test_sprint_one_fifty_eight_change_log_documents_classifier_gate_control() -> None:
+    change_log = Path("docs/sprints/sprint-158-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "`JEDI_CLASSIFIER_GATE=<true|false>`" in change_log
+    assert "defaults to `true`" in guide
+    assert "`JEDI_CLASSIFIER_GATE=false`" in guide
+    assert "exploratory structured reasoning" in guide
+    assert "do not create retrieved Update Set handoffs" in change_log
+
+
 def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> None:
     change_log = Path("docs/sprints/sprint-93-change-log.md").read_text(encoding="utf-8")
 

@@ -2029,6 +2029,74 @@ def test_model_fulfillment_work_note_includes_story_rewrite_guidance() -> None:
     assert "Decision needed:" in feedback_fields["work_notes"]
 
 
+def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010112",
+            short_description=(
+                "Configure Serial Number as Primary Identifier in Reconciliation Rules"
+            ),
+            description=(
+                "As a ServiceNow Configuration Manager, I want serial number to be "
+                "configured as the primary unique identifier in all reconciliation "
+                "rules so that devices are accurately matched across SCCM, Intune, "
+                "Workspace ONE, Azure Arc, and ServiceNow."
+            ),
+            acceptance_criteria=(
+                "Given device data from multiple sources, when reconciliation runs, "
+                "then serial number is used as the primary match key."
+            ),
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+            classifier_gate=False,
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010112"}))
+    candidate = result.artifacts[-1].payload_json
+    assert candidate is not None
+
+    assert provider.payloads
+    assert provider.payloads[0]["controls"]["safety_decision"] == "unsupported_capability"
+    assert provider.payloads[0]["controls"]["context_escalation"]["should_call_model"] is False
+    assert candidate["status"] == "Manual Build"
+    assert candidate["eligibility_decision"] == "manual_review"
+    assert "classifier gate disabled for exploratory model reasoning" in (
+        candidate["eligibility_reasons"]
+    )
+    assert result.after_artifacts_persisted is not None
+    result.after_artifacts_persisted(
+        [
+            FulfillmentPersistedArtifact(
+                artifact_kind="implementation_candidate",
+                path="db://artifact_blobs/212",
+                sha256="e" * 64,
+                artifact_id=212,
+            )
+        ]
+    )
+    assert client.imports == []
+    feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
+    assert feedback_fields["u_ai_status"] == "Human Review Required"
+    assert "classifier gate disabled for exploratory model reasoning" in (
+        feedback_fields["work_notes"]
+    )
+
+
 def test_model_candidate_handler_fails_closed_for_invalid_model_response(
     tmp_path: Path,
 ) -> None:
