@@ -31,6 +31,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.FIELD_LABEL_CREATE,
     Capability.FORM_LAYOUT_PLACE_FIELD,
     Capability.FORM_SECTION_REMOVE,
+    Capability.CMDB_IRE_ANALYZE,
 }
 
 FULL_MATURITY_MAX_AUTOMATED_POINTS = 5
@@ -91,6 +92,27 @@ def analyze_story_capabilities(
             reasons=reasons,
             missing_details=missing_details,
             unsupported=unsupported,
+        )
+
+    if Capability.CMDB_IRE_ANALYZE in requested:
+        profile = capability_profile(Capability.CMDB_IRE_ANALYZE)
+        reasons.extend(
+            [
+                "CMDB IRE analysis first",
+                "CMDB IRE mutation is not enabled yet",
+            ]
+        )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.CONTEXT_ANALYSIS,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
         )
 
     forbidden_business_rule_details = _business_rule_forbidden_details(positive_text)
@@ -663,6 +685,7 @@ def _suggested_artifact_type(requested: set[Capability]) -> str:
         Capability.FIELD_LABEL_CREATE: "Dictionary Field and Form Placement",
         Capability.FORM_LAYOUT_PLACE_FIELD: "Dictionary Field and Form Placement",
         Capability.FORM_SECTION_REMOVE: "Form Section Removal",
+        Capability.CMDB_IRE_ANALYZE: "CMDB IRE Analysis",
         Capability.CHOICE_VALUES_CREATE: "Choice Values",
         Capability.ACL_MODIFY: "ACL",
         Capability.FLOW_MODIFY: "Flow Designer",
@@ -700,6 +723,8 @@ def _requested_capabilities(text: str) -> set[Capability]:
         )
     if _is_form_section_request(text):
         capabilities.add(Capability.FORM_SECTION_REMOVE)
+    if _is_cmdb_ire_analysis_request(text):
+        capabilities.add(Capability.CMDB_IRE_ANALYZE)
     if "acl" in text or "only admins" in text or "only admin" in text:
         capabilities.add(Capability.ACL_MODIFY)
     if "workflow" in text or "flow designer" in text:
@@ -1100,6 +1125,8 @@ def _field_form_intent(story: Story, text: str) -> FieldFormIntent | None:
 def _target_table(text: str) -> str | None:
     if "script include" in text:
         return "global"
+    if _is_cmdb_ire_analysis_request(text):
+        return _cmdb_ire_target_table(text)
     if "incident" in text:
         return "incident"
     if "problem" in text:
@@ -1115,6 +1142,41 @@ def _target_table(text: str) -> str | None:
     if match:
         return match.group(1).lower()
     return None
+
+
+def _is_cmdb_ire_analysis_request(text: str) -> bool:
+    cmdb_terms = ("cmdb", "configuration item", "ci ", " cis", "device", "devices")
+    ire_terms = (
+        "ire",
+        "identification rule",
+        "identification rules",
+        "reconciliation rule",
+        "reconciliation rules",
+        "reconciliation runs",
+        "primary unique identifier",
+        "primary identifier",
+        "match key",
+        "matched by",
+    )
+    source_terms = ("sccm", "intune", "workspace one", "azure arc", "discovery source")
+    return (
+        any(term in text for term in cmdb_terms)
+        and any(term in text for term in ire_terms)
+    ) or (
+        "serial number" in text
+        and "reconciliation" in text
+        and any(term in text for term in source_terms)
+    )
+
+
+def _cmdb_ire_target_table(text: str) -> str:
+    if any(term in text for term in ["device", "devices", "computer", "sccm", "intune"]):
+        return "cmdb_ci_computer"
+    if any(term in text for term in ["server", "servers"]):
+        return "cmdb_ci_server"
+    if "network" in text:
+        return "cmdb_ci_netgear"
+    return "cmdb_ci"
 
 
 def _field_label(text: str) -> str | None:

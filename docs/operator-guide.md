@@ -1,5 +1,7 @@
 # Operator Guide
 
+For the full runtime architecture, workflow diagrams, and data-flow diagrams, see `docs/system-architecture.md`.
+
 ## Local Configuration
 
 Create a local `.env` file using `.env.example` as the template:
@@ -228,10 +230,11 @@ The worker runs outside the webhook request. The webhook should only validate, r
 Runtime configuration is loaded by `load_runtime_settings()` in `jedi_devproject.runtime`. Required environment values are:
 
 - `DATABASE_URL`
-- `SERVICENOW_INSTANCE_URL`
-- `SERVICENOW_CLIENT_ID`
-- `SERVICENOW_CLIENT_SECRET`
+- `SERVICENOW_PM_INSTANCE_URL`, `SERVICENOW_PM_CLIENT_ID`, and `SERVICENOW_PM_CLIENT_SECRET` for the story/source instance.
+- `SERVICENOW_DEV_INSTANCE_URL`, `SERVICENOW_DEV_CLIENT_ID`, and `SERVICENOW_DEV_CLIENT_SECRET` for the development target instance.
 - `JEDI_AUDIT_ROOT`
+
+The legacy `SERVICENOW_INSTANCE_URL`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET` values remain as a single-instance fallback for local tests and old deployments. New runtime deployments should use the PM/DEV split. Story retrieval, story state choices, story dictionary checks, story status updates, and failure work notes use the PM client. Live table/form context retrieval, platform metadata reads, bootstrap-style platform writes, and retrieved Update Set imports use the DEV client.
 
 Optional values are `JEDI_WORKER_ID`, `JEDI_BUILD_CLAIM_APPLY`, `JEDI_BUILD_CLAIM_FROM_STATE`, `JEDI_BUILD_CLAIM_STATE`, `JEDI_CLASSIFIER_GATE`, `JEDI_ADMIN_API_TOKEN`, `JEDI_ENVIRONMENT`, `JEDI_ADMIN_AUTH_MODE`, `JEDI_ADMIN_CONSOLE_USERNAME`, and `JEDI_ADMIN_CONSOLE_PASSWORD`. The API process should call `create_runtime_api()` with these settings. The worker process should call `process_one_runtime_fulfillment()` in a loop or scheduler owned by the runtime host.
 
@@ -305,7 +308,7 @@ When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-cl
 
 The model-facing dossier can include read-only XML shape references for the selected ServiceNow surface. These references are structured field/record models, not raw `sys_update_xml` payloads, and the model output contract is `structured_candidate_change_only`. Model responses that include raw XML fields or raw Update Set XML content fail validation.
 
-Before model generation, the worker investigates the target ServiceNow surface. This is broader than table/form metadata. Depending on story signals, the `instance_context_bundle` can include table schema, form layout, Business Rules, Client Scripts, UI Policies, Flow Designer records, Script Includes, ACL indicators, CMDB/discovery indicators, outbound REST integration surfaces, and public documentation queries routed through the approved RAG boundary.
+Before model generation, the worker investigates the target ServiceNow surface. This is broader than table/form metadata. Depending on story signals, the `instance_context_bundle` can include table schema, form layout, Business Rules, Client Scripts, UI Policies, Flow Designer records, Script Includes, ACL indicators, CMDB/discovery indicators, CMDB IRE identification and reconciliation context, outbound REST integration surfaces, and public documentation queries routed through the approved RAG boundary.
 
 The worker uses read-only Table API retrieval for live instance surfaces and does not call public documentation sites directly at runtime. Public documentation context must come through curated or approved RAG sources with citations. If required context cannot be retrieved, the implementation packet records `context_sufficiency.status=insufficient`, the provider is not called, and the story receives human-review or clarification feedback rather than a guessed implementation.
 
@@ -404,6 +407,21 @@ Surface mappings:
 When selected, the runtime retrieves the required context, redacts script-like fields, stores an `instance_context_bundle`, and stores a `code-surface-analysis-v1` artifact. The analysis names the capability, surface, source table, target table or `global`, existing record count, unsupported cases, and context sufficiency. It does not call the model and does not create a retrieved Update Set.
 
 The story receives human-review feedback through the normal work-note path. Code surface generation remains unsupported until separate mutation profiles define output schema, deterministic validators, retrieved Update Set XML evidence, and UAT expectations for each artifact type.
+
+### CMDB IRE Analysis Capability
+
+The `cmdb_ire_analyze` capability is context-only. It exists for stories that ask for CMDB Identification and Reconciliation Engine changes, such as using serial number as a primary identifier or match key across SCCM, Intune, Workspace ONE, Azure Arc, and ServiceNow device sources.
+
+When selected, the runtime targets the relevant CMDB class, usually `cmdb_ci_computer` for device stories, and retrieves four required surfaces:
+
+- `cmdb_ire_identification_rules` from `cmdb_identifier` and `cmdb_identifier_entry`.
+- `cmdb_ire_reconciliation_rules` from `cmdb_reconciliation_definition`.
+- `cmdb_data_sources` from `sys_object_source`.
+- `cmdb_class_hierarchy` from `sys_db_object`.
+
+The worker stores an `instance_context_bundle` and a `cmdb_ire_analysis` artifact with schema `cmdb-ire-analysis-v1`. With the classifier gate enabled, CMDB IRE stories route to human review without model generation. With `JEDI_CLASSIFIER_GATE=false`, the model may produce exploratory structured reasoning against the retrieved IRE dossier, but builder maturity remains `0.00`, status remains `Manual Build`, and no retrieved Update Set is created.
+
+CMDB IRE mutation is not enabled until identification-rule and reconciliation-rule validators, XML shape evidence, rollback strategy, and preview/commit evidence are approved.
 
 ### Business Rule Generation Capability
 
@@ -525,7 +543,7 @@ Run the local stack with:
 docker compose up --build
 ```
 
-The compose file expects ServiceNow OAuth values in the host environment: `SERVICENOW_INSTANCE_URL`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET`. It sets `DATABASE_URL` to the local `postgres` service and writes audit output under `/app/artifacts/audit`.
+The compose file expects ServiceNow OAuth values in the host environment. Prefer the split runtime values `SERVICENOW_PM_INSTANCE_URL`, `SERVICENOW_PM_CLIENT_ID`, `SERVICENOW_PM_CLIENT_SECRET`, `SERVICENOW_DEV_INSTANCE_URL`, `SERVICENOW_DEV_CLIENT_ID`, and `SERVICENOW_DEV_CLIENT_SECRET`. The legacy single-instance `SERVICENOW_INSTANCE_URL`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET` values remain supported for local compatibility. Compose sets `DATABASE_URL` to the local `postgres` service and writes audit output under `/app/artifacts/audit`.
 
 `JEDI_BUILD_CLAIM_APPLY` defaults to `false` in compose. Keep it false for local runtime verification until the story, webhook, and writeback behavior have been reviewed for the target PDI.
 

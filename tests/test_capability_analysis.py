@@ -932,7 +932,7 @@ def test_structured_form_section_rename_does_not_route_to_removal_pipeline() -> 
     assert "request includes unsupported pipeline capabilities" in assessment.reasons
 
 
-def test_non_automated_story_includes_general_rewrite_guidance() -> None:
+def test_cmdb_ire_story_routes_to_context_analysis() -> None:
     assessment = analyze_story_capabilities(
         _story(
             number="STRY0010111",
@@ -950,13 +950,17 @@ def test_non_automated_story_includes_general_rewrite_guidance() -> None:
         )
     )
 
-    assert assessment.outcome is SuitabilityOutcome.UNSUPPORTED_CAPABILITY
-    assert assessment.capabilities == {Capability.UNKNOWN}
-    assert assessment.operator_feedback
-    assert assessment.suggested_story is not None
-    assert "Target artifact type:" in assessment.suggested_story
-    assert "Decision needed:" in assessment.suggested_story
-    assert "Acceptance criteria:" in assessment.suggested_story
+    assert assessment.outcome is SuitabilityOutcome.CONTEXT_ANALYSIS
+    assert assessment.capabilities == {Capability.CMDB_IRE_ANALYZE}
+    assert assessment.target_table == "cmdb_ci_computer"
+    assert assessment.required_instance_context == [
+        "cmdb_ire_identification_rules",
+        "cmdb_ire_reconciliation_rules",
+        "cmdb_data_sources",
+        "cmdb_class_hierarchy",
+    ]
+    assert assessment.unsupported_capabilities == set()
+    assert "CMDB IRE analysis first" in assessment.reasons
 
 
 def test_missing_details_story_suggests_required_story_fields() -> None:

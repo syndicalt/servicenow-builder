@@ -20,6 +20,7 @@ class Capability(StrEnum):
     FIELD_LABEL_CREATE = "field_label_create"
     FORM_LAYOUT_PLACE_FIELD = "form_layout_place_field"
     FORM_SECTION_REMOVE = "form_section_remove"
+    CMDB_IRE_ANALYZE = "cmdb_ire_analyze"
     CHOICE_VALUES_CREATE = "choice_values_create"
     ACL_MODIFY = "acl_modify"
     FLOW_MODIFY = "flow_modify"
@@ -415,6 +416,52 @@ def _catalog_item_generation_profile() -> CapabilityProfile:
     )
 
 
+def _cmdb_ire_analysis_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.CMDB_IRE_ANALYZE,
+        status="context_only",
+        supported_artifacts=[
+            "cmdb_identifier",
+            "cmdb_identifier_entry",
+            "cmdb_reconciliation_definition",
+            "sys_object_source",
+        ],
+        required_instance_context=[
+            "cmdb_ire_identification_rules",
+            "cmdb_ire_reconciliation_rules",
+            "cmdb_data_sources",
+            "cmdb_class_hierarchy",
+        ],
+        deterministic_validators=[
+            "target_cmdb_class_resolved",
+            "identifier_rules_retrieved",
+            "reconciliation_rules_retrieved",
+            "data_sources_retrieved",
+            "class_hierarchy_retrieved",
+        ],
+        unsupported_cases=[
+            "automatic IRE rule mutation",
+            "CMDB class model creation",
+            "data source onboarding",
+            "discovery source credential changes",
+            "CMDB data migration",
+        ],
+        uat_story_shape=[
+            "target CMDB class or CI family",
+            "source systems",
+            "identifier attributes",
+            "reconciliation behavior",
+            "exception handling",
+            "test evidence",
+        ],
+        researcher="cmdb_ire_researcher",
+        build_pipeline="cmdb_ire_analysis_pipeline",
+        current_max_story_points=0,
+        target_max_story_points=5,
+        creates_update_set=False,
+    )
+
+
 CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.DICTIONARY_FIELD_CREATE: _dictionary_form_profile(
         capability=Capability.DICTIONARY_FIELD_CREATE
@@ -492,6 +539,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.UI_POLICY_GENERATE: _ui_policy_generation_profile(),
     Capability.FLOW_MODIFY: _flow_designer_generation_profile(),
+    Capability.CMDB_IRE_ANALYZE: _cmdb_ire_analysis_profile(),
 }
 
 
@@ -510,6 +558,7 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
         CAPABILITY_REGISTRY[Capability.SCRIPT_INCLUDE_GENERATE],
         CAPABILITY_REGISTRY[Capability.UI_POLICY_GENERATE],
         CAPABILITY_REGISTRY[Capability.FLOW_MODIFY],
+        CAPABILITY_REGISTRY[Capability.CMDB_IRE_ANALYZE],
     ]
 
 

@@ -77,6 +77,8 @@ This project should be treated as **FedRAMP-aligned and authorization-boundary r
 
 ServiceNow is the canonical work surface and workflow system of record. Users should continue to manage demand intake, project governance, backlog refinement, sprint execution, testing, and release tracking in ServiceNow SPM/PPM and Agile Development workflows.
 
+The detailed runtime architecture, workflow diagrams, and data-flow diagrams are maintained in `docs/system-architecture.md`.
+
 This product operates as an SPM-aware sidecar. It monitors approved ServiceNow records, analyzes eligible stories, generates reviewable artifacts, coordinates with the external build pipeline, and writes structured status back to ServiceNow. It does not replace Demand Management, Project Management, Agile Development 2.0, sprint planning, release tracking, or human approval.
 
 The sidecar writeback model is structured first:

@@ -35,6 +35,12 @@ def test_env_file_is_ignored() -> None:
 def test_env_example_documents_required_servicenow_keys() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
+    assert "SERVICENOW_PM_INSTANCE_URL=" in env_example
+    assert "SERVICENOW_PM_CLIENT_ID=" in env_example
+    assert "SERVICENOW_PM_CLIENT_SECRET=" in env_example
+    assert "SERVICENOW_DEV_INSTANCE_URL=" in env_example
+    assert "SERVICENOW_DEV_CLIENT_ID=" in env_example
+    assert "SERVICENOW_DEV_CLIENT_SECRET=" in env_example
     assert "SERVICENOW_INSTANCE_URL=" in env_example
     assert "SERVICENOW_CLIENT_ID=" in env_example
     assert "SERVICENOW_CLIENT_SECRET=" in env_example

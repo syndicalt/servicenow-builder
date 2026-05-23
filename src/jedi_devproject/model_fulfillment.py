@@ -115,6 +115,10 @@ def model_candidate_fulfillment_handler(
             packet=packet,
             surface_context_bundle=surface_context_bundle,
         )
+        cmdb_ire_analysis = _cmdb_ire_analysis_artifact(
+            packet=packet,
+            surface_context_bundle=surface_context_bundle,
+        )
         flow_preflight_guidance = _flow_preflight_guidance_artifact(packet=packet)
 
         return FulfillmentExecutionResult(
@@ -151,6 +155,17 @@ def model_candidate_fulfillment_handler(
                         )
                     ]
                     if form_layout_analysis is not None
+                    else []
+                ),
+                *(
+                    [
+                        FulfillmentArtifactRef(
+                            artifact_kind="cmdb_ire_analysis",
+                            schema_version="cmdb-ire-analysis-v1",
+                            payload_json=cmdb_ire_analysis,
+                        )
+                    ]
+                    if cmdb_ire_analysis is not None
                     else []
                 ),
                 *(
@@ -346,6 +361,60 @@ def _form_layout_analysis_artifact(
             "required_instance_context", []
         ),
         "context_sufficiency": packet.context_sufficiency,
+    }
+
+
+def _cmdb_ire_analysis_artifact(
+    *,
+    packet: Any,
+    surface_context_bundle: ServiceNowSurfaceContextBundle | None,
+) -> dict[str, Any] | None:
+    capabilities = set(packet.capability_assessment.get("capabilities", []))
+    if Capability.CMDB_IRE_ANALYZE.value not in capabilities:
+        return None
+    profile = capability_profile(Capability.CMDB_IRE_ANALYZE)
+    surface_names: list[SurfaceName] = [
+        "cmdb_ire_identification_rules",
+        "cmdb_ire_reconciliation_rules",
+        "cmdb_data_sources",
+        "cmdb_class_hierarchy",
+    ]
+    surfaces: dict[str, Any] = {}
+    for surface_name in surface_names:
+        context = (
+            surface_context_bundle.surface(surface_name)
+            if surface_context_bundle is not None
+            else None
+        )
+        surfaces[surface_name] = {
+            "source_table": context.source_table if context is not None else "unknown",
+            "record_count": len(context.records) if context is not None else 0,
+            "records": [
+                {
+                    "source_table": record.source_table,
+                    "name": record.name,
+                    "active": record.active,
+                    "summary": record.summary,
+                    "metadata": record.metadata,
+                }
+                for record in (context.records if context is not None else [])
+            ],
+            "citations": context.citations if context is not None else [],
+        }
+    return {
+        "schema_version": "cmdb-ire-analysis-v1",
+        "story_number": packet.story.number,
+        "capability": Capability.CMDB_IRE_ANALYZE.value,
+        "target_table": (
+            surface_context_bundle.target_table if surface_context_bundle is not None else "unknown"
+        ),
+        "supported_generation": False,
+        "unsupported_cases": profile.unsupported_cases,
+        "required_instance_context": packet.capability_assessment.get(
+            "required_instance_context", []
+        ),
+        "context_sufficiency": packet.context_sufficiency,
+        "surfaces": surfaces,
     }
 
 
