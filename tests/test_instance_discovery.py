@@ -67,6 +67,36 @@ class FakeDiscoveryClient:
             return [{"name": "incident", "label": "Incident", "is_extendable": "true"}]
         if table == "sys_db_object" and lookup == {"name": "sc_cat_item"}:
             return [{"name": "sc_cat_item", "label": "Catalog Item", "is_extendable": "true"}]
+        if table == "sys_db_object" and lookup == {"name": "cmdb_ci_computer"}:
+            return [
+                {
+                    "name": "cmdb_ci_computer",
+                    "label": "Computer",
+                    "is_extendable": "true",
+                    "super_class": "cmdb_ci_hardware",
+                }
+            ]
+        if table == "sys_db_object" and lookup == {}:
+            return [
+                {
+                    "sys_id": "cmdb-ci-sys-id",
+                    "name": "cmdb_ci",
+                    "label": "Configuration Item",
+                    "super_class": "",
+                },
+                {
+                    "sys_id": "cmdb-hardware-sys-id",
+                    "name": "cmdb_ci_hardware",
+                    "label": "Hardware",
+                    "super_class": "cmdb_ci",
+                },
+                {
+                    "sys_id": "cmdb-computer-sys-id",
+                    "name": "cmdb_ci_computer",
+                    "label": "Computer",
+                    "super_class": "cmdb_ci_hardware",
+                },
+            ]
         if table == "sys_dictionary" and lookup == {"name": "incident"}:
             return [
                 {
@@ -85,6 +115,15 @@ class FakeDiscoveryClient:
                     "max_length": "255",
                 }
             ]
+        if table == "sys_dictionary" and lookup == {"name": "cmdb_ci_computer"}:
+            return [
+                {
+                    "element": "serial_number",
+                    "column_label": "Serial number",
+                    "internal_type": "string",
+                    "max_length": "255",
+                }
+            ]
         if table == "sys_ui_section" and lookup == {"name": "incident"}:
             return [
                 {
@@ -96,12 +135,16 @@ class FakeDiscoveryClient:
             ]
         if table == "sys_ui_section" and lookup == {"name": "sc_cat_item"}:
             return []
+        if table == "sys_ui_section" and lookup == {"name": "cmdb_ci_computer"}:
+            return []
         if table == "sys_ui_element" and lookup == {
             "name": "incident",
             "sys_ui_section": "incident-main-section",
         }:
             return [{"sys_id": "description-element", "element": "description", "position": "2"}]
         if table == "sys_security_acl" and lookup == {"name": "sc_cat_item"}:
+            return []
+        if table == "sys_security_acl" and lookup == {"name": "cmdb_ci_computer"}:
             return []
         if table == "sys_security_acl" and lookup == {"name": "incident"}:
             return []
@@ -209,6 +252,44 @@ class FakeDiscoveryClient:
             ]
         if table == "sys_script_include" and lookup == {}:
             return [{"sys_id": "script-include-sys-id", "name": "IncidentUtils", "active": "true"}]
+        if table == "cmdb_identifier" and lookup == {}:
+            return [
+                {
+                    "sys_id": "identifier-sys-id",
+                    "name": "Computer",
+                    "applies_to": "cmdb_ci_computer",
+                    "active": "true",
+                }
+            ]
+        if table == "cmdb_identifier_entry" and lookup == {}:
+            return [
+                {
+                    "sys_id": "identifier-entry-sys-id",
+                    "identifier": "identifier-sys-id",
+                    "priority": "100",
+                    "attributes": "serial_number",
+                    "active": "true",
+                }
+            ]
+        if table == "cmdb_reconciliation_definition" and lookup == {}:
+            return [
+                {
+                    "sys_id": "reconciliation-sys-id",
+                    "name": "Computer SCCM",
+                    "applies_to": "cmdb_ci_computer",
+                    "data_source": "SCCM",
+                    "active": "true",
+                }
+            ]
+        if table == "sys_object_source" and lookup == {}:
+            return [
+                {
+                    "sys_id": "source-sys-id",
+                    "source_name": "SCCM",
+                    "target_sys_class_name": "cmdb_ci_computer",
+                    "name": "SCCM",
+                }
+            ]
         if table == "cmdb_ci" and lookup == {"sys_class_name": "cmdb_ci_discovery"}:
             return [
                 {
@@ -398,6 +479,39 @@ def test_discover_servicenow_surface_context_collects_catalog_employee_center_su
     assert connected_content.records[0].name == "Catalog Item"
     assert connected_content.records[0].metadata["sys_id"] == "catalog-item-content-type-sys-id"
     assert any(call["table"] == "taxonomy" for call in client.calls)
+
+
+def test_discover_servicenow_surface_context_collects_cmdb_ire_surfaces() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="cmdb_ci_computer",
+        story_text=(
+            "Configure serial number as the primary unique identifier in CMDB IRE "
+            "identification and reconciliation rules for SCCM and Intune devices."
+        ),
+        public_doc_queries=[],
+        required_surfaces_override=[
+            "cmdb_ire_identification_rules",
+            "cmdb_ire_reconciliation_rules",
+            "cmdb_data_sources",
+            "cmdb_class_hierarchy",
+        ],
+    )
+
+    assert bundle.target_table == "cmdb_ci_computer"
+    assert bundle.context_sufficient is True
+    assert bundle.surface_record_count("cmdb_ire_identification_rules") == 2
+    assert bundle.surface_record_count("cmdb_ire_reconciliation_rules") == 1
+    assert bundle.surface_record_count("cmdb_data_sources") == 1
+    assert bundle.surface_record_count("cmdb_class_hierarchy") == 3
+    assert bundle.surface("cmdb_ire_identification_rules").source_table == "cmdb_identifier"
+    assert bundle.surface("cmdb_ire_reconciliation_rules").source_table == (
+        "cmdb_reconciliation_definition"
+    )
+    assert "cmdb_identifier" in bundle.evidence
+    assert "cmdb_reconciliation_definition" in bundle.evidence
 
 
 def test_surface_context_ignores_forbidden_boundaries_as_requested_surfaces() -> None:

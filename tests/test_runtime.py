@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,12 +18,13 @@ from jedi_devproject.rate_limit import InMemoryRateLimiter
 from jedi_devproject.runtime import (
     RuntimeConfigError,
     RuntimeSettings,
+    SplitServiceNowClient,
     create_runtime_api,
     load_runtime_settings,
     process_one_runtime_fulfillment,
     validate_runtime_settings,
 )
-from jedi_devproject.servicenow import HttpRequest, HttpResponse
+from jedi_devproject.servicenow import HttpRequest, HttpResponse, ServiceNowClient
 
 
 class FakeRuntimeStore:
@@ -205,6 +206,66 @@ class RecordingTransport:
         return self.responses.pop(0)
 
 
+class RecordingServiceNowEndpoint:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.calls: list[str] = []
+
+    def fetch_ready_stories(
+        self,
+        project_sys_id: str | None = None,
+        *,
+        limit: int = 100,
+    ) -> list[Any]:
+        self.calls.append(f"fetch_ready_stories:{project_sys_id}:{limit}")
+        return []
+
+    def fetch_stories(self, sysparm_query: str | None = None, *, limit: int = 100) -> list[Any]:
+        self.calls.append(f"fetch_stories:{sysparm_query}:{limit}")
+        return []
+
+    def fetch_story_state_choices(self) -> list[Any]:
+        self.calls.append("fetch_story_state_choices")
+        return []
+
+    def fetch_story_dictionary_fields(self) -> list[Any]:
+        self.calls.append("fetch_story_dictionary_fields")
+        return []
+
+    def update_story_fields(self, story_sys_id: str, fields: dict[str, object]) -> dict[str, str]:
+        self.calls.append(f"update_story_fields:{story_sys_id}:{sorted(fields)}")
+        return {"sys_id": story_sys_id}
+
+    def fetch_table_record(self, *, table: str, lookup: dict[str, str]) -> dict[str, str] | None:
+        self.calls.append(f"fetch_table_record:{table}:{sorted(lookup)}")
+        return None
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, str]]:
+        self.calls.append(f"fetch_table_records:{table}:{sorted(lookup)}:{fields}:{limit}")
+        return []
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, object],
+    ) -> dict[str, str]:
+        self.calls.append(f"upsert_table_record:{table}:{sorted(lookup)}:{sorted(fields)}")
+        return {"sys_id": "record-sys-id"}
+
+    def import_update_set_xml(self, *, service_id: str, update_set_xml: str) -> dict[str, str]:
+        self.calls.append(f"import_update_set_xml:{service_id}:{len(update_set_xml)}")
+        return {"status": "imported"}
+
+
 def _settings(tmp_path: Path, *, apply: bool = False) -> RuntimeSettings:
     return RuntimeSettings(
         database_url="postgresql://jedi:secret@localhost:5432/jedi",
@@ -239,6 +300,41 @@ def _settings_with_openai(tmp_path: Path, *, apply: bool = False) -> RuntimeSett
             "openai_model": "gpt-4o-2024-08-06",
         }
     )
+
+
+def test_split_servicenow_client_routes_story_and_development_operations() -> None:
+    story_endpoint = RecordingServiceNowEndpoint("pm")
+    development_endpoint = RecordingServiceNowEndpoint("dev")
+    client = SplitServiceNowClient(
+        story_client=cast(ServiceNowClient, story_endpoint),
+        development_client=cast(ServiceNowClient, development_endpoint),
+    )
+
+    client.fetch_stories(sysparm_query="number=STRY0010013", limit=1)
+    client.fetch_story_state_choices()
+    client.fetch_story_dictionary_fields()
+    client.update_story_fields("story-sys-id", {"u_ai_status": "Complete"})
+    client.fetch_table_records(table="sys_dictionary", lookup={"name": "incident"})
+    client.fetch_table_record(table="sys_user", lookup={"user_name": "admin"})
+    client.upsert_table_record(
+        table="sys_remote_update_set",
+        lookup={"name": "JEDI STRY0010013 - AI Candidate"},
+        fields={"state": "loaded"},
+    )
+    client.import_update_set_xml(service_id="jedi_update_set_import", update_set_xml="<xml/>")
+
+    assert story_endpoint.calls == [
+        "fetch_stories:number=STRY0010013:1",
+        "fetch_story_state_choices",
+        "fetch_story_dictionary_fields",
+        "update_story_fields:story-sys-id:['u_ai_status']",
+    ]
+    assert development_endpoint.calls == [
+        "fetch_table_records:sys_dictionary:['name']:None:100",
+        "fetch_table_record:sys_user:['user_name']",
+        "upsert_table_record:sys_remote_update_set:['name']:['state']",
+        "import_update_set_xml:jedi_update_set_import:6",
+    ]
 
 
 def _job(
@@ -393,6 +489,37 @@ def test_load_runtime_settings_accepts_env_file(tmp_path: Path) -> None:
     assert settings.build_claim_apply is True
     assert settings.classifier_gate is False
     assert settings.model_provider is None
+
+
+def test_load_runtime_settings_separates_pm_source_from_dev_target(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_PM_INSTANCE_URL=https://pm.service-now.com",
+                "SERVICENOW_PM_CLIENT_ID=pm-client-id",
+                "SERVICENOW_PM_CLIENT_SECRET=pm-client-secret",
+                "SERVICENOW_DEV_INSTANCE_URL=https://dev.service-now.com",
+                "SERVICENOW_DEV_CLIENT_ID=dev-client-id",
+                "SERVICENOW_DEV_CLIENT_SECRET=dev-client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.servicenow_pm_instance_url == "https://pm.service-now.com"
+    assert settings.servicenow_pm_client_id == "pm-client-id"
+    assert settings.servicenow_pm_client_secret == "pm-client-secret"
+    assert settings.servicenow_dev_instance_url == "https://dev.service-now.com"
+    assert settings.servicenow_dev_client_id == "dev-client-id"
+    assert settings.servicenow_dev_client_secret == "dev-client-secret"
+    assert settings.servicenow_instance_url == "https://dev.service-now.com"
+    assert settings.servicenow_client_id == "dev-client-id"
+    assert settings.servicenow_client_secret == "dev-client-secret"
 
 
 def test_load_runtime_settings_defaults_classifier_gate_enabled(tmp_path: Path) -> None:

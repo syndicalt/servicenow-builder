@@ -74,6 +74,12 @@ class RuntimeSettings(BaseModel):
     servicenow_instance_url: str
     servicenow_client_id: str
     servicenow_client_secret: str
+    servicenow_pm_instance_url: str = ""
+    servicenow_pm_client_id: str = ""
+    servicenow_pm_client_secret: str = ""
+    servicenow_dev_instance_url: str = ""
+    servicenow_dev_client_id: str = ""
+    servicenow_dev_client_secret: str = ""
     worker_id: str = "jedi-devproject-worker"
     audit_root: Path
     build_claim_apply: bool = False
@@ -117,27 +123,83 @@ StoreFactory = Callable[[str], RuntimeStore]
 DEFAULT_STORE_FACTORY = cast(StoreFactory, connect_operational_store)
 
 
+def _env_value(values: dict[str, str], primary_key: str, fallback_key: str) -> str:
+    return str(values.get(primary_key) or values.get(fallback_key) or "")
+
+
+def _missing_split_servicenow_settings(
+    *,
+    pm_instance_url: str,
+    pm_client_id: str,
+    pm_client_secret: str,
+    dev_instance_url: str,
+    dev_client_id: str,
+    dev_client_secret: str,
+) -> list[str]:
+    missing: list[str] = []
+    if not pm_instance_url:
+        missing.append("SERVICENOW_PM_INSTANCE_URL or SERVICENOW_INSTANCE_URL")
+    if not pm_client_id:
+        missing.append("SERVICENOW_PM_CLIENT_ID or SERVICENOW_CLIENT_ID")
+    if not pm_client_secret:
+        missing.append("SERVICENOW_PM_CLIENT_SECRET or SERVICENOW_CLIENT_SECRET")
+    if not dev_instance_url:
+        missing.append("SERVICENOW_DEV_INSTANCE_URL or SERVICENOW_INSTANCE_URL")
+    if not dev_client_id:
+        missing.append("SERVICENOW_DEV_CLIENT_ID or SERVICENOW_CLIENT_ID")
+    if not dev_client_secret:
+        missing.append("SERVICENOW_DEV_CLIENT_SECRET or SERVICENOW_CLIENT_SECRET")
+    return missing
+
+
 def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
     values = dict(os.environ)
     if env_path is not None and env_path.exists():
         values.update(load_dotenv_values(env_path))
+    pm_instance_url = _env_value(values, "SERVICENOW_PM_INSTANCE_URL", "SERVICENOW_INSTANCE_URL")
+    pm_client_id = _env_value(values, "SERVICENOW_PM_CLIENT_ID", "SERVICENOW_CLIENT_ID")
+    pm_client_secret = _env_value(
+        values,
+        "SERVICENOW_PM_CLIENT_SECRET",
+        "SERVICENOW_CLIENT_SECRET",
+    )
+    dev_instance_url = _env_value(values, "SERVICENOW_DEV_INSTANCE_URL", "SERVICENOW_INSTANCE_URL")
+    dev_client_id = _env_value(values, "SERVICENOW_DEV_CLIENT_ID", "SERVICENOW_CLIENT_ID")
+    dev_client_secret = _env_value(
+        values,
+        "SERVICENOW_DEV_CLIENT_SECRET",
+        "SERVICENOW_CLIENT_SECRET",
+    )
     required = [
         "DATABASE_URL",
-        "SERVICENOW_INSTANCE_URL",
-        "SERVICENOW_CLIENT_ID",
-        "SERVICENOW_CLIENT_SECRET",
         "JEDI_AUDIT_ROOT",
     ]
     missing = [key for key in required if not values.get(key)]
+    missing.extend(
+        _missing_split_servicenow_settings(
+            pm_instance_url=pm_instance_url,
+            pm_client_id=pm_client_id,
+            pm_client_secret=pm_client_secret,
+            dev_instance_url=dev_instance_url,
+            dev_client_id=dev_client_id,
+            dev_client_secret=dev_client_secret,
+        )
+    )
     if missing:
         raise RuntimeConfigError(f"Missing required runtime settings: {', '.join(missing)}")
 
     return RuntimeSettings(
         runtime_environment=str(values.get("JEDI_ENVIRONMENT") or "development"),
         database_url=str(values["DATABASE_URL"]),
-        servicenow_instance_url=str(values["SERVICENOW_INSTANCE_URL"]),
-        servicenow_client_id=str(values["SERVICENOW_CLIENT_ID"]),
-        servicenow_client_secret=str(values["SERVICENOW_CLIENT_SECRET"]),
+        servicenow_instance_url=str(dev_instance_url),
+        servicenow_client_id=str(dev_client_id),
+        servicenow_client_secret=str(dev_client_secret),
+        servicenow_pm_instance_url=str(pm_instance_url),
+        servicenow_pm_client_id=str(pm_client_id),
+        servicenow_pm_client_secret=str(pm_client_secret),
+        servicenow_dev_instance_url=str(dev_instance_url),
+        servicenow_dev_client_id=str(dev_client_id),
+        servicenow_dev_client_secret=str(dev_client_secret),
         worker_id=str(values.get("JEDI_WORKER_ID") or "jedi-devproject-worker"),
         audit_root=Path(str(values["JEDI_AUDIT_ROOT"])),
         build_claim_apply=_truthy(values.get("JEDI_BUILD_CLAIM_APPLY")),
@@ -243,13 +305,13 @@ def create_runtime_api(
     )
     store = store_factory(settings.database_url)
     request_transport = transport or UrllibTransport()
-    servicenow_client = _servicenow_client_from_settings(
+    story_client = _servicenow_story_client_from_settings(
         settings=settings,
         transport=request_transport,
     )
     app = create_lifecycle_api(
         store=store,
-        complete_notifier=_servicenow_complete_notifier(client=servicenow_client),
+        complete_notifier=_servicenow_complete_notifier(client=story_client),
         webhook_auth_mode=settings.lifecycle_webhook_auth_mode,
         webhook_secret=settings.lifecycle_webhook_secret,
         runtime_environment=settings.runtime_environment,
@@ -799,7 +861,7 @@ def _json_timestamp(value: datetime) -> str:
 def _runtime_handler(
     *,
     settings: RuntimeSettings,
-    client: ServiceNowClient,
+    client: Any,
     claim_handler: FulfillmentHandler,
     transport: HttpTransport,
 ) -> FulfillmentHandler:
@@ -825,7 +887,7 @@ def _runtime_handler(
                 ),
                 transport=transport,
             ),
-            instance_url=settings.servicenow_instance_url,
+            instance_url=settings.servicenow_dev_instance_url or settings.servicenow_instance_url,
             apply_update_set_changes=settings.update_set_apply,
             update_set_user_name=settings.update_set_user_name,
             classifier_gate=settings.classifier_gate,
@@ -847,13 +909,25 @@ def process_one_runtime_fulfillment(
 ) -> FulfillmentWorkerResult:
     validate_runtime_settings(settings, require_admin_auth=False)
     request_transport = transport or UrllibTransport()
-    servicenow_client = _servicenow_client_from_settings(
+    story_client = _servicenow_story_client_from_settings(
         settings=settings,
         transport=request_transport,
     )
+    development_client = (
+        story_client
+        if _servicenow_pm_and_dev_settings_match(settings)
+        else _servicenow_development_client_from_settings(
+            settings=settings,
+            transport=request_transport,
+        )
+    )
+    servicenow_client = SplitServiceNowClient(
+        story_client=story_client,
+        development_client=development_client,
+    )
     with store_factory(settings.database_url) as store:
         claim_handler = build_claim_fulfillment_handler(
-            client=servicenow_client,
+            client=story_client,
             config=BuildClaimFulfillmentConfig(
                 actor_id=settings.worker_id,
                 audit_root=settings.audit_root,
@@ -876,7 +950,7 @@ def process_one_runtime_fulfillment(
                 secret_values=_runtime_secret_values(settings),
             ),
             failure_notifier=_servicenow_failure_notifier(
-                client=servicenow_client,
+                client=story_client,
                 secret_values=_runtime_secret_values(settings),
             ),
         )
@@ -892,19 +966,121 @@ def _rate_limiter(*, max_requests: int, window_seconds: int) -> InMemoryRateLimi
     return InMemoryRateLimiter(max_requests=max_requests, window_seconds=window_seconds)
 
 
-def _servicenow_client_from_settings(
+class SplitServiceNowClient:
+    def __init__(
+        self,
+        *,
+        story_client: ServiceNowClient,
+        development_client: ServiceNowClient,
+    ) -> None:
+        self._story_client = story_client
+        self._development_client = development_client
+
+    def fetch_ready_stories(self, project_sys_id: str | None = None, *, limit: int = 100) -> Any:
+        return self._story_client.fetch_ready_stories(project_sys_id=project_sys_id, limit=limit)
+
+    def fetch_stories(self, sysparm_query: str | None = None, *, limit: int = 100) -> Any:
+        return self._story_client.fetch_stories(sysparm_query=sysparm_query, limit=limit)
+
+    def fetch_story_state_choices(self) -> Any:
+        return self._story_client.fetch_story_state_choices()
+
+    def fetch_story_dictionary_fields(self) -> Any:
+        return self._story_client.fetch_story_dictionary_fields()
+
+    def update_story_fields(self, story_sys_id: str, fields: dict[str, object]) -> Any:
+        return self._story_client.update_story_fields(story_sys_id, fields)
+
+    def fetch_table_record(self, *, table: str, lookup: dict[str, str]) -> Any:
+        return self._development_client.fetch_table_record(table=table, lookup=lookup)
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> Any:
+        return self._development_client.fetch_table_records(
+            table=table,
+            lookup=lookup,
+            fields=fields,
+            limit=limit,
+        )
+
+    def upsert_table_record(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: dict[str, object],
+    ) -> Any:
+        return self._development_client.upsert_table_record(
+            table=table,
+            lookup=lookup,
+            fields=fields,
+        )
+
+    def import_update_set_xml(self, *, service_id: str, update_set_xml: str) -> Any:
+        return self._development_client.import_update_set_xml(
+            service_id=service_id,
+            update_set_xml=update_set_xml,
+        )
+
+
+def _servicenow_story_client_from_settings(
     *,
     settings: RuntimeSettings,
     transport: HttpTransport,
 ) -> ServiceNowClient:
+    return _servicenow_client(
+        instance_url=settings.servicenow_pm_instance_url or settings.servicenow_instance_url,
+        client_id=settings.servicenow_pm_client_id or settings.servicenow_client_id,
+        client_secret=settings.servicenow_pm_client_secret or settings.servicenow_client_secret,
+        transport=transport,
+    )
+
+
+def _servicenow_development_client_from_settings(
+    *,
+    settings: RuntimeSettings,
+    transport: HttpTransport,
+) -> ServiceNowClient:
+    return _servicenow_client(
+        instance_url=settings.servicenow_dev_instance_url or settings.servicenow_instance_url,
+        client_id=settings.servicenow_dev_client_id or settings.servicenow_client_id,
+        client_secret=settings.servicenow_dev_client_secret or settings.servicenow_client_secret,
+        transport=transport,
+    )
+
+
+def _servicenow_pm_and_dev_settings_match(settings: RuntimeSettings) -> bool:
+    return (
+        (settings.servicenow_pm_instance_url or settings.servicenow_instance_url)
+        == (settings.servicenow_dev_instance_url or settings.servicenow_instance_url)
+        and (settings.servicenow_pm_client_id or settings.servicenow_client_id)
+        == (settings.servicenow_dev_client_id or settings.servicenow_client_id)
+        and (settings.servicenow_pm_client_secret or settings.servicenow_client_secret)
+        == (settings.servicenow_dev_client_secret or settings.servicenow_client_secret)
+    )
+
+
+def _servicenow_client(
+    *,
+    instance_url: str,
+    client_id: str,
+    client_secret: str,
+    transport: HttpTransport,
+) -> ServiceNowClient:
     auth = OAuthClientCredentials(
-        instance_url=settings.servicenow_instance_url,
-        client_id=settings.servicenow_client_id,
-        client_secret=settings.servicenow_client_secret,
+        instance_url=instance_url,
+        client_id=client_id,
+        client_secret=client_secret,
         transport=transport,
     )
     return ServiceNowClient(
-        settings=ServiceNowSettings(instance_url=settings.servicenow_instance_url),
+        settings=ServiceNowSettings(instance_url=instance_url),
         auth=auth,
         transport=transport,
     )
@@ -970,6 +1146,10 @@ def _default_model_allowlist_policy() -> AllowlistPolicy:
             "item_option_new",
             "sc_cat_item_category",
             "m2m_connected_content",
+            "cmdb_identifier",
+            "cmdb_identifier_entry",
+            "cmdb_reconciliation_definition",
+            "sys_object_source",
         },
         operations={"delete", "insert", "update"},
         max_points=3,
@@ -1051,6 +1231,8 @@ def _runtime_secret_values(settings: RuntimeSettings) -> tuple[str, ...]:
         settings.database_url,
         _url_password(settings.database_url),
         settings.servicenow_client_secret,
+        settings.servicenow_pm_client_secret,
+        settings.servicenow_dev_client_secret,
         settings.lifecycle_webhook_secret or "",
     ]
     return tuple(value for value in values if value)

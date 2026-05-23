@@ -102,6 +102,27 @@ class FakeModelClient:
         limit: int = 100,
     ) -> list[dict[str, object]]:
         self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
+        if table == "sys_db_object" and lookup == {}:
+            return [
+                {
+                    "sys_id": "cmdb-ci-sys-id",
+                    "name": "cmdb_ci",
+                    "label": "Configuration Item",
+                    "super_class": "",
+                },
+                {
+                    "sys_id": "cmdb-hardware-sys-id",
+                    "name": "cmdb_ci_hardware",
+                    "label": "Hardware",
+                    "super_class": "cmdb_ci",
+                },
+                {
+                    "sys_id": "cmdb-computer-sys-id",
+                    "name": "cmdb_ci_computer",
+                    "label": "Computer",
+                    "super_class": "cmdb_ci_hardware",
+                },
+            ]
         if table == "sys_db_object":
             target_table = lookup["name"]
             return [{"name": target_table, "label": target_table.replace("_", " ").title()}]
@@ -258,6 +279,44 @@ class FakeModelClient:
                     "script": "var password = 'secret-value';",
                 }
             ]
+        if table == "cmdb_identifier":
+            return [
+                {
+                    "sys_id": "identifier-sys-id",
+                    "name": "Computer identifier",
+                    "applies_to": "cmdb_ci_computer",
+                    "active": "true",
+                }
+            ]
+        if table == "cmdb_identifier_entry":
+            return [
+                {
+                    "sys_id": "identifier-entry-sys-id",
+                    "identifier": "identifier-sys-id",
+                    "priority": "100",
+                    "attributes": "serial_number",
+                    "active": "true",
+                }
+            ]
+        if table == "cmdb_reconciliation_definition":
+            return [
+                {
+                    "sys_id": "reconciliation-sys-id",
+                    "name": "SCCM computer reconciliation",
+                    "applies_to": "cmdb_ci_computer",
+                    "data_source": "SCCM",
+                    "active": "true",
+                }
+            ]
+        if table == "sys_object_source":
+            return [
+                {
+                    "sys_id": "source-sys-id",
+                    "source_name": "SCCM",
+                    "target_sys_class_name": "cmdb_ci_computer",
+                    "name": "SCCM",
+                }
+            ]
         if table == "cmdb_ci":
             return []
         if table == "sys_rest_message":
@@ -345,6 +404,10 @@ def _policy() -> AllowlistPolicy:
             "sys_script_include",
             "sys_ui_policy",
             "sys_ui_policy_action",
+            "cmdb_identifier",
+            "cmdb_identifier_entry",
+            "cmdb_reconciliation_definition",
+            "sys_object_source",
         },
         operations={"insert", "update", "delete"},
         max_points=3,
@@ -1972,7 +2035,7 @@ def test_model_fulfillment_work_note_names_missing_surface_context() -> None:
     assert "Missing ServiceNow context: flows" in fields["work_notes"]
 
 
-def test_model_fulfillment_work_note_includes_story_rewrite_guidance() -> None:
+def test_model_fulfillment_work_note_includes_cmdb_ire_analysis_feedback() -> None:
     client = FakeModelClient(
         story=Story(
             sys_id="story-sys-id",
@@ -2021,12 +2084,9 @@ def test_model_fulfillment_work_note_includes_story_rewrite_guidance() -> None:
     assert provider.payloads == []
     feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
     assert feedback_fields["u_ai_status"] == "Human Review Required"
-    assert "The current request includes capabilities outside the automated build pipeline" in (
-        feedback_fields["work_notes"]
-    )
-    assert "Suggested rewrite:" in feedback_fields["work_notes"]
-    assert "Target artifact type:" in feedback_fields["work_notes"]
-    assert "Decision needed:" in feedback_fields["work_notes"]
+    assert "cmdb_ire_analysis:first" in feedback_fields["work_notes"]
+    assert "capability:cmdb_ire_analyze" in feedback_fields["work_notes"]
+    assert "CMDB IRE mutation is not enabled yet" in feedback_fields["work_notes"]
 
 
 def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning() -> None:
@@ -2053,7 +2113,23 @@ def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning
             data_classification=DataClassification.PUBLIC,
         )
     )
-    provider = RecordingModelProvider()
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                    {
+                        "table": "cmdb_identifier",
+                        "operation": "update",
+                        "fields": {
+                            "name": "Computer identifier",
+                            "applies_to": "cmdb_ci_computer",
+                    },
+                    "rationale": "Serial-number IRE change requires human review.",
+                }
+            ],
+            "test_plan": ["Review CMDB IRE identifier and reconciliation rules."],
+            "rollback_notes": ["Do not commit CMDB IRE changes without CAB approval."],
+        }
+    )
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
@@ -2071,12 +2147,27 @@ def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning
     assert candidate is not None
 
     assert provider.payloads
-    assert provider.payloads[0]["controls"]["safety_decision"] == "unsupported_capability"
-    assert provider.payloads[0]["controls"]["context_escalation"]["should_call_model"] is False
+    assert provider.payloads[0]["controls"]["safety_decision"] == "context_analysis"
+    assert provider.payloads[0]["controls"]["context_escalation"]["should_call_model"] is True
+    assert provider.payloads[0]["controls"]["capability_assessment"]["capabilities"] == [
+        "cmdb_ire_analyze"
+    ]
+    assert provider.payloads[0]["instance_context_bundle"]["required_surfaces"] == [
+        "cmdb_ire_identification_rules",
+        "cmdb_ire_reconciliation_rules",
+        "cmdb_data_sources",
+        "cmdb_class_hierarchy",
+    ]
     assert candidate["status"] == "Manual Build"
     assert candidate["eligibility_decision"] == "manual_review"
     assert "classifier gate disabled for exploratory model reasoning" in (
         candidate["eligibility_reasons"]
+    )
+    assert "builder maturity below automated handoff threshold: cmdb_identifier=0.00" in (
+        candidate["eligibility_reasons"]
+    )
+    assert any(
+        artifact.artifact_kind == "cmdb_ire_analysis" for artifact in result.artifacts
     )
     assert result.after_artifacts_persisted is not None
     result.after_artifacts_persisted(

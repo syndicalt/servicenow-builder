@@ -866,6 +866,19 @@ def _manual_review_candidate(
                 ),
                 *_automation_feedback_notes(packet),
             ]
+        if Capability.CMDB_IRE_ANALYZE.value in set(
+            packet.capability_assessment.get("capabilities", [])
+        ):
+            eligibility_reasons.insert(0, "cmdb_ire_analysis:first")
+            eligibility_reasons.insert(1, f"capability:{Capability.CMDB_IRE_ANALYZE.value}")
+            reviewer_notes = [
+                "CMDB IRE analysis completed without generation.",
+                (
+                    "CMDB IRE mutation is not enabled until identification and "
+                    "reconciliation rule validators are approved."
+                ),
+                *_automation_feedback_notes(packet),
+            ]
     candidate = UpdateSetCandidate(
         story_number=packet.story.number,
         name=f"UPD_{packet.story.number}_Manual_Build",

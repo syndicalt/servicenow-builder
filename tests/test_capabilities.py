@@ -94,6 +94,23 @@ def test_code_surface_analysis_profiles_are_context_only() -> None:
         assert profile.creates_update_set is False
 
 
+def test_cmdb_ire_analysis_profile_is_context_only() -> None:
+    profile = capability_profile(Capability.CMDB_IRE_ANALYZE)
+
+    assert profile.status == "context_only"
+    assert profile.required_instance_context == [
+        "cmdb_ire_identification_rules",
+        "cmdb_ire_reconciliation_rules",
+        "cmdb_data_sources",
+        "cmdb_class_hierarchy",
+    ]
+    assert "cmdb_identifier" in profile.supported_artifacts
+    assert "cmdb_reconciliation_definition" in profile.supported_artifacts
+    assert profile.current_max_story_points == 0
+    assert profile.target_max_story_points == 5
+    assert profile.creates_update_set is False
+
+
 def test_capability_profiles_record_current_and_target_story_point_maturity() -> None:
     dictionary_profile = capability_profile(Capability.DICTIONARY_FIELD_CREATE)
     business_rule_profile = capability_profile(Capability.BUSINESS_RULE_GENERATE)
@@ -125,6 +142,7 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
         Capability.SCRIPT_INCLUDE_GENERATE,
         Capability.UI_POLICY_GENERATE,
         Capability.FLOW_MODIFY,
+        Capability.CMDB_IRE_ANALYZE,
     ]
     assert all(profile.target_max_story_points == 5 for profile in profiles)
     assert all(profile.researcher for profile in profiles)

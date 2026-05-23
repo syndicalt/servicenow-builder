@@ -136,6 +136,36 @@ def test_operator_guide_documents_postgres_operational_store() -> None:
     assert "DB-backed artifacts" in guide
 
 
+def test_system_architecture_doc_includes_workflow_and_data_flow_diagrams() -> None:
+    architecture = Path("docs/system-architecture.md").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    security_flow = Path("docs/security/data-flow.md").read_text(encoding="utf-8")
+
+    assert "## Runtime Components" in architecture
+    assert "## Deployment Topology" in architecture
+    assert "## Lifecycle Workflow" in architecture
+    assert "## Fulfillment Pipeline" in architecture
+    assert "## Data Flow" in architecture
+    assert "## Failure Handling" in architecture
+    assert "```mermaid" in architecture
+    assert "sequenceDiagram" in architecture
+    assert "flowchart TD" in architecture
+    assert "flowchart LR" in architecture
+    assert "ServiceNow Instance" in architecture
+    assert "PostgreSQL operational store" in architecture
+    assert "instance_context_bundle" in architecture
+    assert "implementation_packet" in architecture
+    assert "sys_remote_update_set" in architecture
+    assert "cmdb_ire_analyze" in architecture
+    assert "Split ServiceNow Instances" in architecture
+    assert "SERVICENOW_PM_INSTANCE_URL" in architecture
+    assert "SERVICENOW_DEV_INSTANCE_URL" in architecture
+    assert "docs/system-architecture.md" in readme
+    assert "docs/system-architecture.md" in guide
+    assert "docs/system-architecture.md" in security_flow
+
+
 def test_operator_guide_documents_lifecycle_webhook_api() -> None:
     guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
 
@@ -2460,6 +2490,34 @@ def test_sprint_one_fifty_eight_change_log_documents_classifier_gate_control() -
     assert "`JEDI_CLASSIFIER_GATE=false`" in guide
     assert "exploratory structured reasoning" in guide
     assert "do not create retrieved Update Set handoffs" in change_log
+
+
+def test_sprint_one_fifty_nine_change_log_documents_cmdb_ire_analysis() -> None:
+    change_log = Path("docs/sprints/sprint-159-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+
+    assert "`cmdb_ire_analyze`" in change_log
+    assert "`cmdb_ire_identification_rules`" in change_log
+    assert "`cmdb_ire_reconciliation_rules`" in change_log
+    assert "cmdb-ire-analysis-v1" in change_log
+    assert "CMDB IRE Analysis Capability" in guide
+    assert "cmdb_identifier" in guide
+    assert "cmdb_reconciliation_definition" in guide
+    assert "builder maturity remains `0.00`" in guide
+
+
+def test_sprint_one_sixty_change_log_documents_split_servicenow_runtime() -> None:
+    change_log = Path("docs/sprints/sprint-160-change-log.md").read_text(encoding="utf-8")
+    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    architecture = Path("docs/system-architecture.md").read_text(encoding="utf-8")
+
+    assert "separate story/source and development/target instances" in change_log
+    assert "`SERVICENOW_PM_INSTANCE_URL`" in change_log
+    assert "`SERVICENOW_DEV_INSTANCE_URL`" in change_log
+    assert "single-instance compatibility fallback" in change_log
+    assert "story status updates" in guide
+    assert "retrieved Update Set imports use the DEV client" in guide
+    assert "Split ServiceNow Instances" in architecture
 
 
 def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> None:

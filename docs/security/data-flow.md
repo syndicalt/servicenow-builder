@@ -1,5 +1,7 @@
 # Data Flow
 
+The canonical architecture and diagram set is `docs/system-architecture.md`. This file keeps the security-focused data-flow summary.
+
 ## Local Development Flow
 
 1. Developer stores PDI connection settings in local `.env`.
