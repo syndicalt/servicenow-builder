@@ -9,6 +9,8 @@ from jedi_devproject.instance_discovery import (
     discover_dictionary_form_context,
     discover_servicenow_surface_context,
 )
+from jedi_devproject.models import RetrievalCitation
+from jedi_devproject.rag import RetrievalResult
 
 
 def test_instance_discovery_context_records_table_fields_and_form_anchor() -> None:
@@ -386,6 +388,15 @@ def test_discover_dictionary_form_context_fetches_target_instance_state() -> Non
 
 def test_discover_servicenow_surface_context_collects_related_platform_surfaces() -> None:
     client = FakeDiscoveryClient()
+    public_doc_result = RetrievalResult(
+        content="Business Rules run on ServiceNow records.",
+        citation=RetrievalCitation(
+            source="public_web:https://docs.servicenow.com/business-rules",
+            content_hash="public-doc-hash",
+            confidence=0.75,
+            version="live-public-web",
+        ),
+    )
 
     bundle = discover_servicenow_surface_context(
         client=client,
@@ -396,6 +407,7 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
             "and public documentation."
         ),
         public_doc_queries=["ServiceNow business rule documentation"],
+        public_doc_results=[public_doc_result],
     )
 
     assert isinstance(bundle, ServiceNowSurfaceContextBundle)
@@ -425,6 +437,7 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     assert bundle.surface_record_count("public_docs") == 1
     assert "sys_script:incident" in bundle.evidence
     assert "public_docs:ServiceNow business rule documentation" in bundle.evidence
+    assert "public_web:public-doc-hash" in bundle.evidence
     assert "business-rule-sys-id" not in bundle.model_dump_json()
     assert "secret-value" not in bundle.model_dump_json()
     assert "token=" not in bundle.model_dump_json()
@@ -439,6 +452,23 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     assert integrations.records[0].metadata["rest_endpoint"] == (
         "https://api.example.invalid/path?[redacted_query]"
     )
+
+
+def test_required_public_docs_without_results_are_insufficient() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text="Use public documentation for this Incident UI Policy.",
+        public_doc_queries=["ServiceNow UI Policy documentation"],
+        public_doc_results=[],
+        required_surfaces_override=["table_schema", "form_layout", "public_docs"],
+    )
+
+    assert bundle.surface_record_count("public_docs") == 0
+    assert "public_docs" in bundle.missing_required_surfaces
+    assert bundle.context_sufficient is False
 
 
 def test_discover_servicenow_surface_context_collects_catalog_employee_center_surfaces() -> None:

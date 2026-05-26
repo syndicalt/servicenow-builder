@@ -129,9 +129,21 @@ def ui_policy_customer_updates(
 
 
 def _ui_policy_intent(changes: list[CandidateChange]) -> UiPolicyIntent:
-    policy_change = next((change for change in changes if change.table == "sys_ui_policy"), None)
-    if policy_change is None:
+    unexpected_tables = sorted(
+        {change.table for change in changes}
+        - {"sys_ui_policy", "sys_ui_policy_action"}
+    )
+    if unexpected_tables:
+        raise ValueError(
+            "UI Policy handoff received unsupported tables: "
+            f"{', '.join(unexpected_tables)}"
+        )
+    policy_changes = [change for change in changes if change.table == "sys_ui_policy"]
+    if not policy_changes:
         raise ValueError("UI Policy handoff requires a sys_ui_policy change")
+    if len(policy_changes) != 1:
+        raise ValueError("UI Policy handoff requires exactly one sys_ui_policy change")
+    policy_change = policy_changes[0]
     action_changes = [change for change in changes if change.table == "sys_ui_policy_action"]
     if not action_changes:
         raise ValueError("UI Policy handoff requires at least one sys_ui_policy_action change")

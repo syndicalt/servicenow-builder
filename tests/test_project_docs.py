@@ -555,7 +555,8 @@ def test_operator_guide_documents_surface_investigation_before_model_calls() -> 
     assert "Flow Designer records" in guide
     assert "CMDB/discovery indicators" in guide
     assert "provider is not called" in guide
-    assert "does not call public documentation sites directly" in guide
+    assert "JEDI_PUBLIC_WEB_ACCESS=worker" in guide
+    assert "HTTPS" in guide
 
 
 def test_sprint_one_hundred_six_change_log_documents_surface_investigator() -> None:
@@ -2503,7 +2504,8 @@ def test_sprint_one_fifty_nine_change_log_documents_cmdb_ire_analysis() -> None:
     assert "CMDB IRE Analysis Capability" in guide
     assert "cmdb_identifier" in guide
     assert "cmdb_reconciliation_definition" in guide
-    assert "builder maturity remains `0.00`" in guide
+    assert "cmdb_ire_generate" in guide
+    assert "retrieved Update Set handoff remains disabled" in guide
 
 
 def test_sprint_one_sixty_change_log_documents_split_servicenow_runtime() -> None:
@@ -2518,6 +2520,16 @@ def test_sprint_one_sixty_change_log_documents_split_servicenow_runtime() -> Non
     assert "story status updates" in guide
     assert "retrieved Update Set imports use the DEV client" in guide
     assert "Split ServiceNow Instances" in architecture
+
+
+def test_sprint_one_sixty_one_change_log_documents_roadmap_items_four_five_six() -> None:
+    change_log = Path("docs/sprints/sprint-161-change-log.md").read_text(encoding="utf-8")
+
+    assert "Sprint 161 Change Log" in change_log
+    assert "`enabled` now means" in change_log
+    assert "`ui_policy_generate`" in change_log
+    assert "`cmdb_ire_generate`" in change_log
+    assert "JEDI_PUBLIC_WEB_ACCESS=worker" in change_log
 
 
 def test_sprint_ninety_three_change_log_documents_generic_dictionary_form() -> None:

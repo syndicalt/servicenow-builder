@@ -121,12 +121,45 @@ def test_capability_profiles_record_current_and_target_story_point_maturity() ->
     assert dictionary_profile.build_pipeline == "dictionary_form_update_set_pipeline"
     assert dictionary_profile.creates_update_set is True
 
-    assert business_rule_profile.status == "enabled"
+    assert business_rule_profile.status == "candidate_generation"
     assert business_rule_profile.current_max_story_points == 3
     assert business_rule_profile.target_max_story_points == 5
     assert business_rule_profile.researcher == "code_surface_researcher"
     assert business_rule_profile.build_pipeline == "business_rule_update_set_pipeline"
-    assert business_rule_profile.creates_update_set is True
+    assert business_rule_profile.creates_update_set is False
+
+
+def test_only_handoff_capable_profiles_use_enabled_status() -> None:
+    for profile in generation_capability_profiles():
+        if profile.status == "enabled":
+            assert profile.creates_update_set is True
+            assert profile.capability in {
+                Capability.DICTIONARY_FIELD_CREATE,
+                Capability.FORM_LAYOUT_PLACE_FIELD,
+                Capability.UI_POLICY_GENERATE,
+            }
+        else:
+            assert profile.status in {"candidate_generation", "designed", "context_only"}
+            assert profile.creates_update_set is False
+
+
+def test_cmdb_ire_generation_profile_includes_reconciliation_rules_without_handoff() -> None:
+    profile = capability_profile(Capability.CMDB_IRE_GENERATE)
+
+    assert profile.status == "candidate_generation"
+    assert profile.required_instance_context == [
+        "cmdb_ire_identification_rules",
+        "cmdb_ire_reconciliation_rules",
+        "cmdb_data_sources",
+        "cmdb_class_hierarchy",
+    ]
+    assert profile.supported_artifacts == [
+        "cmdb_identifier",
+        "cmdb_identifier_entry",
+        "cmdb_reconciliation_definition",
+    ]
+    assert profile.creates_update_set is False
+    assert "xml shape evidence not captured" in profile.unsupported_cases
 
 
 def test_generation_registry_names_every_handled_surface_pipeline() -> None:
@@ -143,34 +176,35 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
         Capability.UI_POLICY_GENERATE,
         Capability.FLOW_MODIFY,
         Capability.CMDB_IRE_ANALYZE,
+        Capability.CMDB_IRE_GENERATE,
     ]
     assert all(profile.target_max_story_points == 5 for profile in profiles)
     assert all(profile.researcher for profile in profiles)
     assert all(profile.build_pipeline for profile in profiles)
 
 
-def test_client_script_generation_profile_is_enabled_at_current_maturity() -> None:
+def test_client_script_generation_profile_generates_candidates_at_current_maturity() -> None:
     profile = capability_profile(Capability.CLIENT_SCRIPT_GENERATE)
 
-    assert profile.status == "enabled"
+    assert profile.status == "candidate_generation"
     assert profile.current_max_story_points == 3
     assert profile.target_max_story_points == 5
     assert profile.supported_artifacts == ["sys_script_client"]
     assert profile.required_instance_context == ["table_schema", "client_scripts"]
-    assert profile.creates_update_set is True
+    assert profile.creates_update_set is False
     assert "DOM manipulation outside g_form APIs" in profile.unsupported_cases
     assert "GlideAjax dependency creation" in profile.unsupported_cases
 
 
-def test_script_include_generation_profile_is_enabled_at_current_maturity() -> None:
+def test_script_include_generation_profile_generates_candidates_at_current_maturity() -> None:
     profile = capability_profile(Capability.SCRIPT_INCLUDE_GENERATE)
 
-    assert profile.status == "enabled"
+    assert profile.status == "candidate_generation"
     assert profile.current_max_story_points == 3
     assert profile.target_max_story_points == 5
     assert profile.supported_artifacts == ["sys_script_include"]
     assert profile.required_instance_context == ["script_includes"]
-    assert profile.creates_update_set is True
+    assert profile.creates_update_set is False
     assert "global privilege escalation" in profile.unsupported_cases
     assert "cross-scope access changes" in profile.unsupported_cases
 
@@ -203,17 +237,17 @@ def test_flow_designer_generation_profile_is_designed_but_not_enabled() -> None:
         "sys_hub_flow_logic_instance_v2",
     ]
     assert profile.required_instance_context == ["flows", "flow_graph"]
-    assert profile.creates_update_set is True
+    assert profile.creates_update_set is False
     assert profile.researcher == "flow_designer_researcher"
     assert profile.build_pipeline == "flow_designer_update_set_pipeline"
     assert "graph rewrites" in profile.unsupported_cases
     assert "custom actions" in profile.unsupported_cases
 
 
-def test_catalog_item_generation_profile_is_enabled_for_simple_catalog_items() -> None:
+def test_catalog_item_generation_profile_generates_candidates_for_simple_catalog_items() -> None:
     profile = capability_profile(Capability.CATALOG_ITEM_CREATE)
 
-    assert profile.status == "enabled"
+    assert profile.status == "candidate_generation"
     assert profile.current_max_story_points == 3
     assert profile.target_max_story_points == 5
     assert profile.supported_artifacts == [
@@ -228,21 +262,21 @@ def test_catalog_item_generation_profile_is_enabled_for_simple_catalog_items() -
         "employee_center_topics",
         "employee_center_connected_content",
     ]
-    assert profile.creates_update_set is True
+    assert profile.creates_update_set is False
     assert profile.researcher == "catalog_item_researcher"
     assert profile.build_pipeline == "catalog_item_update_set_pipeline"
     assert "Record Producers" in profile.unsupported_cases
     assert "fulfillment flow or workflow creation" in profile.unsupported_cases
 
 
-def test_form_section_generation_profile_is_enabled_for_retrieved_update_sets() -> None:
+def test_form_section_generation_profile_generates_candidates_pending_handoff() -> None:
     profile = capability_profile(Capability.FORM_SECTION_REMOVE)
 
-    assert profile.status == "enabled"
+    assert profile.status == "candidate_generation"
     assert profile.current_max_story_points == 3
     assert profile.target_max_story_points == 5
     assert profile.supported_artifacts == ["sys_ui_section", "sys_ui_element"]
     assert profile.required_instance_context == ["form_sections", "form_layout"]
-    assert profile.creates_update_set is True
+    assert profile.creates_update_set is False
     assert profile.researcher == "form_layout_researcher"
     assert profile.build_pipeline == "form_section_update_set_pipeline"

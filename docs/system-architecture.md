@@ -135,14 +135,14 @@ flowchart TD
 | Capability | Current Runtime Outcome | Required Context | Handoff |
 |---|---|---|---|
 | `dictionary_field_create` / `form_layout_place_field` | Automated build for low-complexity stories | `table_schema`, `form_layout` | Retrieved Update Set. |
-| `form_section_remove` | Supported narrow form section removal | `form_sections`, `form_layout` | Retrieved Update Set when deterministic section resolution succeeds. |
-| `catalog_item_create` | Supported for current narrow catalog subset | Catalog, category, Employee Center topic, connected content | Retrieved Update Set when builder maturity allows. |
-| `business_rule_generate` | Supported table-local subset | `table_schema`, `business_rules` | Retrieved Update Set for validated safe scripts. |
-| `client_script_generate` | Supported table-local subset | `table_schema`, `client_scripts` | Retrieved Update Set for validated safe scripts. |
-| `script_include_generate` | Supported utility subset | `script_includes` | Retrieved Update Set for validated safe scripts. |
+| `form_section_remove` | Candidate generation | `form_sections`, `form_layout` | No handoff until deterministic section XML evidence is restored. |
+| `catalog_item_create` | Candidate generation | Catalog, category, Employee Center topic, connected content | No handoff until catalog builder maturity reaches the handoff threshold. |
+| `business_rule_generate` | Candidate generation | `table_schema`, `business_rules` | No handoff until executable-code XML evidence and validators are approved. |
+| `client_script_generate` | Candidate generation | `table_schema`, `client_scripts` | No handoff until browser-side safety and XML evidence are approved. |
+| `script_include_generate` | Candidate generation | `script_includes` | No handoff until executable-code XML evidence and validators are approved. |
 | `ui_policy_generate` | Supported declarative subset | `table_schema`, `form_layout`, `ui_policies` | Retrieved Update Set for validated actions. |
 | `flow_modify` | Context/preflight only | `flows`, `flow_graph` | No handoff. |
-| `cmdb_ire_analyze` | Context-only | IRE rules, data sources, class hierarchy | No handoff. |
+| `cmdb_ire_analyze` / `cmdb_ire_generate` | Analysis and candidate generation | IRE rules, data sources, class hierarchy | No handoff until CMDB IRE XML shape evidence exists. |
 | Unknown, unsupported, high-risk, or missing details | Clarification or human review | Varies | No handoff. |
 
 ## Live Context Dossier
@@ -244,7 +244,7 @@ flowchart TD
     RawXml -- "No" --> Candidate["UpdateSetCandidate artifact"]
 ```
 
-Provider calls are disabled unless runtime configuration, provider policy, data classification, context sufficiency, and capability maturity allow them. `JEDI_CLASSIFIER_GATE=false` is a development control for exploratory structured reasoning; it does not authorize retrieved Update Set handoff for non-automated classifier outcomes.
+Provider calls are disabled unless runtime configuration, provider policy, data classification, context sufficiency, and capability maturity allow them. `JEDI_CLASSIFIER_GATE=false` is a development control for exploratory structured reasoning; it does not authorize retrieved Update Set handoff for non-automated classifier outcomes. Capability status uses `enabled` only for builders that can create retrieved Update Set handoff artifacts now; lower maturity builders use `candidate_generation`, `context_only`, or `designed`.
 
 ### Retrieved Update Set Handoff Flow
 
@@ -346,6 +346,6 @@ Bootstrap should be treated as controlled platform configuration and reviewed li
 
 - Production role-backed admin authentication is reserved but not implemented.
 - Several ServiceNow surfaces remain context-only or design-only.
-- Flow Designer and CMDB IRE mutation builders are not approved.
-- Public documentation retrieval is represented through approved RAG boundaries; the runtime does not browse public docs directly.
+- Flow Designer and CMDB IRE retrieved Update Set mutation builders are not approved.
+- Public documentation retrieval can be enabled for the worker with `JEDI_PUBLIC_WEB_ACCESS=worker`; it is allowlist-only, HTTPS-only, bounded, cited, hash-backed, and fail-closed before model invocation when required public docs cannot be fetched.
 - Production deployment still needs customer boundary review for hosting, logs, database, secrets, and model provider.
