@@ -1017,7 +1017,6 @@ def test_create_update_set_handoff_blocks_non_dictionary_candidates_until_builde
         _form_section_removal_candidate(),
         _client_script_candidate(),
         _script_include_candidate(),
-        _ui_policy_candidate(),
     ]:
         try:
             create_update_set_handoff(
@@ -1037,6 +1036,34 @@ def test_create_update_set_handoff_blocks_non_dictionary_candidates_until_builde
 
     assert client.imports == []
     assert client.story_updates == []
+
+
+def test_create_update_set_handoff_imports_ui_policy_customer_updates() -> None:
+    client = FakeUpdateSetClient()
+
+    result = create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010123",
+            candidate=_ui_policy_candidate(),
+            candidate_artifact_ref="db://artifact_blobs/901",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    assert result.update_set_sys_id == "remote-update-set-sys-id"
+    assert len(client.imports) == 1
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "sys_ui_policy_incident_jedi_incident_assignment_group_required" in imported_xml
+    assert "sys_ui_policy_action_incident_assignment_group_required_visible" in imported_xml
+    assert "<sys_ui_policy action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<sys_ui_policy_action action=\"INSERT_OR_UPDATE\">" in imported_xml
+    assert "<conditions>category=software</conditions>" in imported_xml
+    assert "<field>assignment_group</field>" in imported_xml
+    assert "<mandatory>true</mandatory>" in imported_xml
+    assert "<visible>true</visible>" in imported_xml
+    assert client.story_updates[0]["fields"]["u_ai_status"] == "Ready for Testing"
 
 
 def test_create_update_set_handoff_rejects_empty_candidate_changes_before_table_routing() -> None:

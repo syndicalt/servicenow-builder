@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome, capability_profile
 from jedi_devproject.capability_analysis import analyze_story_capabilities
@@ -24,7 +24,14 @@ from jedi_devproject.instance_discovery import (
 )
 from jedi_devproject.models import CandidateStatus, ProviderPolicy, UpdateSetCandidate
 from jedi_devproject.operational_store import FulfillmentJobRecord
-from jedi_devproject.rag import SpecializedRags
+from jedi_devproject.rag import (
+    Document,
+    PublicWebRetrievalBlocked,
+    PublicWebRetriever,
+    RagDomain,
+    RetrievalResult,
+    SpecializedRags,
+)
 from jedi_devproject.safety import AllowlistPolicy
 from jedi_devproject.update_set_handoff import (
     UpdateSetHandoffRequest,
@@ -77,6 +84,8 @@ class ModelCandidateFulfillmentConfig(BaseModel):
     apply_update_set_changes: bool = False
     update_set_user_name: str | None = None
     classifier_gate: bool = True
+    public_doc_retriever: PublicWebRetriever | None = None
+    public_doc_urls: list[str] = Field(default_factory=list)
 
 
 def model_candidate_fulfillment_handler(
@@ -90,12 +99,16 @@ def model_candidate_fulfillment_handler(
             raise RuntimeError(f"story not found: {job.story_number}")
 
         story = enrich_story(stories[0]).enriched_story
-        surface_context_bundle = _surface_context_for_story(client=client, story=story)
+        surface_context_bundle, rags = _surface_context_and_rags_for_story(
+            client=client,
+            story=story,
+            config=config,
+        )
         packet = build_implementation_packet(
             story=story,
             policy=config.policy,
             provider_policy=config.provider_policy,
-            rags=config.rags,
+            rags=rags,
             discovery_context=(
                 surface_context_bundle.table_context if surface_context_bundle is not None else None
             ),
@@ -215,17 +228,18 @@ def _story_lookup_query(job: FulfillmentJobRecord) -> str:
     return f"number={job.story_number}"
 
 
-def _surface_context_for_story(
+def _surface_context_and_rags_for_story(
     *,
     client: ModelFulfillmentClient,
     story: Any,
-) -> ServiceNowSurfaceContextBundle | None:
+    config: ModelCandidateFulfillmentConfig,
+) -> tuple[ServiceNowSurfaceContextBundle | None, SpecializedRags]:
     assessment = analyze_story_capabilities(story)
     target_table = (
         assessment.intent.target_table if assessment.intent is not None else assessment.target_table
     )
     if target_table is None:
-        return None
+        return None, config.rags
     story_text = " ".join(
         str(value)
         for value in [
@@ -235,25 +249,74 @@ def _surface_context_for_story(
         ]
         if value
     )
+    public_doc_queries = _public_doc_queries(story_text)
+    public_doc_results = _retrieve_public_docs(
+        queries=public_doc_queries,
+        retriever=config.public_doc_retriever,
+        urls=config.public_doc_urls,
+    )
+    rags = config.rags.with_documents(
+        [
+            Document(
+                domain=RagDomain.PUBLIC_DOCUMENTATION,
+                source=result.citation.source,
+                content=result.content,
+                version=str(result.citation.version or ""),
+            )
+            for result in public_doc_results
+        ]
+    )
     return discover_servicenow_surface_context(
         client=client,
         target_table=target_table,
         story_text=story_text,
-        public_doc_queries=_public_doc_queries(story_text),
-        required_surfaces_override=_required_surfaces_for_assessment(assessment),
-    )
+        public_doc_queries=public_doc_queries,
+        public_doc_results=public_doc_results,
+        required_surfaces_override=_required_surfaces_for_assessment(
+            assessment,
+            public_doc_queries=public_doc_queries,
+        ),
+    ), rags
 
 
-def _required_surfaces_for_assessment(assessment: Any) -> list[SurfaceName] | None:
+def _retrieve_public_docs(
+    *,
+    queries: list[str],
+    retriever: PublicWebRetriever | None,
+    urls: list[str],
+) -> list[RetrievalResult]:
+    if not queries or retriever is None or not urls:
+        return []
+    results: list[RetrievalResult] = []
+    for query in queries:
+        try:
+            results.extend(retriever.retrieve(query, urls=urls))
+        except PublicWebRetrievalBlocked:
+            return []
+    return results
+
+
+def _required_surfaces_for_assessment(
+    assessment: Any,
+    *,
+    public_doc_queries: list[str] | None = None,
+) -> list[SurfaceName] | None:
+    public_docs_required = bool(public_doc_queries)
     if assessment.required_instance_context:
-        return cast(list[SurfaceName], assessment.required_instance_context)
+        surfaces = [str(surface) for surface in assessment.required_instance_context]
+        if public_docs_required and "public_docs" not in surfaces:
+            surfaces.append("public_docs")
+        return cast(list[SurfaceName], surfaces)
     automation_intent = assessment.automation_intent
     if not isinstance(automation_intent, dict):
-        return None
+        return ["public_docs"] if public_docs_required else None
     required_context = automation_intent.get("required_instance_context")
     if not isinstance(required_context, list):
-        return None
-    return cast(list[SurfaceName], [str(surface) for surface in required_context])
+        return ["public_docs"] if public_docs_required else None
+    surfaces = [str(surface) for surface in required_context]
+    if public_docs_required and "public_docs" not in surfaces:
+        surfaces.append("public_docs")
+    return cast(list[SurfaceName], surfaces)
 
 
 CODE_SURFACE_MAP: dict[Capability, tuple[SurfaceName, str]] = {
@@ -370,9 +433,16 @@ def _cmdb_ire_analysis_artifact(
     surface_context_bundle: ServiceNowSurfaceContextBundle | None,
 ) -> dict[str, Any] | None:
     capabilities = set(packet.capability_assessment.get("capabilities", []))
-    if Capability.CMDB_IRE_ANALYZE.value not in capabilities:
+    if not {
+        Capability.CMDB_IRE_ANALYZE.value,
+        Capability.CMDB_IRE_GENERATE.value,
+    }.intersection(capabilities):
         return None
-    profile = capability_profile(Capability.CMDB_IRE_ANALYZE)
+    profile = capability_profile(
+        Capability.CMDB_IRE_GENERATE
+        if Capability.CMDB_IRE_GENERATE.value in capabilities
+        else Capability.CMDB_IRE_ANALYZE
+    )
     surface_names: list[SurfaceName] = [
         "cmdb_ire_identification_rules",
         "cmdb_ire_reconciliation_rules",
@@ -404,11 +474,12 @@ def _cmdb_ire_analysis_artifact(
     return {
         "schema_version": "cmdb-ire-analysis-v1",
         "story_number": packet.story.number,
-        "capability": Capability.CMDB_IRE_ANALYZE.value,
+        "capability": profile.capability.value,
         "target_table": (
             surface_context_bundle.target_table if surface_context_bundle is not None else "unknown"
         ),
-        "supported_generation": False,
+        "supported_generation": profile.capability is Capability.CMDB_IRE_GENERATE,
+        "retrieved_update_set_handoff_enabled": profile.creates_update_set,
         "unsupported_cases": profile.unsupported_cases,
         "required_instance_context": packet.capability_assessment.get(
             "required_instance_context", []

@@ -17,7 +17,14 @@ from jedi_devproject.models import (
     Story,
 )
 from jedi_devproject.operational_store import FulfillmentJobRecord
-from jedi_devproject.rag import Document, RagDomain, SpecializedRags
+from jedi_devproject.rag import (
+    Document,
+    PublicWebAccessConfig,
+    PublicWebResponse,
+    PublicWebRetriever,
+    RagDomain,
+    SpecializedRags,
+)
 from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
 
@@ -374,6 +381,21 @@ class RecordingModelProvider:
 
     def generate(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.payloads.append(payload)
+        return self.response
+
+
+class FailingModelProvider:
+    def generate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        raise AssertionError("provider should not be called")
+
+
+class StaticPublicWebTransport:
+    def __init__(self, response: PublicWebResponse) -> None:
+        self.response = response
+        self.urls: list[str] = []
+
+    def get(self, url: str, *, timeout_seconds: float, max_bytes: int) -> PublicWebResponse:
+        self.urls.append(url)
         return self.response
 
 
@@ -894,7 +916,33 @@ def test_model_candidate_handler_emits_flow_preflight_guidance_artifact() -> Non
             data_classification=DataClassification.PUBLIC,
         )
     )
-    provider = RecordingModelProvider()
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "cmdb_identifier",
+                    "operation": "update",
+                    "fields": {
+                        "name": "Computer identifier",
+                        "applies_to": "cmdb_ci_computer",
+                    },
+                    "rationale": "Use serial number as a CMDB IRE identifier candidate.",
+                },
+                {
+                    "table": "cmdb_reconciliation_definition",
+                    "operation": "update",
+                    "fields": {
+                        "name": "SCCM computer reconciliation",
+                        "applies_to": "cmdb_ci_computer",
+                        "data_source": "SCCM",
+                    },
+                    "rationale": "Represent the requested reconciliation-rule candidate.",
+                },
+            ],
+            "test_plan": ["Review CMDB IRE identifier and reconciliation rules."],
+            "rollback_notes": ["Do not commit CMDB IRE changes without CAB approval."],
+        }
+    )
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
@@ -1939,7 +1987,7 @@ def test_model_candidate_handler_generates_ui_policy_update_set_handoff() -> Non
     ] == ["table_schema", "form_layout", "ui_policies"]
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
-    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert candidate["status"] == CandidateStatus.READY_FOR_REVIEW.value
     assert candidate["changes"][0]["table"] == "sys_ui_policy"
     assert candidate["changes"][1]["table"] == "sys_ui_policy_action"
 
@@ -1955,9 +2003,144 @@ def test_model_candidate_handler_generates_ui_policy_update_set_handoff() -> Non
         ]
     )
 
-    assert client.imports == []
+    assert len(client.imports) == 1
+    assert "<sys_ui_policy action=\"INSERT_OR_UPDATE\">" in client.imports[0]["update_set_xml"]
+    assert "<sys_ui_policy_action action=\"INSERT_OR_UPDATE\">" in (
+        client.imports[0]["update_set_xml"]
+    )
     updated_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
-    assert updated_fields["u_ai_status"] == "Human Review Required"
+    assert updated_fields["u_ai_status"] == "Ready for Testing"
+    assert updated_fields["u_ai_handoff_type"] == "retrieved_update_set"
+
+
+def test_model_candidate_handler_adds_live_public_docs_to_packet() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010994",
+            short_description="Create Incident UI Policy using public docs",
+            description=(
+                "Create a UI Policy on the Incident table using public documentation. "
+                "Condition: category is software. Expected behavior: make the "
+                "assignment_group field mandatory and visible. Fields read: category. "
+                "Fields affected: assignment_group. Reverse if false: true."
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    transport = StaticPublicWebTransport(
+        PublicWebResponse(
+            url="https://docs.servicenow.com/ui-policy",
+            status_code=200,
+            body=b"<html><body>UI Policies set fields mandatory or visible.</body></html>",
+        )
+    )
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "sys_ui_policy",
+                    "operation": "insert",
+                    "fields": {
+                        "short_description": "JEDI Incident Assignment Group Required",
+                        "table": "incident",
+                        "conditions": "category=software",
+                        "reverse_if_false": True,
+                        "run_scripts": False,
+                    },
+                },
+                {
+                    "table": "sys_ui_policy_action",
+                    "operation": "insert",
+                    "fields": {
+                        "policy_name": "JEDI Incident Assignment Group Required",
+                        "table": "incident",
+                        "field": "assignment_group",
+                        "mandatory": "true",
+                        "visible": "true",
+                    },
+                },
+            ],
+            "test_plan": ["Confirm the UI Policy behavior."],
+            "rollback_notes": ["Delete the generated UI Policy and action."],
+        }
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+            public_doc_retriever=PublicWebRetriever(
+                config=PublicWebAccessConfig(allowed_domains=["docs.servicenow.com"]),
+                transport=transport,
+            ),
+            public_doc_urls=["https://docs.servicenow.com/ui-policy"],
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010994"}))
+
+    assert transport.urls == ["https://docs.servicenow.com/ui-policy"]
+    packet = result.artifacts[-2].payload_json
+    assert packet is not None
+    assert packet["context_sufficiency"]["status"] == "sufficient"
+    public_docs = [
+        surface
+        for surface in packet["instance_context_bundle"]["surfaces"]
+        if surface["surface"] == "public_docs"
+    ][0]
+    assert public_docs["records"][0]["summary"] == (
+        "UI Policies set fields mandatory or visible."
+    )
+    assert public_docs["citations"][0]["content_hash"]
+    assert provider.payloads[0]["output_contract"]["public_web_access_mode"] == (
+        "worker_live_web"
+    )
+
+
+def test_model_candidate_handler_skips_provider_when_required_public_docs_missing() -> None:
+    client = FakeModelClient(
+        story=Story(
+            sys_id="story-sys-id",
+            number="STRY0010995",
+            short_description="Create Incident UI Policy using public docs",
+            description=(
+                "Create a UI Policy on the Incident table using public documentation. "
+                "Condition: category is software. Expected behavior: make the "
+                "assignment_group field mandatory and visible. Fields read: category. "
+                "Fields affected: assignment_group. Reverse if false: true."
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+            priority=4,
+            state="Work in Progress",
+            data_classification=DataClassification.PUBLIC,
+        )
+    )
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=FailingModelProvider(),
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    result = handler(_job().model_copy(update={"story_number": "STRY0010995"}))
+
+    candidate = result.artifacts[-1].payload_json
+    assert candidate is not None
+    assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
+    assert "context_insufficient:public_docs" in candidate["eligibility_reasons"]
 
 
 def test_model_fulfillment_writes_needs_clarification_feedback() -> None:
@@ -2056,7 +2239,33 @@ def test_model_fulfillment_work_note_includes_cmdb_ire_analysis_feedback() -> No
             data_classification=DataClassification.PUBLIC,
         )
     )
-    provider = RecordingModelProvider()
+    provider = RecordingModelProvider(
+        response={
+            "changes": [
+                {
+                    "table": "cmdb_identifier",
+                    "operation": "update",
+                    "fields": {
+                        "name": "Computer identifier",
+                        "applies_to": "cmdb_ci_computer",
+                    },
+                    "rationale": "Use serial number as a CMDB IRE identifier candidate.",
+                },
+                {
+                    "table": "cmdb_reconciliation_definition",
+                    "operation": "update",
+                    "fields": {
+                        "name": "SCCM computer reconciliation",
+                        "applies_to": "cmdb_ci_computer",
+                        "data_source": "SCCM",
+                    },
+                    "rationale": "Represent the requested reconciliation-rule candidate.",
+                },
+            ],
+            "test_plan": ["Review CMDB IRE identifier and reconciliation rules."],
+            "rollback_notes": ["Do not commit CMDB IRE changes without CAB approval."],
+        }
+    )
     handler = model_candidate_fulfillment_handler(
         client=client,
         config=ModelCandidateFulfillmentConfig(
@@ -2081,12 +2290,12 @@ def test_model_fulfillment_work_note_includes_cmdb_ire_analysis_feedback() -> No
         ]
     )
 
-    assert provider.payloads == []
+    assert provider.payloads
+    assert provider.payloads[0]["controls"]["safety_decision"] == "automated_build"
     feedback_fields = cast(dict[str, str], client.updated_fields[-1]["fields"])
     assert feedback_fields["u_ai_status"] == "Human Review Required"
-    assert "cmdb_ire_analysis:first" in feedback_fields["work_notes"]
-    assert "capability:cmdb_ire_analyze" in feedback_fields["work_notes"]
-    assert "CMDB IRE mutation is not enabled yet" in feedback_fields["work_notes"]
+    assert "builder maturity below automated handoff threshold" in feedback_fields["work_notes"]
+    assert "cmdb_reconciliation_definition" in feedback_fields["work_notes"]
 
 
 def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning() -> None:
@@ -2147,11 +2356,14 @@ def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning
     assert candidate is not None
 
     assert provider.payloads
-    assert provider.payloads[0]["controls"]["safety_decision"] == "context_analysis"
+    assert provider.payloads[0]["controls"]["safety_decision"] == "automated_build"
     assert provider.payloads[0]["controls"]["context_escalation"]["should_call_model"] is True
-    assert provider.payloads[0]["controls"]["capability_assessment"]["capabilities"] == [
-        "cmdb_ire_analyze"
-    ]
+    assert set(
+        provider.payloads[0]["controls"]["capability_assessment"]["capabilities"]
+    ) == {
+        "cmdb_ire_analyze",
+        "cmdb_ire_generate",
+    }
     assert provider.payloads[0]["instance_context_bundle"]["required_surfaces"] == [
         "cmdb_ire_identification_rules",
         "cmdb_ire_reconciliation_rules",

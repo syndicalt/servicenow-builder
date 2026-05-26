@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from jedi_devproject.rag import RetrievalResult
 from jedi_devproject.requirement_text import positive_requirement_text
 
 
@@ -137,6 +138,7 @@ class ServiceNowSurfaceContextBundle(BaseModel):
     surfaces: list[ServiceNowSurfaceContext]
     table_context: InstanceDiscoveryContext
     public_doc_queries: list[str] = Field(default_factory=list)
+    public_doc_results: list[RetrievalResult] = Field(default_factory=list)
     missing_required_surfaces: list[SurfaceName] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
 
@@ -256,6 +258,7 @@ def discover_servicenow_surface_context(
     target_table: str,
     story_text: str,
     public_doc_queries: list[str],
+    public_doc_results: list[RetrievalResult] | None = None,
     required_surfaces_override: list[SurfaceName] | None = None,
 ) -> ServiceNowSurfaceContextBundle:
     table_context = discover_dictionary_form_context(client=client, target_table=target_table)
@@ -384,29 +387,10 @@ def discover_servicenow_surface_context(
             evidence="sys_rest_message",
             limit=25,
         ),
-        ServiceNowSurfaceContext(
-            surface="public_docs",
-            source_table="curated_rag",
+        _public_docs_surface(
+            public_doc_queries=public_doc_queries,
+            public_doc_results=public_doc_results or [],
             required="public_docs" in required_surfaces,
-            records=[
-                ServiceNowSurfaceRecord(
-                    source_table="curated_rag",
-                    name=query,
-                    active=True,
-                    summary="Public documentation query routed through approved RAG boundary.",
-                )
-                for query in public_doc_queries
-            ],
-            evidence=[f"public_docs:{query}" for query in public_doc_queries],
-            confidence=0.8 if public_doc_queries else 0.0,
-            citations=[
-                {
-                    "source_table": "curated_rag",
-                    "query": query,
-                    "record_count": "1",
-                }
-                for query in public_doc_queries
-            ],
         ),
         ServiceNowSurfaceContext(
             surface="form_sections",
@@ -470,8 +454,49 @@ def discover_servicenow_surface_context(
         surfaces=surfaces,
         table_context=table_context,
         public_doc_queries=public_doc_queries,
+        public_doc_results=public_doc_results or [],
         missing_required_surfaces=missing_required_surfaces,
         evidence=evidence,
+    )
+
+
+def _public_docs_surface(
+    *,
+    public_doc_queries: list[str],
+    public_doc_results: list[RetrievalResult],
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    return ServiceNowSurfaceContext(
+        surface="public_docs",
+        source_table="public_web",
+        required=required,
+        records=[
+            ServiceNowSurfaceRecord(
+                source_table="public_web",
+                name=result.citation.source,
+                active=True,
+                summary=result.content,
+                metadata={
+                    "content_hash": result.citation.content_hash,
+                    "version": str(result.citation.version or ""),
+                    "confidence": f"{result.citation.confidence:.2f}",
+                    "excerpt_chars": str(len(result.content)),
+                },
+            )
+            for result in public_doc_results
+        ],
+        evidence=[f"public_docs:{query}" for query in public_doc_queries]
+        + [f"public_web:{result.citation.content_hash}" for result in public_doc_results],
+        confidence=0.8 if public_doc_results else 0.0,
+        citations=[
+            {
+                "source": result.citation.source,
+                "content_hash": result.citation.content_hash,
+                "version": str(result.citation.version or ""),
+                "confidence": f"{result.citation.confidence:.2f}",
+            }
+            for result in public_doc_results
+        ],
     )
 
 

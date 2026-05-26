@@ -932,7 +932,7 @@ def test_structured_form_section_rename_does_not_route_to_removal_pipeline() -> 
     assert "request includes unsupported pipeline capabilities" in assessment.reasons
 
 
-def test_cmdb_ire_story_routes_to_context_analysis() -> None:
+def test_cmdb_ire_story_routes_to_candidate_generation_with_reconciliation_context() -> None:
     assessment = analyze_story_capabilities(
         _story(
             number="STRY0010111",
@@ -950,8 +950,11 @@ def test_cmdb_ire_story_routes_to_context_analysis() -> None:
         )
     )
 
-    assert assessment.outcome is SuitabilityOutcome.CONTEXT_ANALYSIS
-    assert assessment.capabilities == {Capability.CMDB_IRE_ANALYZE}
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {
+        Capability.CMDB_IRE_ANALYZE,
+        Capability.CMDB_IRE_GENERATE,
+    }
     assert assessment.target_table == "cmdb_ci_computer"
     assert assessment.required_instance_context == [
         "cmdb_ire_identification_rules",
@@ -960,7 +963,9 @@ def test_cmdb_ire_story_routes_to_context_analysis() -> None:
         "cmdb_class_hierarchy",
     ]
     assert assessment.unsupported_capabilities == set()
-    assert "CMDB IRE analysis first" in assessment.reasons
+    assert "supported CMDB IRE identifier and reconciliation candidate request" in (
+        assessment.reasons
+    )
 
 
 def test_missing_details_story_suggests_required_story_fields() -> None:

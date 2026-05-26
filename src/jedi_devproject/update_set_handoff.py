@@ -13,6 +13,7 @@ from jedi_devproject.generic_dictionary_form import (
 )
 from jedi_devproject.models import CandidateChange, CandidateStatus, UpdateSetCandidate
 from jedi_devproject.servicenow import StoryStateChoice
+from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
 from jedi_devproject.writeback import build_state_mapping_from_choices
 
 
@@ -253,6 +254,11 @@ def _customer_updates_for_candidate(
         updates = dictionary_form_customer_updates(
             client=client,
             intent=intent,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        )
+    elif tables.issubset({"sys_ui_policy", "sys_ui_policy_action"}):
+        updates = ui_policy_customer_updates(
+            changes=candidate.changes,
             remote_update_set_sys_id=remote_update_set_sys_id,
         )
     else:

@@ -215,6 +215,14 @@ def build_implementation_packet(
             "capabilities": sorted(capability.value for capability in assessment.capabilities),
             "must_follow_normalized_intent": True,
             "must_use_discovered_instance_context": True,
+            "must_use_public_docs_only_with_citations": True,
+            "must_not_treat_public_docs_as_instance_truth": True,
+            "public_web_access_mode": (
+                "worker_live_web"
+                if surface_context_bundle is not None
+                and surface_context_bundle.public_doc_results
+                else "none"
+            ),
         },
     )
 
@@ -428,6 +436,8 @@ def _builder_maturity_context(*, required_surfaces: Sequence[str]) -> list[dict[
 def _builder_maturity_for_surface(surface: str) -> float:
     if surface in {"table_schema", "form_layout"}:
         return 0.95
+    if surface == "ui_policies":
+        return 0.95
     if surface == "form_sections":
         return 0.30
     if surface in {
@@ -470,6 +480,7 @@ def generate_implementation_candidate(
         allowed_sys_ids=set(),
     )
     _validate_implementation_contract(response)
+    _validate_response_tables_match_capability(packet=packet, response=response)
     return response
 
 
@@ -530,6 +541,7 @@ def generate_implementation_update_set_candidate_from_packet(
         allowed_sys_ids=set(),
     )
     _validate_implementation_contract(response)
+    _validate_response_tables_match_capability(packet=packet, response=response)
     candidate = UpdateSetCandidate(
         story_number=packet.story.number,
         name=f"UPD_{packet.story.number}_LLM_Implementation",
@@ -613,6 +625,8 @@ def _route_candidate_by_builder_maturity(candidate: UpdateSetCandidate) -> Updat
 def _builder_maturity_for_changes(changes: list[CandidateChange]) -> float:
     tables = {change.table for change in changes}
     if tables and tables.issubset({"sys_dictionary", "sys_ui_form"}):
+        return 0.95
+    if tables and tables.issubset({"sys_ui_policy", "sys_ui_policy_action"}):
         return 0.95
     if tables == {"sys_ui_section"}:
         return 0.30
@@ -979,6 +993,55 @@ def _validate_implementation_contract(response: dict[str, Any]) -> None:
         value = response.get(field_name)
         if not isinstance(value, list) or not value:
             raise ModelResponseError(f"{field_name} must be a non-empty list")
+
+
+def _validate_response_tables_match_capability(
+    *,
+    packet: ImplementationPacket,
+    response: dict[str, Any],
+) -> None:
+    expected_tables = _expected_tables_for_packet(packet)
+    if not expected_tables:
+        return
+    changes = response.get("changes")
+    if not isinstance(changes, list):
+        return
+    actual_tables = {
+        str(change.get("table") or "")
+        for change in changes
+        if isinstance(change, dict) and str(change.get("table") or "").strip()
+    }
+    unexpected = sorted(actual_tables - expected_tables)
+    if unexpected:
+        raise ModelResponseError(
+            "model response tables do not match assessed capability: "
+            f"{', '.join(unexpected)}"
+        )
+
+
+def _expected_tables_for_packet(packet: ImplementationPacket) -> set[str]:
+    capabilities = set(str(item) for item in packet.capability_assessment.get("capabilities", []))
+    if Capability.CMDB_IRE_GENERATE.value in capabilities:
+        return {"cmdb_identifier", "cmdb_identifier_entry", "cmdb_reconciliation_definition"}
+    if Capability.UI_POLICY_GENERATE.value in capabilities:
+        return {"sys_ui_policy", "sys_ui_policy_action"}
+    if Capability.CATALOG_ITEM_CREATE.value in capabilities:
+        return {"sc_cat_item", "item_option_new", "sc_cat_item_category", "m2m_connected_content"}
+    if Capability.BUSINESS_RULE_GENERATE.value in capabilities:
+        return {"sys_script"}
+    if Capability.CLIENT_SCRIPT_GENERATE.value in capabilities:
+        return {"sys_script_client"}
+    if Capability.SCRIPT_INCLUDE_GENERATE.value in capabilities:
+        return {"sys_script_include"}
+    if Capability.FORM_SECTION_REMOVE.value in capabilities:
+        return {"sys_ui_section"}
+    if {
+        Capability.DICTIONARY_FIELD_CREATE.value,
+        Capability.FORM_LAYOUT_PLACE_FIELD.value,
+        Capability.FIELD_LABEL_CREATE.value,
+    }.intersection(capabilities):
+        return {"sys_dictionary", "sys_ui_form"}
+    return set()
 
 
 def _validate_no_raw_xml(value: Any) -> None:

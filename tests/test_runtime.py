@@ -542,6 +542,42 @@ def test_load_runtime_settings_defaults_classifier_gate_enabled(tmp_path: Path) 
     assert settings.classifier_gate is True
 
 
+def test_load_runtime_settings_reads_public_web_worker_controls(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret@localhost:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+                "JEDI_PUBLIC_WEB_ACCESS=worker",
+                "JEDI_PUBLIC_WEB_ALLOWED_DOMAINS=docs.servicenow.com,developer.servicenow.com",
+                "JEDI_PUBLIC_WEB_DOC_URLS=https://docs.servicenow.com/ui-policy",
+                "JEDI_PUBLIC_WEB_TIMEOUT_SECONDS=4",
+                "JEDI_PUBLIC_WEB_MAX_RESPONSE_BYTES=4096",
+                "JEDI_PUBLIC_WEB_MAX_EXCERPT_CHARS=1200",
+                "JEDI_PUBLIC_WEB_MAX_RESULTS=2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(env_path)
+
+    assert settings.public_web_access == "worker"
+    assert settings.public_web_allowed_domains == [
+        "docs.servicenow.com",
+        "developer.servicenow.com",
+    ]
+    assert settings.public_web_doc_urls == ["https://docs.servicenow.com/ui-policy"]
+    assert settings.public_web_timeout_seconds == 4.0
+    assert settings.public_web_max_response_bytes == 4096
+    assert settings.public_web_max_excerpt_chars == 1200
+    assert settings.public_web_max_results == 2
+
+
 def test_load_runtime_settings_accepts_build_claim_state_values(tmp_path: Path) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text(
@@ -785,6 +821,24 @@ def test_validate_runtime_settings_requires_openai_production_secrets(
     message = str(exc.value)
     assert "OPENAI_API_KEY" in message
     assert "OPENAI_MODEL" in message
+
+
+def test_validate_runtime_settings_rejects_production_public_web_without_allowlist(
+    tmp_path: Path,
+) -> None:
+    settings = _settings_with_openai(tmp_path).model_copy(
+        update={
+            "runtime_environment": "production",
+            "lifecycle_webhook_auth_mode": "hmac_sha256",
+            "lifecycle_webhook_secret": "webhook-secret",
+            "admin_auth_mode": "oidc",
+            "public_web_access": "worker",
+            "public_web_allowed_domains": [],
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_PUBLIC_WEB_ALLOWED_DOMAINS"):
+        validate_runtime_settings(settings, require_admin_auth=False)
 
 
 def test_create_runtime_api_validates_production_settings_before_store_open(

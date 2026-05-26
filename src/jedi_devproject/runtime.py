@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.fulfillment_handler import (
     BuildClaimFulfillmentConfig,
@@ -49,7 +49,13 @@ from jedi_devproject.operational_store import (
     LifecycleEventRecord,
     connect_operational_store,
 )
-from jedi_devproject.rag import Document, RagDomain, SpecializedRags
+from jedi_devproject.rag import (
+    Document,
+    PublicWebAccessConfig,
+    PublicWebRetriever,
+    RagDomain,
+    SpecializedRags,
+)
 from jedi_devproject.rate_limit import InMemoryRateLimiter
 from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import (
@@ -103,6 +109,13 @@ class RuntimeSettings(BaseModel):
     update_set_apply: bool = False
     update_set_user_name: str | None = None
     classifier_gate: bool = True
+    public_web_access: Literal["disabled", "worker"] = "disabled"
+    public_web_allowed_domains: list[str] = Field(default_factory=list)
+    public_web_doc_urls: list[str] = Field(default_factory=list)
+    public_web_timeout_seconds: float = 3.0
+    public_web_max_response_bytes: int = 128 * 1024
+    public_web_max_excerpt_chars: int = 4000
+    public_web_max_results: int = 3
 
 
 class RuntimeStore(LifecycleEventStore, FulfillmentWorkerStore, Protocol):
@@ -247,6 +260,28 @@ def load_runtime_settings(env_path: Path | None = None) -> RuntimeSettings:
         update_set_apply=_truthy(values.get("JEDI_UPDATE_SET_APPLY")),
         update_set_user_name=_optional_str(values.get("JEDI_UPDATE_SET_USER_NAME")),
         classifier_gate=_truthy(values.get("JEDI_CLASSIFIER_GATE"), default=True),
+        public_web_access=cast(
+            Literal["disabled", "worker"],
+            str(values.get("JEDI_PUBLIC_WEB_ACCESS") or "disabled"),
+        ),
+        public_web_allowed_domains=_csv_values(values.get("JEDI_PUBLIC_WEB_ALLOWED_DOMAINS")),
+        public_web_doc_urls=_csv_values(values.get("JEDI_PUBLIC_WEB_DOC_URLS")),
+        public_web_timeout_seconds=_float_value(
+            values.get("JEDI_PUBLIC_WEB_TIMEOUT_SECONDS"),
+            default=3.0,
+        ),
+        public_web_max_response_bytes=_int_value(
+            values.get("JEDI_PUBLIC_WEB_MAX_RESPONSE_BYTES"),
+            default=128 * 1024,
+        ),
+        public_web_max_excerpt_chars=_int_value(
+            values.get("JEDI_PUBLIC_WEB_MAX_EXCERPT_CHARS"),
+            default=4000,
+        ),
+        public_web_max_results=_int_value(
+            values.get("JEDI_PUBLIC_WEB_MAX_RESULTS"),
+            default=3,
+        ),
     )
 
 
@@ -281,6 +316,13 @@ def validate_runtime_settings(
             errors.append("OPENAI_API_KEY is required when JEDI_MODEL_PROVIDER=openai")
         if not settings.openai_model:
             errors.append("OPENAI_MODEL is required when JEDI_MODEL_PROVIDER=openai")
+
+    if settings.public_web_access == "worker" and not settings.public_web_allowed_domains:
+        errors.append(
+            "JEDI_PUBLIC_WEB_ALLOWED_DOMAINS is required when public web access is enabled"
+        )
+    if settings.public_web_access == "worker" and not settings.public_web_doc_urls:
+        errors.append("JEDI_PUBLIC_WEB_DOC_URLS is required when public web access is enabled")
 
     if errors:
         raise RuntimeConfigError("; ".join(errors))
@@ -891,6 +933,20 @@ def _runtime_handler(
             apply_update_set_changes=settings.update_set_apply,
             update_set_user_name=settings.update_set_user_name,
             classifier_gate=settings.classifier_gate,
+            public_doc_retriever=(
+                PublicWebRetriever(
+                    config=PublicWebAccessConfig(
+                        allowed_domains=settings.public_web_allowed_domains,
+                        timeout_seconds=settings.public_web_timeout_seconds,
+                        max_response_bytes=settings.public_web_max_response_bytes,
+                        max_excerpt_chars=settings.public_web_max_excerpt_chars,
+                        max_results=settings.public_web_max_results,
+                    )
+                )
+                if settings.public_web_access == "worker"
+                else None
+            ),
+            public_doc_urls=settings.public_web_doc_urls,
         ),
     )
 
@@ -1289,6 +1345,18 @@ def _int_value(value: str | None, *, default: int) -> int:
     if value is None or value.strip() == "":
         return default
     return int(value.strip())
+
+
+def _float_value(value: str | None, *, default: float) -> float:
+    if value is None or value.strip() == "":
+        return default
+    return float(value.strip())
+
+
+def _csv_values(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _optional_str(value: str | None) -> str | None:

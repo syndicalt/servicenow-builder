@@ -132,6 +132,15 @@ def _catalog_policy() -> AllowlistPolicy:
     )
 
 
+def _ui_policy_policy() -> AllowlistPolicy:
+    return AllowlistPolicy(
+        story_types={StoryType.DICTIONARY_FORM},
+        tables={"sys_ui_policy", "sys_ui_policy_action"},
+        operations={"insert", "update"},
+        max_points=3,
+    )
+
+
 def _provider_policy() -> ProviderPolicy:
     return ProviderPolicy(
         provider_id="now-assist-native",
@@ -173,6 +182,124 @@ def _discovery_context() -> InstanceDiscoveryContext:
             )
         ],
         evidence=["sys_dictionary:rm_story", "sys_ui_section:rm_story"],
+    )
+
+
+def _ui_policy_story() -> Story:
+    return Story(
+        sys_id="ui-policy-story-sys-id",
+        number="STRY0010123",
+        short_description="Create UI Policy for Software Incident assignment group",
+        description=(
+            "Create a UI Policy on the incident table. Condition: category=software. "
+            "Fields read: category. Fields affected: assignment_group. "
+            "Expected behavior: make assignment_group mandatory and visible. "
+            "Reverse if false: true."
+        ),
+        acceptance_criteria=(
+            "Given an Incident with category Software, when the form loads, then "
+            "Assignment group is mandatory and visible. Given category is not Software, "
+            "when the condition is false, then the policy must reverse."
+        ),
+        story_points=3,
+        priority=4,
+        state="Ready",
+        data_classification=DataClassification.PUBLIC,
+        affected_tables=["sys_ui_policy", "sys_ui_policy_action"],
+    )
+
+
+def _ui_policy_context_bundle() -> ServiceNowSurfaceContextBundle:
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="category",
+                column_label="Category",
+                internal_type="choice",
+            ),
+            DiscoveredField(
+                element="assignment_group",
+                column_label="Assignment group",
+                internal_type="reference",
+            ),
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id="incident-main-section",
+                name="incident",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id="category-element",
+                        element="category",
+                        position=2,
+                    ),
+                    DiscoveredFormElement(
+                        sys_id="assignment-group-element",
+                        element="assignment_group",
+                        position=10,
+                    ),
+                ],
+            )
+        ],
+        evidence=["sys_dictionary:incident", "sys_ui_section:incident"],
+    )
+    return ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "form_layout", "ui_policies"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="table_schema",
+                source_table="sys_dictionary",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_dictionary",
+                        name="category",
+                        active=True,
+                        summary="Category",
+                        metadata={"internal_type": "choice"},
+                    ),
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_dictionary",
+                        name="assignment_group",
+                        active=True,
+                        summary="Assignment group",
+                        metadata={"internal_type": "reference"},
+                    ),
+                ],
+                evidence=["sys_dictionary:incident"],
+                confidence=1.0,
+            ),
+            ServiceNowSurfaceContext(
+                surface="form_layout",
+                source_table="sys_ui_section",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_ui_section",
+                        name="incident",
+                        active=True,
+                        summary="",
+                    )
+                ],
+                evidence=["sys_ui_section:incident"],
+                confidence=1.0,
+            ),
+            ServiceNowSurfaceContext(
+                surface="ui_policies",
+                source_table="sys_ui_policy",
+                required=True,
+                records=[],
+                evidence=["sys_ui_policy:incident"],
+                confidence=0.0,
+            ),
+        ],
+        evidence=["sys_dictionary:incident", "sys_ui_section:incident", "sys_ui_policy:incident"],
     )
 
 

@@ -308,9 +308,9 @@ When OpenAI runtime mode is enabled, fulfillment first runs the guarded build-cl
 
 The model-facing dossier can include read-only XML shape references for the selected ServiceNow surface. These references are structured field/record models, not raw `sys_update_xml` payloads, and the model output contract is `structured_candidate_change_only`. Model responses that include raw XML fields or raw Update Set XML content fail validation.
 
-Before model generation, the worker investigates the target ServiceNow surface. This is broader than table/form metadata. Depending on story signals, the `instance_context_bundle` can include table schema, form layout, Business Rules, Client Scripts, UI Policies, Flow Designer records, Script Includes, ACL indicators, CMDB/discovery indicators, CMDB IRE identification and reconciliation context, outbound REST integration surfaces, and public documentation queries routed through the approved RAG boundary.
+Before model generation, the worker investigates the target ServiceNow surface. This is broader than table/form metadata. Depending on story signals, the `instance_context_bundle` can include table schema, form layout, Business Rules, Client Scripts, UI Policies, Flow Designer records, Script Includes, ACL indicators, CMDB/discovery indicators, CMDB IRE identification and reconciliation context, outbound REST integration surfaces, and public documentation context.
 
-The worker uses read-only Table API retrieval for live instance surfaces and does not call public documentation sites directly at runtime. Public documentation context must come through curated or approved RAG sources with citations. If required context cannot be retrieved, the implementation packet records `context_sufficiency.status=insufficient`, the provider is not called, and the story receives human-review or clarification feedback rather than a guessed implementation.
+The worker uses read-only Table API retrieval for live instance surfaces. Public documentation retrieval is disabled by default. When `JEDI_PUBLIC_WEB_ACCESS=worker` is set, only the worker can fetch public documentation, and only from `JEDI_PUBLIC_WEB_ALLOWED_DOMAINS` over HTTPS. Fetched excerpts are bounded by `JEDI_PUBLIC_WEB_MAX_RESPONSE_BYTES`, `JEDI_PUBLIC_WEB_MAX_EXCERPT_CHARS`, and `JEDI_PUBLIC_WEB_MAX_RESULTS`, stripped of scripts/styles, attached to citations with content hashes, and treated as public documentation context rather than instance truth. If required public documentation cannot be retrieved, the implementation packet records `context_sufficiency.status=insufficient`, the provider is not called, and the story receives human-review or clarification feedback rather than a guessed implementation.
 
 Each surface context includes a confidence score and citation records with source table, query, and retrieved record count. Surface artifacts intentionally minimize executable or sensitive material: script bodies and conditions are replaced with redaction markers, ServiceNow sys_ids are not preserved in the model-facing bundle, and integration endpoint query strings are redacted. When context blocks model execution, the ServiceNow work note names the missing surface context directly.
 
@@ -408,9 +408,9 @@ When selected, the runtime retrieves the required context, redacts script-like f
 
 The story receives human-review feedback through the normal work-note path. Code surface generation remains unsupported until separate mutation profiles define output schema, deterministic validators, retrieved Update Set XML evidence, and UAT expectations for each artifact type.
 
-### CMDB IRE Analysis Capability
+### CMDB IRE Analysis Capability and Candidate Capability
 
-The `cmdb_ire_analyze` capability is context-only. It exists for stories that ask for CMDB Identification and Reconciliation Engine changes, such as using serial number as a primary identifier or match key across SCCM, Intune, Workspace ONE, Azure Arc, and ServiceNow device sources.
+The `cmdb_ire_analyze` capability is context-only. The `cmdb_ire_generate` capability is candidate-generation only. Together they exist for stories that ask for CMDB Identification and Reconciliation Engine changes, such as using serial number as a primary identifier or match key across SCCM, Intune, Workspace ONE, Azure Arc, and ServiceNow device sources.
 
 When selected, the runtime targets the relevant CMDB class, usually `cmdb_ci_computer` for device stories, and retrieves four required surfaces:
 
@@ -419,13 +419,13 @@ When selected, the runtime targets the relevant CMDB class, usually `cmdb_ci_com
 - `cmdb_data_sources` from `sys_object_source`.
 - `cmdb_class_hierarchy` from `sys_db_object`.
 
-The worker stores an `instance_context_bundle` and a `cmdb_ire_analysis` artifact with schema `cmdb-ire-analysis-v1`. With the classifier gate enabled, CMDB IRE stories route to human review without model generation. With `JEDI_CLASSIFIER_GATE=false`, the model may produce exploratory structured reasoning against the retrieved IRE dossier, but builder maturity remains `0.00`, status remains `Manual Build`, and no retrieved Update Set is created.
+The worker stores an `instance_context_bundle` and a `cmdb_ire_analysis` artifact with schema `cmdb-ire-analysis-v1`. CMDB IRE stories may now produce structured candidates for `cmdb_identifier`, `cmdb_identifier_entry`, and `cmdb_reconciliation_definition`, including reconciliation-rule intent, but retrieved Update Set handoff remains disabled because verified ServiceNow XML shape evidence is not yet captured for those tables.
 
-CMDB IRE mutation is not enabled until identification-rule and reconciliation-rule validators, XML shape evidence, rollback strategy, and preview/commit evidence are approved.
+CMDB IRE retrieved Update Set mutation is not enabled until identification-rule and reconciliation-rule validators, XML shape evidence, rollback strategy, and preview/commit evidence are approved.
 
 ### Business Rule Generation Capability
 
-`business_rule_generate` is enabled for the first production-hardening subset. The current maturity limit is `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
+`business_rule_generate` is currently `candidate_generation` for the first production-hardening subset. The current maturity limit is `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`. Retrieved Update Set handoff remains disabled until executable-code XML evidence and validators are approved.
 
 The supported subset is table-local Business Rules only: `before/after` timing, `insert/update` operations, one target table, one generated rule, and an explicit condition. Generated changes must become `sys_script` customer updates wrapped in `sys_update_xml` for retrieved Update Set review. Retrieved Update Set preview/commit remains the human review boundary.
 
@@ -435,7 +435,7 @@ The provider output must be structured implementation intent, not authoritative 
 
 ### Client Script Generation Capability
 
-The Sprint 117 Client Script Generation Profile Design is implemented for the first production-hardening subset. `client_script_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
+The Sprint 117 Client Script Generation Profile Design is implemented for the first production-hardening subset. `client_script_generate` is currently `candidate_generation` with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`. Retrieved Update Set handoff remains disabled until browser-side safety and XML evidence are approved.
 
 The supported subset is table-local Client Scripts only: one generated `sys_script_client` record on one target table, `onLoad`, `onChange`, or `onSubmit` type, optional target field for `onChange`, and behavior implemented through ServiceNow client APIs such as `g_form`. Generated changes must become `sys_script_client` customer updates wrapped in `sys_update_xml` for retrieved Update Set review. Retrieved Update Set preview/commit remains the human review boundary.
 
@@ -445,7 +445,7 @@ The provider output must be structured implementation intent, not authoritative 
 
 ### Script Include Generation Capability
 
-The Sprint 119 Script Include Generation Profile Design is implemented for the first production-hardening subset. `script_include_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
+The Sprint 119 Script Include Generation Profile Design is implemented for the first production-hardening subset. `script_include_generate` is currently `candidate_generation` with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`. Retrieved Update Set handoff remains disabled until executable-code XML evidence and validators are approved.
 
 The supported subset is server-side utility Script Includes only: one generated `sys_script_include` record per story, one named class or function, explicit scope, explicit client-callable decision, and no simultaneous caller creation. Generated changes must become `sys_script_include` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
 
@@ -455,9 +455,9 @@ client callable Script Includes are not supported in the first implementation be
 
 ### UI Policy Generation Capability
 
-The Sprint 122 UI Policy Generation Profile Design is implemented for the first production-hardening subset. `ui_policy_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`.
+The Sprint 122 UI Policy Generation Profile Design is implemented for the first production-hardening subset. `ui_policy_generate` is enabled with `current_max_story_points=3`; the full maturity target remains `target_max_story_points=5`. In this registry, `enabled` means the deterministic builder can create retrieved Update Set handoff artifacts now.
 
-The supported future subset is declarative, table-local UI Policy behavior only: one generated `sys_ui_policy` record and one or more generated `sys_ui_policy_action` records, an explicit target table, an explicit condition, an explicit reverse-if-false decision, and field actions limited to mandatory, visible, or read-only behavior. Generated changes must become `sys_ui_policy` and `sys_ui_policy_action` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
+The supported subset is declarative, table-local UI Policy behavior only: one generated `sys_ui_policy` record and one or more generated `sys_ui_policy_action` records, an explicit target table, an explicit condition, an explicit reverse-if-false decision, and field actions limited to mandatory, visible, or read-only behavior. Generated changes become `sys_ui_policy` and `sys_ui_policy_action` customer updates wrapped in `sys_update_xml` for retrieved Update Set review.
 
 Unsupported behavior includes run scripts, advanced scripts, Client Script behavior, `g_form` logic, Business Rule creation, Script Include creation, Flow creation, ACL changes, integration calls, cross-table behavior, data migration, role changes, system property changes, credentials, secrets, tokens, and API keys.
 

@@ -32,6 +32,7 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.FORM_LAYOUT_PLACE_FIELD,
     Capability.FORM_SECTION_REMOVE,
     Capability.CMDB_IRE_ANALYZE,
+    Capability.CMDB_IRE_GENERATE,
 }
 
 FULL_MATURITY_MAX_AUTOMATED_POINTS = 5
@@ -95,16 +96,16 @@ def analyze_story_capabilities(
         )
 
     if Capability.CMDB_IRE_ANALYZE in requested:
-        profile = capability_profile(Capability.CMDB_IRE_ANALYZE)
+        profile = capability_profile(Capability.CMDB_IRE_GENERATE)
         reasons.extend(
             [
-                "CMDB IRE analysis first",
-                "CMDB IRE mutation is not enabled yet",
+                "supported CMDB IRE identifier and reconciliation candidate request",
+                "CMDB IRE retrieved Update Set handoff requires XML shape evidence",
             ]
         )
         return _assessment(
             story=story,
-            outcome=SuitabilityOutcome.CONTEXT_ANALYSIS,
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
             requested=requested,
             supported=supported_capabilities,
             intent=intent,
@@ -686,6 +687,7 @@ def _suggested_artifact_type(requested: set[Capability]) -> str:
         Capability.FORM_LAYOUT_PLACE_FIELD: "Dictionary Field and Form Placement",
         Capability.FORM_SECTION_REMOVE: "Form Section Removal",
         Capability.CMDB_IRE_ANALYZE: "CMDB IRE Analysis",
+        Capability.CMDB_IRE_GENERATE: "CMDB IRE Rules",
         Capability.CHOICE_VALUES_CREATE: "Choice Values",
         Capability.ACL_MODIFY: "ACL",
         Capability.FLOW_MODIFY: "Flow Designer",
@@ -724,7 +726,7 @@ def _requested_capabilities(text: str) -> set[Capability]:
     if _is_form_section_request(text):
         capabilities.add(Capability.FORM_SECTION_REMOVE)
     if _is_cmdb_ire_analysis_request(text):
-        capabilities.add(Capability.CMDB_IRE_ANALYZE)
+        capabilities.update({Capability.CMDB_IRE_ANALYZE, Capability.CMDB_IRE_GENERATE})
     if "acl" in text or "only admins" in text or "only admin" in text:
         capabilities.add(Capability.ACL_MODIFY)
     if "workflow" in text or "flow designer" in text:

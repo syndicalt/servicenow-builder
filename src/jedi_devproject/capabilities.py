@@ -21,6 +21,7 @@ class Capability(StrEnum):
     FORM_LAYOUT_PLACE_FIELD = "form_layout_place_field"
     FORM_SECTION_REMOVE = "form_section_remove"
     CMDB_IRE_ANALYZE = "cmdb_ire_analyze"
+    CMDB_IRE_GENERATE = "cmdb_ire_generate"
     CHOICE_VALUES_CREATE = "choice_values_create"
     ACL_MODIFY = "acl_modify"
     FLOW_MODIFY = "flow_modify"
@@ -201,7 +202,7 @@ def _dictionary_form_profile(*, capability: Capability) -> CapabilityProfile:
 def _form_section_profile() -> CapabilityProfile:
     return CapabilityProfile(
         capability=Capability.FORM_SECTION_REMOVE,
-        status="enabled",
+        status="candidate_generation",
         supported_artifacts=["sys_ui_section", "sys_ui_element"],
         required_instance_context=["form_sections", "form_layout"],
         deterministic_validators=[
@@ -228,7 +229,7 @@ def _form_section_profile() -> CapabilityProfile:
         build_pipeline="form_section_update_set_pipeline",
         current_max_story_points=3,
         target_max_story_points=5,
-        creates_update_set=True,
+        creates_update_set=False,
     )
 
 
@@ -270,7 +271,7 @@ def _generation_profile(
         build_pipeline=build_pipeline,
         current_max_story_points=current_max_story_points,
         target_max_story_points=5,
-        creates_update_set=True,
+        creates_update_set=status == "enabled",
     )
 
 
@@ -357,14 +358,14 @@ def _flow_designer_generation_profile() -> CapabilityProfile:
         build_pipeline="flow_designer_update_set_pipeline",
         current_max_story_points=0,
         target_max_story_points=5,
-        creates_update_set=True,
+        creates_update_set=False,
     )
 
 
 def _catalog_item_generation_profile() -> CapabilityProfile:
     return CapabilityProfile(
         capability=Capability.CATALOG_ITEM_CREATE,
-        status="enabled",
+        status="candidate_generation",
         supported_artifacts=[
             "sc_cat_item",
             "item_option_new",
@@ -412,7 +413,7 @@ def _catalog_item_generation_profile() -> CapabilityProfile:
         build_pipeline="catalog_item_update_set_pipeline",
         current_max_story_points=3,
         target_max_story_points=5,
-        creates_update_set=True,
+        creates_update_set=False,
     )
 
 
@@ -462,6 +463,54 @@ def _cmdb_ire_analysis_profile() -> CapabilityProfile:
     )
 
 
+def _cmdb_ire_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.CMDB_IRE_GENERATE,
+        status="candidate_generation",
+        supported_artifacts=[
+            "cmdb_identifier",
+            "cmdb_identifier_entry",
+            "cmdb_reconciliation_definition",
+        ],
+        required_instance_context=[
+            "cmdb_ire_identification_rules",
+            "cmdb_ire_reconciliation_rules",
+            "cmdb_data_sources",
+            "cmdb_class_hierarchy",
+        ],
+        deterministic_validators=[
+            "target_cmdb_class_resolved",
+            "identifier_attributes_resolved",
+            "reconciliation_rules_retrieved",
+            "data_sources_resolved",
+            "xml_shape_evidence_validated",
+        ],
+        unsupported_cases=[
+            "xml shape evidence not captured",
+            "CMDB class model creation",
+            "data source onboarding",
+            "discovery source credential changes",
+            "CMDB data migration",
+            "delete IRE rules",
+        ],
+        uat_story_shape=[
+            "target CMDB class",
+            "source systems",
+            "identifier attributes",
+            "match priority",
+            "reconciliation behavior",
+            "target data sources",
+            "test evidence",
+            "rollback expectation",
+        ],
+        researcher="cmdb_ire_researcher",
+        build_pipeline="cmdb_ire_candidate_pipeline",
+        current_max_story_points=3,
+        target_max_story_points=5,
+        creates_update_set=False,
+    )
+
+
 CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.DICTIONARY_FIELD_CREATE: _dictionary_form_profile(
         capability=Capability.DICTIONARY_FIELD_CREATE
@@ -491,7 +540,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.BUSINESS_RULE_GENERATE: _generation_profile(
         capability=Capability.BUSINESS_RULE_GENERATE,
-        status="enabled",
+        status="candidate_generation",
         supported_artifact="sys_script",
         required_instance_context=["table_schema", "business_rules"],
         researcher="code_surface_researcher",
@@ -509,7 +558,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.CLIENT_SCRIPT_GENERATE: _generation_profile(
         capability=Capability.CLIENT_SCRIPT_GENERATE,
-        status="enabled",
+        status="candidate_generation",
         supported_artifact="sys_script_client",
         required_instance_context=["table_schema", "client_scripts"],
         researcher="code_surface_researcher",
@@ -524,7 +573,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.SCRIPT_INCLUDE_GENERATE: _generation_profile(
         capability=Capability.SCRIPT_INCLUDE_GENERATE,
-        status="enabled",
+        status="candidate_generation",
         supported_artifact="sys_script_include",
         required_instance_context=["script_includes"],
         researcher="code_surface_researcher",
@@ -540,6 +589,7 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     Capability.UI_POLICY_GENERATE: _ui_policy_generation_profile(),
     Capability.FLOW_MODIFY: _flow_designer_generation_profile(),
     Capability.CMDB_IRE_ANALYZE: _cmdb_ire_analysis_profile(),
+    Capability.CMDB_IRE_GENERATE: _cmdb_ire_generation_profile(),
 }
 
 
@@ -559,6 +609,7 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
         CAPABILITY_REGISTRY[Capability.UI_POLICY_GENERATE],
         CAPABILITY_REGISTRY[Capability.FLOW_MODIFY],
         CAPABILITY_REGISTRY[Capability.CMDB_IRE_ANALYZE],
+        CAPABILITY_REGISTRY[Capability.CMDB_IRE_GENERATE],
     ]
 
 
