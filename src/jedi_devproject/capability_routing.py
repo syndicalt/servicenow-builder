@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from jedi_devproject.automation_intent import (
     AutomationIntent,
     AutomationIntentType,
@@ -19,11 +21,14 @@ from jedi_devproject.capability_assessment import (
     FULL_MATURITY_MAX_AUTOMATED_POINTS,
     _assessment,
 )
+from jedi_devproject.catalog_item_generation import is_declarative_reference_qualifier
 from jedi_devproject.intent_classifier import (
     _business_rule_forbidden_details,
     _client_script_forbidden_details,
     _code_surface_capability,
+    _is_catalog_item_creation_request,
     _is_dictionary_form_request,
+    _is_record_producer_request,
     _missing_details,
     _requested_capabilities,
     _script_include_forbidden_details,
@@ -39,6 +44,9 @@ from jedi_devproject.story_features import (
 
 SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.CATALOG_ITEM_CREATE,
+    Capability.RECORD_PRODUCER_CREATE,
+    Capability.CATALOG_UI_POLICY_GENERATE,
+    Capability.CATALOG_CLIENT_SCRIPT_GENERATE,
     Capability.BUSINESS_RULE_ANALYZE,
     Capability.BUSINESS_RULE_GENERATE,
     Capability.CLIENT_SCRIPT_ANALYZE,
@@ -53,6 +61,69 @@ SUPPORTED_BASELINE_CAPABILITIES = {
     Capability.CMDB_IRE_ANALYZE,
     Capability.CMDB_IRE_GENERATE,
 }
+
+# Catalog variable behavior (catalog UI policies and catalog client scripts) is
+# only supported when the same story creates the catalog item, so the behavior
+# can be validated against the item's own generated variables. Standalone
+# changes target an existing catalog item, and there is no live-item discovery
+# contract for that yet — they route to manual review with these stable codes.
+CATALOG_UI_POLICY_EXISTING_ITEM_REASON_CODE = "catalog_ui_policy:existing_item_manual_review"
+CATALOG_CLIENT_SCRIPT_EXISTING_ITEM_REASON_CODE = (
+    "catalog_client_script:existing_item_manual_review"
+)
+
+_STANDALONE_CATALOG_BEHAVIOR_REASON_CODES: dict[Capability, str] = {
+    Capability.CATALOG_UI_POLICY_GENERATE: CATALOG_UI_POLICY_EXISTING_ITEM_REASON_CODE,
+    Capability.CATALOG_CLIENT_SCRIPT_GENERATE: CATALOG_CLIENT_SCRIPT_EXISTING_ITEM_REASON_CODE,
+}
+
+_STANDALONE_CATALOG_BEHAVIOR_REASON = (
+    "standalone catalog variable behavior targets an existing catalog item; "
+    "no live catalog item discovery contract exists yet"
+)
+
+
+# A record producer creates a record in a target table; a catalog item drives
+# request fulfillment. A story asking for both at once is ambiguous about which
+# artifact owns the variables and placement, so it routes to manual review with
+# this stable code instead of guessing.
+RECORD_PRODUCER_COMBINED_ITEM_REASON_CODE = (
+    "record_producer:combined_with_catalog_item_manual_review"
+)
+
+_RECORD_PRODUCER_COMBINED_ITEM_REASON = (
+    "story requests both a catalog item and a record producer; "
+    "combined requests route to manual review"
+)
+
+# Record producers (like catalog items) are only generated from structured
+# intent; free-text requests route to clarification with missing-detail
+# feedback rather than guessing producer placement or field mappings.
+_RECORD_PRODUCER_STRUCTURED_INTENT_REASON = (
+    "record producer stories require structured intent for automated generation"
+)
+
+
+def _combined_item_and_producer_reasons(positive_text: str) -> list[str]:
+    if _is_record_producer_request(positive_text) and _is_catalog_item_creation_request(
+        positive_text
+    ):
+        return [
+            RECORD_PRODUCER_COMBINED_ITEM_REASON_CODE,
+            _RECORD_PRODUCER_COMBINED_ITEM_REASON,
+        ]
+    return []
+
+
+def _standalone_catalog_behavior_reasons(requested: set[Capability]) -> list[str]:
+    codes = [
+        code
+        for capability, code in _STANDALONE_CATALOG_BEHAVIOR_REASON_CODES.items()
+        if capability in requested
+    ]
+    if not codes:
+        return []
+    return [*sorted(codes), _STANDALONE_CATALOG_BEHAVIOR_REASON]
 
 
 def analyze_story_capabilities(
@@ -99,6 +170,39 @@ def analyze_story_capabilities(
             "story points exceed current automation max: "
             f"{story.story_points:.1f} > {CURRENT_AUTOMATION_MAX_POINTS}"
         )
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
+    standalone_catalog_behavior_reasons = _standalone_catalog_behavior_reasons(requested)
+    if standalone_catalog_behavior_reasons:
+        # Free-text stories never create a catalog item (catalog items require
+        # structured intent), so any catalog policy/script request here targets
+        # an existing item and routes to manual review.
+        reasons.extend(standalone_catalog_behavior_reasons)
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
+    combined_item_and_producer_reasons = _combined_item_and_producer_reasons(positive_text)
+    if combined_item_and_producer_reasons:
+        reasons.extend(combined_item_and_producer_reasons)
         return _assessment(
             story=story,
             outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
@@ -209,6 +313,22 @@ def analyze_story_capabilities(
         return _assessment(
             story=story,
             outcome=SuitabilityOutcome.UNSUPPORTED_CAPABILITY,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=missing_details,
+            unsupported=unsupported,
+        )
+
+    if Capability.RECORD_PRODUCER_CREATE in requested:
+        reasons.append(_RECORD_PRODUCER_STRUCTURED_INTENT_REASON)
+        if missing_details:
+            reasons.append("story is missing required automation details")
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
             requested=requested,
             supported=supported_capabilities,
             intent=intent,
@@ -353,6 +473,7 @@ def analyze_story_capabilities(
 
 AUTOMATED_INTENT_REASONS = {
     Capability.CATALOG_ITEM_CREATE: "supported standard catalog item generation request",
+    Capability.RECORD_PRODUCER_CREATE: "supported record producer generation request",
     Capability.BUSINESS_RULE_GENERATE: "supported table-local business rule generation request",
     Capability.CLIENT_SCRIPT_GENERATE: "supported table-local client script generation request",
     Capability.SCRIPT_INCLUDE_GENERATE: "supported utility script include generation request",
@@ -413,6 +534,48 @@ def _assess_automation_intent(
             unsupported=unsupported,
             automation_intent=automation_intent,
         )
+
+    if automation_intent.intent_type in {
+        AutomationIntentType.CATALOG_UI_POLICY,
+        AutomationIntentType.CATALOG_CLIENT_SCRIPT,
+    }:
+        # Standalone catalog variable behavior targets an existing catalog
+        # item; supported behavior rides along the story that creates the item.
+        reasons.extend(_standalone_catalog_behavior_reasons({automation_intent.capability}))
+        return _assessment(
+            story=story,
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+            requested=requested,
+            supported=supported_capabilities,
+            intent=field_form_intent,
+            target_table=target_table,
+            reasons=reasons,
+            missing_details=automation_intent.missing_details,
+            unsupported=unsupported,
+            automation_intent=automation_intent,
+        )
+
+    if automation_intent.intent_type in {
+        AutomationIntentType.CATALOG_ITEM,
+        AutomationIntentType.RECORD_PRODUCER,
+    }:
+        combined_reasons = _combined_item_and_producer_reasons(
+            _positive_requirement_text(_story_text(story))
+        )
+        if combined_reasons:
+            reasons.extend(combined_reasons)
+            return _assessment(
+                story=story,
+                outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+                requested=requested,
+                supported=supported_capabilities,
+                intent=field_form_intent,
+                target_table=target_table,
+                reasons=reasons,
+                missing_details=automation_intent.missing_details,
+                unsupported=unsupported,
+                automation_intent=automation_intent,
+            )
 
     forbidden_details = _automation_intent_forbidden_details(automation_intent)
     if forbidden_details:
@@ -508,6 +671,13 @@ def _capabilities_for_automation_intent(automation_intent: AutomationIntent) -> 
             Capability.FIELD_LABEL_CREATE,
             Capability.FORM_LAYOUT_PLACE_FIELD,
         }
+    if automation_intent.intent_type is AutomationIntentType.CATALOG_ITEM:
+        capabilities = {Capability.CATALOG_ITEM_CREATE}
+        if automation_intent.catalog_ui_policies:
+            capabilities.add(Capability.CATALOG_UI_POLICY_GENERATE)
+        if automation_intent.catalog_client_scripts:
+            capabilities.add(Capability.CATALOG_CLIENT_SCRIPT_GENERATE)
+        return capabilities
     return {automation_intent.capability}
 
 
@@ -526,9 +696,40 @@ def _automation_intent_forbidden_details(automation_intent: AutomationIntent) ->
     if (
         automation_intent.intent_type is AutomationIntentType.CATALOG_ITEM
         and automation_intent.fulfillment_flow
+        # Explicitly attaching an EXISTING flow is the supported convergence
+        # path (fail-closed live resolution happens downstream); creating,
+        # modifying, or ambiguously requesting a flow stays forbidden.
+        and not automation_intent.fulfillment_flow_attachment_requested
     ):
         details.append("fulfillment flow or workflow creation")
+    if automation_intent.intent_type is AutomationIntentType.CATALOG_ITEM:
+        if automation_intent.catalog_variable_set_creation:
+            details.append("variable set creation")
+        if _has_non_declarative_reference_qualifier(automation_intent.catalog_variables):
+            details.append("scripted or non-declarative reference qualifier")
+    if automation_intent.intent_type is AutomationIntentType.RECORD_PRODUCER:
+        # Record producers redirect to the produced record and never use
+        # fulfillment flows: any fulfillment-flow request — including
+        # attaching an existing flow — stays forbidden.
+        if automation_intent.fulfillment_flow_attachment_requested:
+            details.append("fulfillment flow attachment")
+        elif automation_intent.fulfillment_flow:
+            details.append("fulfillment flow or workflow creation")
+        if automation_intent.record_producer_script:
+            details.append("producer script")
+        if _has_non_declarative_reference_qualifier(automation_intent.catalog_variables):
+            details.append("scripted or non-declarative reference qualifier")
     return details
+
+
+def _has_non_declarative_reference_qualifier(variables: list[dict[str, Any]]) -> bool:
+    return any(
+        str(variable.get("reference_qualifier") or "").strip()
+        and not is_declarative_reference_qualifier(
+            str(variable.get("reference_qualifier") or "")
+        )
+        for variable in variables
+    )
 
 
 def _field_form_intent_from_automation_intent(

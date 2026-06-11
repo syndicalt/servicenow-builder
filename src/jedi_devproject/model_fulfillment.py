@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from jedi_devproject.atf_test_generation import generate_atf_test_plan
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome, capability_profile
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.enrichment import enrich_story
+from jedi_devproject.flow_builder import flow_builder_available
 from jedi_devproject.flow_designer_generation import flow_builder_readiness_contract
 from jedi_devproject.fulfillment_worker import (
     FulfillmentArtifactRef,
@@ -38,6 +41,8 @@ from jedi_devproject.update_set_handoff import (
     create_update_set_handoff,
 )
 from jedi_devproject.writeback_orchestration import WritebackClient
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ModelFulfillmentClient(WritebackClient, Protocol):
@@ -133,6 +138,7 @@ def model_candidate_fulfillment_handler(
             surface_context_bundle=surface_context_bundle,
         )
         flow_preflight_guidance = _flow_preflight_guidance_artifact(packet=packet)
+        atf_test_plan = _atf_test_plan_artifact(candidate=candidate)
 
         return FulfillmentExecutionResult(
             message=f"Implementation candidate generated for {job.story_number}",
@@ -201,6 +207,17 @@ def model_candidate_fulfillment_handler(
                     artifact_kind="implementation_candidate",
                     schema_version="implementation-candidate-v1",
                     payload_json=candidate.model_dump(mode="json"),
+                ),
+                *(
+                    [
+                        FulfillmentArtifactRef(
+                            artifact_kind="atf_test_plan",
+                            schema_version="atf-test-plan-v1",
+                            payload_json=atf_test_plan,
+                        )
+                    ]
+                    if atf_test_plan is not None
+                    else []
                 ),
             ],
             after_artifacts_persisted=lambda artifacts: _create_handoff_after_persist(
@@ -489,11 +506,35 @@ def _cmdb_ire_analysis_artifact(
     }
 
 
+def _atf_test_plan_artifact(*, candidate: UpdateSetCandidate) -> dict[str, Any] | None:
+    """ATF test plan payload for a generated candidate, failing open.
+
+    Plan generation is advisory evidence for UAT; a failure to derive it must
+    never fail the candidate itself, so any error is logged and the plan is
+    simply omitted from the artifact list.
+    """
+    try:
+        plan = generate_atf_test_plan(candidate)
+    except Exception:
+        _LOGGER.warning(
+            "ATF test plan generation failed for %s; plan omitted",
+            candidate.story_number,
+            exc_info=True,
+        )
+        return None
+    if plan is None:
+        return None
+    return plan.model_dump(mode="json")
+
+
 def _flow_preflight_guidance_artifact(*, packet: Any) -> dict[str, Any] | None:
     capabilities = set(packet.capability_assessment.get("capabilities", []))
     if Capability.FLOW_MODIFY.value not in capabilities:
         return None
-    readiness = flow_builder_readiness_contract()
+    # Builder availability is signaled, but runtime XML shape and snapshot
+    # evidence is never collected in this path, so readiness stays false and
+    # flow stories keep routing to manual review until every gate passes.
+    readiness = flow_builder_readiness_contract(builder_available=flow_builder_available())
     return {
         "schema_version": "flow-preflight-guidance-v1",
         "story_number": packet.story.number,
@@ -617,7 +658,7 @@ def _flow_preflight_guidance_note(
         return ""
     if "unsupported capability: flow_modify" not in candidate.eligibility_reasons:
         return ""
-    readiness = flow_builder_readiness_contract()
+    readiness = flow_builder_readiness_contract(builder_available=flow_builder_available())
     work_notes = " ".join(
         guidance.work_note for guidance in readiness.unsupported_reason_guidance
     )

@@ -63,6 +63,35 @@ def _catalog_categories_surface(
     )
 
 
+def _catalog_variable_sets_surface(
+    *,
+    client: InstanceDiscoveryClient,
+    required: bool,
+) -> ServiceNowSurfaceContext:
+    """Existing shared variable sets (item_option_new_set) available to attach.
+
+    The capability only attaches existing sets; when this surface is required
+    and empty, the bundle reports it missing and the story fails closed to
+    manual review instead of inventing or creating a set.
+    """
+    if not required:
+        return _empty_surface(
+            surface="catalog_variable_sets",
+            source_table="item_option_new_set",
+            required=False,
+        )
+    return _table_surface(
+        client=client,
+        surface="catalog_variable_sets",
+        source_table="item_option_new_set",
+        lookup={},
+        fields=["sys_id", "title", "internal_name", "active"],
+        required=True,
+        evidence="item_option_new_set:active",
+        limit=250,
+    )
+
+
 def _employee_center_topics_surface(
     *,
     client: InstanceDiscoveryClient,

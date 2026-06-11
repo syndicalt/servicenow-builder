@@ -7,6 +7,7 @@ import re
 from jedi_devproject.discovery.catalog import (
     _catalog_categories_surface,
     _catalog_definitions_surface,
+    _catalog_variable_sets_surface,
     _employee_center_connected_content_surface,
     _employee_center_topics_surface,
 )
@@ -207,6 +208,10 @@ def discover_servicenow_surface_context(
             client=client,
             required="catalog_categories" in required_surfaces,
         ),
+        _catalog_variable_sets_surface(
+            client=client,
+            required="catalog_variable_sets" in required_surfaces,
+        ),
         _employee_center_topics_surface(
             client=client,
             required="employee_center_topics" in required_surfaces,
@@ -356,6 +361,7 @@ def _required_surfaces(story_text: str) -> list[SurfaceName]:
             "catalog_definitions",
             (
                 r"\bcatalog\s+items?\b",
+                r"\brecord\s+producers?\b",
                 r"\bservice\s+catalog\b",
                 r"\bemployee\s+center\b",
             ),
@@ -364,9 +370,14 @@ def _required_surfaces(story_text: str) -> list[SurfaceName]:
             "catalog_categories",
             (
                 r"\bcatalog\s+items?\b",
+                r"\brecord\s+producers?\b",
                 r"\bservice\s+catalog\b",
                 r"\bemployee\s+center\b",
             ),
+        ),
+        (
+            "catalog_variable_sets",
+            (r"\bvariable\s+sets?\b",),
         ),
         (
             "employee_center_topics",

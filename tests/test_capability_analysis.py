@@ -791,6 +791,167 @@ def test_catalog_item_story_with_fulfillment_flow_routes_to_manual_build() -> No
     )
 
 
+def _catalog_item_story_description(*extra_lines: str) -> str:
+    return (
+        "Target artifact type: Catalog Item\n"
+        "Artifact name: Request Temporary Badge\n"
+        "Short description: Request a temporary access badge.\n"
+        "Catalog: Service Catalog\n"
+        "Category: Services\n"
+        "Taxonomy: Employee\n"
+        "Employee Center topic: Technology services / Software / Access issues\n"
+        "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100\n"
+        + "".join(f"{line}\n" for line in extra_lines)
+    )
+
+
+def test_catalog_item_story_attaching_existing_flow_routes_to_automated_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010140",
+            short_description="JEDI UAT: Catalog item attaching an existing flow",
+            description=_catalog_item_story_description(
+                "Fulfillment flow: Attach the existing flow Badge Access Fulfillment "
+                "as the fulfillment flow",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.reasons == ["supported standard catalog item generation request"]
+    assert assessment.automation_intent is not None
+    assert assessment.automation_intent["fulfillment_flow_name"] == "Badge Access Fulfillment"
+    assert assessment.automation_intent["fulfillment_flow_attachment_requested"] is True
+
+
+def test_catalog_item_story_modifying_attached_flow_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010141",
+            short_description="JEDI UAT: Catalog item modifying a flow",
+            description=_catalog_item_story_description(
+                "Fulfillment flow: Attach the existing flow Badge Access Fulfillment "
+                "as the fulfillment flow and modify its approval step",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "catalog item generation includes forbidden behavior: fulfillment flow or workflow creation"
+        in assessment.reasons
+    )
+
+
+def test_catalog_item_story_attaching_unnamed_flow_needs_clarification() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010142",
+            short_description="JEDI UAT: Catalog item attaching an unnamed flow",
+            description=_catalog_item_story_description(
+                "Fulfillment flow: Attach an existing flow as the fulfillment flow",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
+    assert "fulfillment flow name" in assessment.missing_details
+
+
+def test_catalog_item_story_attaching_existing_variable_sets_routes_to_automated_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010104",
+            short_description="JEDI UAT: Catalog item with shared variable set",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100; "
+                "start_date|Start date|date|order=200; end_date|End date|date|order=300\n"
+                "Variable sets: Common Visitor Questions\n"
+                "Variable groups: Schedule|start_date, end_date"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.automation_intent is not None
+    assert assessment.automation_intent["catalog_variable_sets"] == ["Common Visitor Questions"]
+    assert assessment.automation_intent["catalog_variable_groups"] == [
+        {"title": "Schedule", "variables": ["start_date", "end_date"]}
+    ]
+
+
+def test_catalog_item_story_creating_variable_set_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010105",
+            short_description="JEDI UAT: Catalog item creating a variable set",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100\n"
+                "Variable sets: Create a new Visitor Details set"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "catalog item generation includes forbidden behavior: variable set creation"
+        in assessment.reasons
+    )
+
+
+def test_catalog_item_story_with_scripted_qualifier_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010106",
+            short_description="JEDI UAT: Catalog item with scripted qualifier",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: sponsor|Sponsor|reference|sys_user|"
+                "qualifier=javascript:gs.getUser()|mandatory=true|order=100"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "catalog item generation includes forbidden behavior: "
+        "scripted or non-declarative reference qualifier"
+        in assessment.reasons
+    )
+
+
 def test_structured_flow_story_routes_to_unsupported_capability() -> None:
     assessment = analyze_story_capabilities(
         _story(
@@ -984,3 +1145,335 @@ def test_missing_details_story_suggests_required_story_fields() -> None:
     ]
     assert assessment.suggested_story is not None
     assert "Target table:" in assessment.suggested_story
+
+
+def test_catalog_item_story_with_variable_behavior_routes_to_automated_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010130",
+            short_description="JEDI UAT: Badge item with variable behavior",
+            description=(
+                "Target artifact type: Catalog Item\n"
+                "Artifact name: Request Temporary Badge\n"
+                "Short description: Request a temporary access badge.\n"
+                "Catalog: Service Catalog\n"
+                "Category: Services\n"
+                "Taxonomy: Employee\n"
+                "Employee Center topic: Technology services / Software / Access issues\n"
+                "Variables: visitor_name|Visitor name|single_line_text|mandatory=true|order=100; "
+                "start_date|Start date|date|order=200; "
+                "end_date|End date|date|order=300\n"
+                "Variable rules: Show schedule|visitor_name=external|"
+                "show=start_date,end_date|require=start_date\n"
+                "Variable scripts: populate_visitor|onload|set=visitor_name=New visitor"
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {
+        Capability.CATALOG_ITEM_CREATE,
+        Capability.CATALOG_UI_POLICY_GENERATE,
+        Capability.CATALOG_CLIENT_SCRIPT_GENERATE,
+    }
+    assert assessment.automation_intent is not None
+    assert assessment.automation_intent["catalog_ui_policies"][0]["title"] == "Show schedule"
+    assert (
+        assessment.automation_intent["catalog_client_scripts"][0]["name"]
+        == "populate_visitor"
+    )
+
+
+def test_standalone_catalog_ui_policy_story_routes_to_manual_with_stable_code() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010131",
+            short_description="JEDI UAT: Hide schedule on existing badge item",
+            description=(
+                "Target artifact type: Catalog UI Policy\n"
+                "Artifact name: Hide schedule on the existing badge item\n"
+                "Condition: needs_schedule=no"
+            ),
+            acceptance_criteria="The schedule variables hide on the existing item.",
+            story_points=2,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert assessment.capabilities == {Capability.CATALOG_UI_POLICY_GENERATE}
+    assert "catalog_ui_policy:existing_item_manual_review" in assessment.reasons
+    assert any("no live catalog item discovery contract" in reason for reason in assessment.reasons)
+
+
+def test_standalone_catalog_client_script_story_routes_to_manual_with_stable_code() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010132",
+            short_description="JEDI UAT: Populate description on existing badge item",
+            description=(
+                "Target artifact type: Catalog Client Script\n"
+                "Artifact name: Populate description on the existing badge item"
+            ),
+            acceptance_criteria="The description populates on load.",
+            story_points=2,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert assessment.capabilities == {Capability.CATALOG_CLIENT_SCRIPT_GENERATE}
+    assert "catalog_client_script:existing_item_manual_review" in assessment.reasons
+
+
+def test_free_text_catalog_behavior_request_routes_to_manual_with_stable_code() -> None:
+    ui_policy = analyze_story_capabilities(
+        _story(
+            short_description="Add a catalog UI policy to the badge item",
+            description=(
+                "Create a catalog ui policy on the existing Request Temporary Badge "
+                "item so the schedule variables hide when not needed."
+            ),
+            acceptance_criteria="The schedule variables hide on the existing item.",
+        )
+    )
+    client_script = analyze_story_capabilities(
+        _story(
+            short_description="Add a catalog client script to the badge item",
+            description=(
+                "Create a catalog client script on the existing Request Temporary "
+                "Badge item to populate the description on load."
+            ),
+            acceptance_criteria="The description populates on load.",
+        )
+    )
+
+    assert ui_policy.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert "catalog_ui_policy:existing_item_manual_review" in ui_policy.reasons
+    assert client_script.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert "catalog_client_script:existing_item_manual_review" in client_script.reasons
+
+
+def _record_producer_story_description(*extra_lines: str) -> str:
+    return (
+        "Target artifact type: Record Producer\n"
+        "Artifact name: Report Security Incident\n"
+        "Short description: Report a security incident for triage.\n"
+        "Target table: incident\n"
+        "Catalog: Service Catalog\n"
+        "Category: Services\n"
+        "Variables: summary|Summary|single_line_text|map=short_description|"
+        "mandatory=true|order=100; "
+        "caller|Caller|reference|sys_user|active=true|map=caller_id|order=200\n"
+        + "".join(f"{line}\n" for line in extra_lines)
+    )
+
+
+def test_structured_record_producer_story_routes_to_automated_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010130",
+            short_description="JEDI UAT: Add security record producer",
+            description=_record_producer_story_description(),
+            acceptance_criteria=(
+                "- Submitting the producer creates an incident record.\n"
+                "- Summary maps to short_description and Caller maps to caller_id.\n"
+                "- Delivery is a retrieved Update Set ready for preview and commit."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.AUTOMATED_BUILD
+    assert assessment.capabilities == {Capability.RECORD_PRODUCER_CREATE}
+    assert assessment.target_table == "incident"
+    assert assessment.required_instance_context == [
+        "table_schema",
+        "catalog_definitions",
+        "catalog_categories",
+    ]
+    assert assessment.reasons == ["supported record producer generation request"]
+    assert assessment.automation_intent is not None
+    producer = assessment.automation_intent["record_producer"]
+    assert producer["target_table"] == "incident"
+    assert producer["variables"][0]["field"] == "short_description"
+
+
+def test_record_producer_story_with_producer_script_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010131",
+            short_description="JEDI UAT: Producer with script mapping",
+            description=_record_producer_story_description(
+                "Producer script: current.short_description = producer.summary;",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "record producer generation includes forbidden behavior: producer script"
+        in assessment.reasons
+    )
+
+
+def test_record_producer_story_with_scripted_qualifier_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010132",
+            short_description="JEDI UAT: Producer with scripted qualifier",
+            description=_record_producer_story_description().replace(
+                "active=true|map=caller_id",
+                "qualifier=javascript:gs.getUser()|map=caller_id",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "record producer generation includes forbidden behavior: "
+        "scripted or non-declarative reference qualifier"
+        in assessment.reasons
+    )
+
+
+def test_record_producer_story_attaching_existing_flow_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010134",
+            short_description="JEDI UAT: Producer attaching an existing flow",
+            description=_record_producer_story_description(
+                "Fulfillment flow: Attach the existing flow Badge Access Fulfillment "
+                "as the fulfillment flow",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "record producer generation includes forbidden behavior: fulfillment flow attachment"
+        in assessment.reasons
+    )
+
+
+def test_record_producer_story_with_fulfillment_flow_routes_to_manual_build() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010135",
+            short_description="JEDI UAT: Producer with fulfillment flow",
+            description=_record_producer_story_description(
+                "Fulfillment flow: Create Badge Request",
+            ),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert (
+        "record producer generation includes forbidden behavior: "
+        "fulfillment flow or workflow creation"
+        in assessment.reasons
+    )
+
+
+def test_record_producer_story_missing_field_mappings_needs_clarification() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010133",
+            short_description="JEDI UAT: Producer without mappings",
+            description=_record_producer_story_description().replace(
+                "map=short_description|", ""
+            ).replace("map=caller_id|", ""),
+            acceptance_criteria="Delivery is a retrieved Update Set.",
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
+    assert "variable field mappings" in assessment.missing_details
+
+
+def test_structured_story_requesting_item_and_producer_routes_to_manual_with_code() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010134",
+            short_description="JEDI UAT: Producer and catalog item together",
+            description=_record_producer_story_description(),
+            acceptance_criteria=(
+                "Also create a catalog item that requests the same access. "
+                "Delivery is a retrieved Update Set."
+            ),
+            story_points=3,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert "record_producer:combined_with_catalog_item_manual_review" in assessment.reasons
+
+
+def test_free_text_record_producer_story_routes_to_clarification() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010135",
+            short_description="Create a security record producer",
+            description=(
+                "Create a record producer for incident with fields summary, details "
+                "mapped to short_description, description."
+            ),
+            acceptance_criteria="Employees can open incidents from the portal.",
+            story_points=2,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
+    assert assessment.capabilities == {Capability.RECORD_PRODUCER_CREATE}
+    assert (
+        "record producer stories require structured intent for automated generation"
+        in assessment.reasons
+    )
+    assert assessment.missing_details == []
+    assert assessment.target_table == "incident"
+
+
+def test_free_text_record_producer_story_reports_missing_details() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010136",
+            short_description="Create a record producer",
+            description="Create a record producer so employees can report facilities issues.",
+            acceptance_criteria="Employees can report issues from the portal.",
+            story_points=2,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.NEEDS_CLARIFICATION
+    assert assessment.missing_details == [
+        "target table",
+        "variables",
+        "variable field mappings",
+    ]
+
+
+def test_free_text_story_requesting_item_and_producer_routes_to_manual_with_code() -> None:
+    assessment = analyze_story_capabilities(
+        _story(
+            number="STRY0010137",
+            short_description="Catalog item and record producer",
+            description=(
+                "Create a catalog item and a record producer for incident with fields "
+                "summary mapped to short_description."
+            ),
+            acceptance_criteria="Both artifacts are delivered together.",
+            story_points=2,
+        )
+    )
+
+    assert assessment.outcome is SuitabilityOutcome.MANUAL_DEVELOPER_BUILD
+    assert "record_producer:combined_with_catalog_item_manual_review" in assessment.reasons

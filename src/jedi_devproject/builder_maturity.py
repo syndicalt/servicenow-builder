@@ -38,12 +38,31 @@ BASELINE_BUILDER_MATURITY: dict[str, float] = {
     "catalog_categories": 0.60,
     "employee_center_topics": 0.60,
     "employee_center_connected_content": 0.60,
+    # Catalog variable behavior surfaces are new and their customer-update XML
+    # shapes are evidence-pending (UAT confirmation required), so they start
+    # well below the automated handoff threshold by design.
+    "catalog_ui_policies": 0.30,
+    "catalog_client_scripts": 0.30,
+    # The record producer builder is new and its customer-update XML shapes are
+    # evidence-pending (UAT confirmation required), so its candidates route to
+    # manual review until recorded outcomes earn promotion.
+    "record_producers": 0.30,
+    # Attaching an existing fulfillment flow writes the sc_cat_item
+    # flow_designer_flow reference, whose retrieved Update Set XML shape is
+    # UAT-unconfirmed; candidates that attach a flow route to manual review
+    # until recorded outcomes earn promotion.
+    "catalog_fulfillment_flows": 0.30,
 }
 DEFAULT_BUILDER_MATURITY_BASELINE = 0.0
 MIN_MATURITY_EVIDENCE_SAMPLES = 5
 MATURITY_EVIDENCE_BLEND_PIVOT_SAMPLES = 20
 MIN_BUILDER_MATURITY_SCORE = 0.0
 MAX_BUILDER_MATURITY_SCORE = 0.99
+
+# The fulfillment-flow attachment surface is exercised through a field on
+# sc_cat_item rather than an extra change table, so candidates that attach a
+# flow pass it explicitly via ``extra_surfaces``.
+CATALOG_FULFILLMENT_FLOW_SURFACE = "catalog_fulfillment_flows"
 
 CHANGE_TABLE_SURFACE_GROUPS: tuple[tuple[frozenset[str], tuple[str, ...]], ...] = (
     (frozenset({"sys_dictionary", "sys_ui_form"}), ("table_schema", "form_layout")),
@@ -63,6 +82,84 @@ CHANGE_TABLE_SURFACE_GROUPS: tuple[tuple[frozenset[str], tuple[str, ...]], ...] 
             "catalog_categories",
             "employee_center_topics",
             "employee_center_connected_content",
+        ),
+    ),
+    # Catalog candidates that add variable behavior exercise the behavior
+    # surfaces on top of the catalog surfaces; the minimum-score rule then
+    # routes them to manual review while those builders stay below threshold.
+    (
+        frozenset(
+            {
+                "sc_cat_item",
+                "item_option_new",
+                "sc_cat_item_category",
+                "m2m_connected_content",
+                "catalog_ui_policy",
+                "catalog_ui_policy_action",
+            }
+        ),
+        (
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+            "catalog_ui_policies",
+        ),
+    ),
+    (
+        frozenset(
+            {
+                "sc_cat_item",
+                "item_option_new",
+                "sc_cat_item_category",
+                "m2m_connected_content",
+                "catalog_script_client",
+            }
+        ),
+        (
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+            "catalog_client_scripts",
+        ),
+    ),
+    (
+        frozenset(
+            {
+                "sc_cat_item",
+                "item_option_new",
+                "sc_cat_item_category",
+                "m2m_connected_content",
+                "catalog_ui_policy",
+                "catalog_ui_policy_action",
+                "catalog_script_client",
+            }
+        ),
+        (
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+            "catalog_ui_policies",
+            "catalog_client_scripts",
+        ),
+    ),
+    # Record producer candidates exercise the catalog placement surfaces plus
+    # the new record_producers surface; the minimum-score rule routes them to
+    # manual review while that builder stays below the handoff threshold.
+    (
+        frozenset(
+            {
+                "sc_cat_item_producer",
+                "item_option_new",
+                "sc_cat_item_category",
+            }
+        ),
+        (
+            "catalog_definitions",
+            "catalog_categories",
+            "record_producers",
         ),
     ),
 )
@@ -174,12 +271,16 @@ def builder_maturity_for_change_tables(
     tables: AbstractSet[str],
     *,
     provider: MaturityEvidenceProvider | None = None,
+    extra_surfaces: tuple[str, ...] = (),
 ) -> BuilderMaturityScore:
     """Score the builder maturity for a candidate's change tables.
 
     When the tables map to multiple surfaces the minimum score wins: automated
     handoff is only as mature as the weakest surface it touches. Unmapped
-    tables score ``0.0`` and always route to manual review.
+    tables score ``0.0`` and always route to manual review. ``extra_surfaces``
+    carries field-level surfaces the change tables alone cannot express (for
+    example the sc_cat_item fulfillment-flow reference) and participates in the
+    same minimum-score rule.
     """
     surfaces = surfaces_for_change_tables(tables)
     if not surfaces:
@@ -189,6 +290,7 @@ def builder_maturity_for_change_tables(
             score=DEFAULT_BUILDER_MATURITY_BASELINE,
             source="baseline",
         )
+    surfaces = (*surfaces, *extra_surfaces)
     scores = [
         score_builder_maturity(
             surface=surface,

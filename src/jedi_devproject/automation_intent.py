@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.capabilities import Capability, capability_profile
 from jedi_devproject.models import Story
+from jedi_devproject.story_features import (
+    explicit_reference_qualifier,
+    looks_like_reference_qualifier_attempt,
+)
 
 
 class AutomationIntentSource(StrEnum):
@@ -18,6 +22,9 @@ class AutomationIntentSource(StrEnum):
 
 class AutomationIntentType(StrEnum):
     CATALOG_ITEM = "catalog_item"
+    RECORD_PRODUCER = "record_producer"
+    CATALOG_UI_POLICY = "catalog_ui_policy"
+    CATALOG_CLIENT_SCRIPT = "catalog_client_script"
     DICTIONARY_FORM = "dictionary_form"
     FORM_SECTION = "form_section"
     BUSINESS_RULE = "business_rule"
@@ -29,6 +36,79 @@ class AutomationIntentType(StrEnum):
     INTEGRATION = "integration"
     DATA_MIGRATION = "data_migration"
     UNKNOWN = "unknown"
+
+
+class CatalogVariableGroupIntent(BaseModel):
+    """A titled container section grouping a catalog item's own new variables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    variables: list[str] = Field(default_factory=list)
+
+
+class RecordProducerIntent(BaseModel):
+    """A complete, typed record producer request: producer, mapped variables, placement.
+
+    Only populated when every required detail is present; incomplete stories
+    keep this ``None`` and surface the gaps as missing details instead. Each
+    variable dict carries a ``field`` key naming the target-table field the
+    variable maps to (``item_option_new.map_to_field``); script-based mapping
+    is never represented here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    short_description: str
+    target_table: str
+    catalog: str
+    category: str
+    variables: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CatalogUiPolicyActionRuleIntent(BaseModel):
+    """One declarative effect a catalog UI policy applies to an item variable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    variable: str
+    visible: str = "ignore"
+    mandatory: str = "ignore"
+    disabled: str = "ignore"
+    cleared: bool = False
+
+
+class CatalogUiPolicyRuleIntent(BaseModel):
+    """A declarative variable behavior rule on the catalog item's own variables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    condition: str
+    reverse_if_false: bool = True
+    actions: list[CatalogUiPolicyActionRuleIntent] = Field(default_factory=list)
+
+
+class CatalogClientScriptActionIntent(BaseModel):
+    """One declarative g_form effect: set a variable's value or clear it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    variable: str
+    value: str = ""
+
+
+class CatalogClientScriptSpecIntent(BaseModel):
+    """A declarative catalog client script on the catalog item's own variables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    script_type: str
+    variable: str = ""
+    actions: list[CatalogClientScriptActionIntent] = Field(default_factory=list)
 
 
 class AutomationIntent(BaseModel):
@@ -70,7 +150,16 @@ class AutomationIntent(BaseModel):
     taxonomy_name: str | None = None
     employee_center_topic: str | None = None
     catalog_variables: list[dict[str, Any]] = Field(default_factory=list)
+    catalog_variable_sets: list[str] = Field(default_factory=list)
+    catalog_variable_groups: list[CatalogVariableGroupIntent] = Field(default_factory=list)
+    catalog_variable_set_creation: bool = False
+    catalog_ui_policies: list[CatalogUiPolicyRuleIntent] = Field(default_factory=list)
+    catalog_client_scripts: list[CatalogClientScriptSpecIntent] = Field(default_factory=list)
+    record_producer: RecordProducerIntent | None = None
+    record_producer_script: str | None = None
     fulfillment_flow: str | None = None
+    fulfillment_flow_name: str | None = None
+    fulfillment_flow_attachment_requested: bool = False
     forbidden_behavior: list[str] = Field(default_factory=list)
     provided_fields: list[str] = Field(default_factory=list)
     required_instance_context: list[str] = Field(default_factory=list)
@@ -89,6 +178,22 @@ ARTIFACT_TYPE_ALIASES: dict[str, tuple[AutomationIntentType, Capability]] = {
     "standard catalog item": (
         AutomationIntentType.CATALOG_ITEM,
         Capability.CATALOG_ITEM_CREATE,
+    ),
+    "record producer": (
+        AutomationIntentType.RECORD_PRODUCER,
+        Capability.RECORD_PRODUCER_CREATE,
+    ),
+    "catalog record producer": (
+        AutomationIntentType.RECORD_PRODUCER,
+        Capability.RECORD_PRODUCER_CREATE,
+    ),
+    "catalog ui policy": (
+        AutomationIntentType.CATALOG_UI_POLICY,
+        Capability.CATALOG_UI_POLICY_GENERATE,
+    ),
+    "catalog client script": (
+        AutomationIntentType.CATALOG_CLIENT_SCRIPT,
+        Capability.CATALOG_CLIENT_SCRIPT_GENERATE,
     ),
     "dictionary form": (
         AutomationIntentType.DICTIONARY_FORM,
@@ -167,6 +272,9 @@ STRUCTURED_KEY_ALIASES = {
     "business rule name": "artifact_name",
     "script include name": "artifact_name",
     "catalog item name": "artifact_name",
+    "record producer name": "artifact_name",
+    "producer script": "record_producer_script",
+    "record producer script": "record_producer_script",
     "short description": "catalog_item_short_description",
     "catalog item short description": "catalog_item_short_description",
     "catalog": "catalog_name",
@@ -176,6 +284,20 @@ STRUCTURED_KEY_ALIASES = {
     "topic": "employee_center_topic",
     "variables": "catalog_variables",
     "catalog variables": "catalog_variables",
+    "variable sets": "catalog_variable_sets",
+    "variable set": "catalog_variable_sets",
+    "attach variable sets": "catalog_variable_sets",
+    "variable groups": "catalog_variable_groups",
+    "variable group": "catalog_variable_groups",
+    "group variables": "catalog_variable_groups",
+    "variable rules": "catalog_ui_policies",
+    "variable rule": "catalog_ui_policies",
+    "variable behavior rules": "catalog_ui_policies",
+    "catalog ui policies": "catalog_ui_policies",
+    "catalog ui policy rules": "catalog_ui_policies",
+    "variable scripts": "catalog_client_scripts",
+    "variable script": "catalog_client_scripts",
+    "catalog client scripts": "catalog_client_scripts",
     "fulfillment flow": "fulfillment_flow",
     "fulfillment workflow": "fulfillment_flow",
     "field label": "field_label",
@@ -242,6 +364,13 @@ def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
         fields_affected = combined
     target_table = _clean_text(fields.get("target_table"))
     artifact_name = _clean_text(fields.get("artifact_name"))
+    catalog_variable_sets, catalog_variable_set_creation = _catalog_variable_sets(
+        fields.get("catalog_variable_sets")
+    )
+    fulfillment_flow = _clean_text(fields.get("fulfillment_flow"))
+    fulfillment_flow_name, fulfillment_flow_attachment_requested = _fulfillment_flow_attachment(
+        fulfillment_flow
+    )
     intent = AutomationIntent(
         source=AutomationIntentSource.STRUCTURED,
         intent_type=intent_type,
@@ -287,12 +416,39 @@ def _intent_from_structured_fields(fields: dict[str, str]) -> AutomationIntent:
         taxonomy_name=_clean_text(fields.get("taxonomy_name")),
         employee_center_topic=_clean_text(fields.get("employee_center_topic")),
         catalog_variables=_catalog_variables(fields.get("catalog_variables")),
-        fulfillment_flow=_clean_text(fields.get("fulfillment_flow")),
+        catalog_variable_sets=catalog_variable_sets,
+        catalog_variable_groups=_catalog_variable_groups(fields.get("catalog_variable_groups")),
+        catalog_variable_set_creation=catalog_variable_set_creation,
+        catalog_ui_policies=_catalog_ui_policy_rules(fields.get("catalog_ui_policies")),
+        catalog_client_scripts=_catalog_client_script_specs(
+            fields.get("catalog_client_scripts")
+        ),
+        record_producer_script=_clean_preserved_text(fields.get("record_producer_script")),
+        fulfillment_flow=fulfillment_flow,
+        fulfillment_flow_name=fulfillment_flow_name,
+        fulfillment_flow_attachment_requested=fulfillment_flow_attachment_requested,
         forbidden_behavior=_forbidden_behavior(fields.get("forbidden_behavior")),
         provided_fields=sorted(fields),
         required_instance_context=_required_context(capability),
     )
-    return intent.model_copy(update={"missing_details": _missing_details(intent, fields)})
+    intent = intent.model_copy(update={"missing_details": _missing_details(intent, fields)})
+    if intent.intent_type is AutomationIntentType.RECORD_PRODUCER:
+        intent = intent.model_copy(update={"record_producer": _record_producer_intent(intent)})
+    return intent
+
+
+def _record_producer_intent(intent: AutomationIntent) -> RecordProducerIntent | None:
+    """Build the typed record producer intent only when every detail is present."""
+    if intent.missing_details:
+        return None
+    return RecordProducerIntent(
+        name=intent.artifact_name or "",
+        short_description=intent.catalog_item_short_description or "",
+        target_table=intent.target_table or "",
+        catalog=intent.catalog_name or "",
+        category=intent.category_name or "",
+        variables=[dict(variable) for variable in intent.catalog_variables],
+    )
 
 
 def _structured_story_fields(description: str) -> dict[str, str]:
@@ -414,6 +570,9 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
             ],
         ]
     if intent.intent_type is AutomationIntentType.CATALOG_ITEM:
+        declared_variable_names = {
+            str(variable.get("name") or "") for variable in intent.catalog_variables
+        }
         return [
             label
             for label, present in [
@@ -427,6 +586,76 @@ def _missing_details(intent: AutomationIntent, fields: dict[str, str]) -> list[s
                 ("taxonomy", bool(intent.taxonomy_name)),
                 ("Employee Center topic", bool(intent.employee_center_topic)),
                 ("variables", bool(intent.catalog_variables)),
+                (
+                    "variable sets",
+                    "catalog_variable_sets" not in fields
+                    or bool(intent.catalog_variable_sets)
+                    or intent.catalog_variable_set_creation,
+                ),
+                (
+                    "variable groups",
+                    "catalog_variable_groups" not in fields
+                    or bool(intent.catalog_variable_groups),
+                ),
+                (
+                    "variable group members",
+                    all(
+                        member in declared_variable_names
+                        for group in intent.catalog_variable_groups
+                        for member in group.variables
+                    ),
+                ),
+                (
+                    "variable rules",
+                    "catalog_ui_policies" not in fields or bool(intent.catalog_ui_policies),
+                ),
+                (
+                    "variable rule members",
+                    all(
+                        member in declared_variable_names
+                        for rule in intent.catalog_ui_policies
+                        for member in _ui_policy_rule_variables(rule)
+                    ),
+                ),
+                (
+                    "variable scripts",
+                    "catalog_client_scripts" not in fields
+                    or bool(intent.catalog_client_scripts),
+                ),
+                (
+                    "variable script members",
+                    all(
+                        member in declared_variable_names
+                        for spec in intent.catalog_client_scripts
+                        for member in _client_script_spec_variables(spec)
+                    ),
+                ),
+                (
+                    "fulfillment flow name",
+                    not intent.fulfillment_flow_attachment_requested
+                    or bool(intent.fulfillment_flow_name),
+                ),
+            ]
+            if not present
+        ]
+    if intent.intent_type is AutomationIntentType.RECORD_PRODUCER:
+        return [
+            label
+            for label, present in [
+                ("record producer name", bool(intent.artifact_name)),
+                ("short description", bool(intent.catalog_item_short_description)),
+                ("target table", bool(intent.target_table)),
+                ("catalog", bool(intent.catalog_name)),
+                ("category", bool(intent.category_name)),
+                ("variables", bool(intent.catalog_variables)),
+                (
+                    "variable field mappings",
+                    not intent.catalog_variables
+                    or all(
+                        str(variable.get("field") or "").strip()
+                        for variable in intent.catalog_variables
+                    ),
+                ),
             ]
             if not present
         ]
@@ -508,6 +737,288 @@ def _catalog_variables(raw_value: str | None) -> list[dict[str, Any]]:
     return variables
 
 
+def _catalog_variable_sets(raw_value: str | None) -> tuple[list[str], bool]:
+    """Parse attached variable-set names; flag explicit set-creation requests.
+
+    Creating new variable sets is unsupported, so any entry that asks to
+    create/build/define a set raises the creation flag (routed to manual
+    review) instead of contributing a name.
+    """
+    cleaned = _clean_preserved_text(raw_value)
+    if cleaned is None:
+        return [], False
+    names: list[str] = []
+    creation_requested = False
+    for raw_entry in re.split(r"[;,]", cleaned):
+        entry = raw_entry.strip(" .")
+        if not entry:
+            continue
+        if re.search(r"\b(?:create|build|define)\b", entry, re.IGNORECASE):
+            creation_requested = True
+            continue
+        if entry.casefold() not in {name.casefold() for name in names}:
+            names.append(entry)
+    return names, creation_requested
+
+
+_FULFILLMENT_FLOW_ATTACH_WITH_NAME_PATTERN = re.compile(
+    r"attach\s+(?:the\s+|an\s+)?existing\s+flow\s+"
+    r"(?:\"(?P<double_quoted>[^\"]+)\"|'(?P<single_quoted>[^']+)'|(?P<name>\S.*?))"
+    r"\s+as\s+the\s+fulfillment\s+flow",
+    re.IGNORECASE,
+)
+_FULFILLMENT_FLOW_ATTACH_WITHOUT_NAME_PATTERN = re.compile(
+    r"attach\s+(?:the\s+|an\s+)?existing\s+flow\s+as\s+the\s+fulfillment\s+flow",
+    re.IGNORECASE,
+)
+
+
+def _fulfillment_flow_attachment(raw_value: str | None) -> tuple[str | None, bool]:
+    """Extract an explicit attach-existing-flow request from the structured field.
+
+    Only the explicit "attach the existing flow <name> as the fulfillment
+    flow" phrasing yields a flow name. The same phrasing without a name still
+    counts as an attachment request and surfaces as a missing detail instead.
+    Anything else — create/modify requests or ambiguous "with a fulfillment
+    flow" prose — yields no attachment, so the raw value keeps routing to
+    manual review as forbidden behavior exactly as before.
+    """
+    if raw_value is None:
+        return None, False
+    if _FULFILLMENT_FLOW_ATTACH_WITHOUT_NAME_PATTERN.fullmatch(raw_value):
+        return None, True
+    match = _FULFILLMENT_FLOW_ATTACH_WITH_NAME_PATTERN.fullmatch(raw_value)
+    if match is None:
+        return None, False
+    name = next(
+        (
+            value
+            for value in (
+                match.group("double_quoted"),
+                match.group("single_quoted"),
+                match.group("name"),
+            )
+            if value
+        ),
+        "",
+    ).strip()
+    return (name or None), True
+
+
+def _catalog_variable_groups(raw_value: str | None) -> list[CatalogVariableGroupIntent]:
+    """Parse ``Title|member_one,member_two; ...`` entries into typed groups.
+
+    Parsing is all-or-nothing: a malformed or duplicate entry discards every
+    group so the gap surfaces as a missing detail instead of silently dropping
+    part of the stated grouping.
+    """
+    cleaned = _clean_preserved_text(raw_value)
+    if cleaned is None:
+        return []
+    groups: list[CatalogVariableGroupIntent] = []
+    seen_titles: set[str] = set()
+    for raw_entry in cleaned.split(";"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        title, separator, raw_members = entry.partition("|")
+        title = title.strip(" .")
+        members = [
+            member
+            for member in (_clean_field_name(part) for part in raw_members.split(","))
+            if member
+        ]
+        if not title or not separator or not members or title.casefold() in seen_titles:
+            return []
+        seen_titles.add(title.casefold())
+        groups.append(CatalogVariableGroupIntent(title=title, variables=members))
+    return groups
+
+
+_CONDITION_VARIABLE_PATTERN = re.compile(r"(?:^|\^)(?:OR)?([a-z][a-z0-9_]*)")
+
+_UI_POLICY_EFFECT_KEYS: dict[str, tuple[str, str]] = {
+    "show": ("visible", "true"),
+    "hide": ("visible", "false"),
+    "require": ("mandatory", "true"),
+    "optional": ("mandatory", "false"),
+    "readonly": ("disabled", "true"),
+    "read_only": ("disabled", "true"),
+    "editable": ("disabled", "false"),
+    "clear": ("cleared", "true"),
+}
+
+
+def _ui_policy_rule_variables(rule: CatalogUiPolicyRuleIntent) -> list[str]:
+    return [
+        *_CONDITION_VARIABLE_PATTERN.findall(rule.condition),
+        *[action.variable for action in rule.actions],
+    ]
+
+
+def _client_script_spec_variables(spec: CatalogClientScriptSpecIntent) -> list[str]:
+    return [
+        *([spec.variable] if spec.variable else []),
+        *[action.variable for action in spec.actions],
+    ]
+
+
+def _catalog_ui_policy_rules(raw_value: str | None) -> list[CatalogUiPolicyRuleIntent]:
+    """Parse ``Title|condition|show=a,b|require=a|reverse=true; ...`` rules.
+
+    Effect parts map declaratively: ``show``/``hide`` to visible,
+    ``require``/``optional`` to mandatory, ``readonly``/``editable`` to
+    read-only, and ``clear`` to cleared. Parsing is all-or-nothing: a
+    malformed, conflicting, or duplicate entry discards every rule so the gap
+    surfaces as a missing detail instead of silently dropping stated behavior.
+    """
+    cleaned = _clean_preserved_text(raw_value)
+    if cleaned is None:
+        return []
+    rules: list[CatalogUiPolicyRuleIntent] = []
+    seen_titles: set[str] = set()
+    for raw_entry in cleaned.split(";"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        parts = [part.strip() for part in entry.split("|")]
+        if len(parts) < 3:
+            return []
+        title = parts[0].strip(" .")
+        condition = parts[1]
+        if not title or not condition or title.casefold() in seen_titles:
+            return []
+        reverse_if_false = True
+        effects: dict[str, dict[str, str]] = {}
+        for part in parts[2:]:
+            key, separator, raw_part_value = part.partition("=")
+            normalized_key = key.strip().lower().replace(" ", "_")
+            value = raw_part_value.strip()
+            if not separator or not value:
+                return []
+            if normalized_key == "reverse":
+                parsed_reverse = _optional_bool(value)
+                if parsed_reverse is None:
+                    return []
+                reverse_if_false = parsed_reverse
+                continue
+            effect = _UI_POLICY_EFFECT_KEYS.get(normalized_key)
+            if effect is None:
+                return []
+            attribute, effect_value = effect
+            for raw_member in value.split(","):
+                member = _clean_field_name(raw_member)
+                if not member:
+                    return []
+                action = effects.setdefault(member, {})
+                if action.get(attribute, effect_value) != effect_value:
+                    return []
+                action[attribute] = effect_value
+        if not effects:
+            return []
+        seen_titles.add(title.casefold())
+        rules.append(
+            CatalogUiPolicyRuleIntent(
+                title=title,
+                condition=condition,
+                reverse_if_false=reverse_if_false,
+                actions=[
+                    CatalogUiPolicyActionRuleIntent(
+                        variable=member,
+                        visible=action.get("visible", "ignore"),
+                        mandatory=action.get("mandatory", "ignore"),
+                        disabled=action.get("disabled", "ignore"),
+                        cleared=action.get("cleared") == "true",
+                    )
+                    for member, action in effects.items()
+                ],
+            )
+        )
+    return rules
+
+
+def _catalog_client_script_specs(raw_value: str | None) -> list[CatalogClientScriptSpecIntent]:
+    """Parse ``name|type|[watched variable]|set=var=value|clear=var; ...`` scripts.
+
+    Script bodies are never carried as free text: only declarative ``set`` and
+    ``clear`` actions are accepted, and the deterministic builder renders the
+    canonical g_form-only script from them. Parsing is all-or-nothing so a
+    malformed entry surfaces as a missing detail.
+    """
+    cleaned = _clean_preserved_text(raw_value)
+    if cleaned is None:
+        return []
+    specs: list[CatalogClientScriptSpecIntent] = []
+    seen_names: set[str] = set()
+    for raw_entry in cleaned.split(";"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        parts = [part.strip() for part in entry.split("|")]
+        if len(parts) < 3:
+            return []
+        name = _clean_field_name(parts[0])
+        script_type = _catalog_client_script_type(parts[1])
+        if not name or script_type is None or name in seen_names:
+            return []
+        action_parts = parts[2:]
+        watched_variable = ""
+        if script_type == "onChange":
+            watched_variable = _clean_field_name(action_parts[0])
+            if not watched_variable or "=" in action_parts[0]:
+                return []
+            action_parts = action_parts[1:]
+        actions: list[CatalogClientScriptActionIntent] = []
+        for part in action_parts:
+            key, separator, raw_part_value = part.partition("=")
+            normalized_key = key.strip().lower()
+            value = raw_part_value.strip()
+            if not separator or not value:
+                return []
+            if normalized_key == "set":
+                variable, value_separator, set_value = value.partition("=")
+                member = _clean_field_name(variable)
+                if not member or not value_separator or not set_value.strip():
+                    return []
+                actions.append(
+                    CatalogClientScriptActionIntent(
+                        kind="set_value",
+                        variable=member,
+                        value=set_value.strip(),
+                    )
+                )
+            elif normalized_key == "clear":
+                member = _clean_field_name(value)
+                if not member:
+                    return []
+                actions.append(
+                    CatalogClientScriptActionIntent(kind="clear_value", variable=member)
+                )
+            else:
+                return []
+        if not actions:
+            return []
+        seen_names.add(name)
+        specs.append(
+            CatalogClientScriptSpecIntent(
+                name=name,
+                script_type=script_type,
+                variable=watched_variable,
+                actions=actions,
+            )
+        )
+    return specs
+
+
+def _catalog_client_script_type(raw_value: str) -> str | None:
+    normalized = raw_value.strip().lower().replace(" ", "")
+    return {
+        "onload": "onLoad",
+        "onchange": "onChange",
+        "onsubmit": "onSubmit",
+    }.get(normalized)
+
+
 def _catalog_variable(entry: str) -> dict[str, Any]:
     parts = [part.strip() for part in entry.split("|") if part.strip()]
     if len(parts) < 3:
@@ -541,11 +1052,31 @@ def _catalog_variable(entry: str) -> dict[str, Any]:
             "qualifier",
         }:
             variable["reference_qualifier"] = cleaned_value
+        elif separator and normalized_key in {"map", "map_to", "maps_to", "map_to_field", "field"}:
+            variable["field"] = _clean_field_name(cleaned_value)
         elif variable_type == "reference" and "reference_table" not in variable:
             variable["reference_table"] = _clean_field_name(cleaned_value) or cleaned_value
         elif variable_type == "reference" and "reference_qualifier" not in variable:
-            variable["reference_qualifier"] = part.strip()
+            qualifier = _explicit_catalog_reference_qualifier(part.strip())
+            if qualifier is not None:
+                variable["reference_qualifier"] = qualifier
     return variable
+
+
+def _explicit_catalog_reference_qualifier(part: str) -> str | None:
+    """Carry a qualifier only when the story states one explicitly.
+
+    An explicit declarative filter maps to its encoded query. Text that looks
+    like an attempted qualifier or script is carried through unchanged so the
+    deterministic gate rejects it into manual review. Ambiguous prose is
+    omitted entirely — a qualifier is never invented.
+    """
+    explicit = explicit_reference_qualifier(part)
+    if explicit is not None:
+        return explicit
+    if looks_like_reference_qualifier_attempt(part):
+        return part
+    return None
 
 
 def _normalize_catalog_variable_type(value: str) -> str:

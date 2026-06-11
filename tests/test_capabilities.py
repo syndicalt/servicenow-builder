@@ -170,6 +170,9 @@ def test_generation_registry_names_every_handled_surface_pipeline() -> None:
         Capability.FORM_LAYOUT_PLACE_FIELD,
         Capability.FORM_SECTION_REMOVE,
         Capability.CATALOG_ITEM_CREATE,
+        Capability.RECORD_PRODUCER_CREATE,
+        Capability.CATALOG_UI_POLICY_GENERATE,
+        Capability.CATALOG_CLIENT_SCRIPT_GENERATE,
         Capability.BUSINESS_RULE_GENERATE,
         Capability.CLIENT_SCRIPT_GENERATE,
         Capability.SCRIPT_INCLUDE_GENERATE,
@@ -280,3 +283,69 @@ def test_form_section_generation_profile_generates_candidates_pending_handoff() 
     assert profile.creates_update_set is False
     assert profile.researcher == "form_layout_researcher"
     assert profile.build_pipeline == "form_section_update_set_pipeline"
+
+
+def test_catalog_ui_policy_generation_profile_generates_candidates_without_handoff() -> None:
+    profile = capability_profile(Capability.CATALOG_UI_POLICY_GENERATE)
+
+    assert profile.status == "candidate_generation"
+    assert profile.current_max_story_points == 3
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == ["catalog_ui_policy", "catalog_ui_policy_action"]
+    assert profile.required_instance_context == [
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    ]
+    assert profile.creates_update_set is False
+    assert profile.researcher == "catalog_item_researcher"
+    assert profile.build_pipeline == "catalog_ui_policy_candidate_pipeline"
+    assert "run scripts" in profile.unsupported_cases
+    assert "policies on existing catalog items" in profile.unsupported_cases
+
+
+def test_catalog_client_script_generation_profile_generates_candidates_without_handoff() -> None:
+    profile = capability_profile(Capability.CATALOG_CLIENT_SCRIPT_GENERATE)
+
+    assert profile.status == "candidate_generation"
+    assert profile.current_max_story_points == 3
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == ["catalog_script_client"]
+    assert profile.required_instance_context == [
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
+    ]
+    assert profile.creates_update_set is False
+    assert profile.researcher == "catalog_item_researcher"
+    assert profile.build_pipeline == "catalog_client_script_candidate_pipeline"
+    assert "DOM manipulation outside g_form APIs" in profile.unsupported_cases
+    assert "free-form script bodies" in profile.unsupported_cases
+    assert "scripts on existing catalog items" in profile.unsupported_cases
+
+
+def test_record_producer_generation_profile_generates_candidates_without_handoff() -> None:
+    profile = capability_profile(Capability.RECORD_PRODUCER_CREATE)
+
+    assert profile.status == "candidate_generation"
+    assert profile.current_max_story_points == 3
+    assert profile.target_max_story_points == 5
+    assert profile.supported_artifacts == [
+        "sc_cat_item_producer",
+        "item_option_new",
+        "sc_cat_item_category",
+    ]
+    assert profile.required_instance_context == [
+        "table_schema",
+        "catalog_definitions",
+        "catalog_categories",
+    ]
+    assert profile.creates_update_set is False
+    assert profile.researcher == "catalog_item_researcher"
+    assert profile.build_pipeline == "record_producer_candidate_pipeline"
+    assert "mapped_fields_resolved_on_target_table" in profile.deterministic_validators
+    assert "producer scripts and script-based field mapping" in profile.unsupported_cases
+    assert "catalog item creation in the same story" in profile.unsupported_cases
+    assert "fulfillment flow or workflow creation" in profile.unsupported_cases

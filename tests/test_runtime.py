@@ -429,6 +429,8 @@ def _transport_for_successful_claim() -> RecordingTransport:
                 },
             ),
             HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+            # Intake feedback assessment re-fetches the story after the claim.
+            HttpResponse(status_code=200, json_body={"result": [_story_record()]}),
         ]
     )
 
@@ -1576,7 +1578,13 @@ def test_process_one_runtime_fulfillment_wires_store_servicenow_and_handler(
     assert store.completed_jobs == [("job-evt-001", "Build claim applied for STRY0010013")]
     assert store.failed_jobs == []
     assert store.closed is True
-    assert [request.method for request in transport.requests] == ["POST", "GET", "GET", "PATCH"]
+    assert [request.method for request in transport.requests] == [
+        "POST",
+        "GET",
+        "GET",
+        "PATCH",
+        "GET",
+    ]
 
 
 def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled(
@@ -1607,6 +1615,8 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
                 },
             ),
             HttpResponse(status_code=200, json_body={"result": {"sys_id": "story-sys-id"}}),
+            # Intake feedback assessment re-fetches the story after the claim.
+            HttpResponse(status_code=200, json_body={"result": [_story_record()]}),
             HttpResponse(
                 status_code=200,
                 json_body={"result": [_story_record(state="Work in Progress")]},
@@ -1751,6 +1761,8 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "GET",
         "PATCH",
+        # Intake feedback assessment story fetch
+        "GET",
         "GET",
         "GET",
         "GET",
@@ -1773,42 +1785,42 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "GET",
         "PATCH",
     ]
-    assert transport.requests[5].url.endswith("/api/now/table/sys_db_object")
-    assert transport.requests[5].params["sysparm_query"] == "name=rm_story"
-    assert transport.requests[6].url.endswith("/api/now/table/sys_dictionary")
+    assert transport.requests[6].url.endswith("/api/now/table/sys_db_object")
     assert transport.requests[6].params["sysparm_query"] == "name=rm_story"
-    assert transport.requests[7].url.endswith("/api/now/table/sys_ui_section")
+    assert transport.requests[7].url.endswith("/api/now/table/sys_dictionary")
     assert transport.requests[7].params["sysparm_query"] == "name=rm_story"
-    assert transport.requests[8].url.endswith("/api/now/table/sys_ui_element")
-    assert transport.requests[8].params["sysparm_query"] == (
+    assert transport.requests[8].url.endswith("/api/now/table/sys_ui_section")
+    assert transport.requests[8].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[9].url.endswith("/api/now/table/sys_ui_element")
+    assert transport.requests[9].params["sysparm_query"] == (
         "name=rm_story^sys_ui_section=rm-story-main-section"
     )
-    assert transport.requests[9].url.endswith("/api/now/table/sys_security_acl")
-    assert transport.requests[9].params["sysparm_query"] == "name=rm_story"
-    assert transport.requests[10].url.endswith("/api/now/table/sys_script")
-    assert transport.requests[10].params["sysparm_query"] == "collection=rm_story"
-    assert transport.requests[17].url == "https://api.openai.com/v1/responses"
-    assert transport.requests[17].headers["Authorization"] == "Bearer openai-key"
-    assert "openai-key" not in repr(transport.requests[17].body)
-    assert transport.requests[18].url.endswith("/api/now/table/sys_ui_section")
-    assert transport.requests[18].params["sysparm_query"] == "name=rm_story"
-    assert transport.requests[19].url.endswith("/api/now/table/sys_ui_element")
-    assert transport.requests[19].params["sysparm_query"] == (
-        "name=rm_story^sys_ui_section=rm-story-main-section"
-    )
-    assert transport.requests[20].url.endswith("/api/now/table/sys_ws_operation")
+    assert transport.requests[10].url.endswith("/api/now/table/sys_security_acl")
+    assert transport.requests[10].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[11].url.endswith("/api/now/table/sys_script")
+    assert transport.requests[11].params["sysparm_query"] == "collection=rm_story"
+    assert transport.requests[18].url == "https://api.openai.com/v1/responses"
+    assert transport.requests[18].headers["Authorization"] == "Bearer openai-key"
+    assert "openai-key" not in repr(transport.requests[18].body)
+    assert transport.requests[19].url.endswith("/api/now/table/sys_ui_section")
+    assert transport.requests[19].params["sysparm_query"] == "name=rm_story"
+    assert transport.requests[20].url.endswith("/api/now/table/sys_ui_element")
     assert transport.requests[20].params["sysparm_query"] == (
+        "name=rm_story^sys_ui_section=rm-story-main-section"
+    )
+    assert transport.requests[21].url.endswith("/api/now/table/sys_ws_operation")
+    assert transport.requests[21].params["sysparm_query"] == (
         "web_service_definition.service_id=jedi_update_set_import"
         "^name=import_update_set_xml^active=true"
     )
-    assert transport.requests[21].url.endswith("/api/1860704/jedi_update_set_import")
+    assert transport.requests[22].url.endswith("/api/1860704/jedi_update_set_import")
     assert (
-        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[21].body["update_set_xml"]
+        "sys_dictionary_rm_story_u_ai_review_notes" in transport.requests[22].body["update_set_xml"]
     )
-    assert transport.requests[22].url.endswith("/api/now/table/sys_remote_update_set")
-    assert transport.requests[22].params["sysparm_query"].startswith("remote_sys_id=")
-    assert transport.requests[23].url.endswith("/api/now/table/sys_choice")
-    assert transport.requests[23].params["sysparm_query"] == (
+    assert transport.requests[23].url.endswith("/api/now/table/sys_remote_update_set")
+    assert transport.requests[23].params["sysparm_query"].startswith("remote_sys_id=")
+    assert transport.requests[24].url.endswith("/api/now/table/sys_choice")
+    assert transport.requests[24].params["sysparm_query"] == (
         "name=rm_story^element=state^inactive=false"
     )
     assert store.artifact_refs == []
@@ -1816,6 +1828,7 @@ def test_process_one_runtime_fulfillment_generates_openai_candidate_when_enabled
         "instance_context_bundle",
         "implementation_packet",
         "implementation_candidate",
+        "atf_test_plan",
     ]
     assert store.json_artifacts[0][3] == "servicenow-surface-context-v1"
     assert store.json_artifacts[1][3] == "implementation-packet-v1"
@@ -1882,6 +1895,8 @@ def test_process_one_runtime_fulfillment_generates_incident_update_set_candidate
                 status_code=200,
                 json_body={"result": {"sys_id": "incident-story-sys-id"}},
             ),
+            # Intake feedback assessment re-fetches the story after the claim.
+            HttpResponse(status_code=200, json_body={"result": [incident_story]}),
             HttpResponse(
                 status_code=200,
                 json_body={"result": [dict(incident_story, state="Work in Progress")]},

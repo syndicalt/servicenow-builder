@@ -17,6 +17,26 @@ from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
 from jedi_devproject.writeback import build_state_mapping_from_choices
 
 
+class UpdateSetImportClient(Protocol):
+    """Narrow client surface needed to import a Retrieved Update Set."""
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]: ...
+
+    def import_update_set_xml(
+        self,
+        *,
+        service_id: str,
+        update_set_xml: str,
+    ) -> dict[str, Any]: ...
+
+
 class UpdateSetHandoffClient(Protocol):
     def fetch_table_records(
         self,
@@ -84,25 +104,13 @@ def create_update_set_handoff(
         candidate=request.candidate,
         remote_update_set_sys_id=remote_sys_id,
     )
-    update_set_xml = _update_set_unload_xml(
+    update_set_sys_id = import_retrieved_update_set(
+        client=client,
         update_set_name=update_set_name,
         remote_sys_id=remote_sys_id,
         description=_update_set_description(request),
         customer_updates=customer_updates,
     )
-    client.import_update_set_xml(
-        service_id="jedi_update_set_import",
-        update_set_xml=update_set_xml,
-    )
-    imported_update_sets = client.fetch_table_records(
-        table="sys_remote_update_set",
-        lookup={"remote_sys_id": remote_sys_id},
-        fields=["sys_id", "name", "state", "remote_sys_id"],
-        limit=1,
-    )
-    update_set_sys_id = str(imported_update_sets[0].get("sys_id") if imported_update_sets else "")
-    if update_set_sys_id.strip() == "":
-        raise RuntimeError("ServiceNow imported Update Set lookup did not include sys_id")
 
     update_set_url = _update_set_url(
         instance_url=request.instance_url,
@@ -130,6 +138,41 @@ def create_update_set_handoff(
         update_set_name=update_set_name,
         update_set_url=update_set_url,
     )
+
+
+def import_retrieved_update_set(
+    *,
+    client: UpdateSetImportClient,
+    update_set_name: str,
+    remote_sys_id: str,
+    description: str,
+    customer_updates: list[dict[str, Any]],
+) -> str:
+    """Import customer updates as a loaded Retrieved Update Set; return its sys_id.
+
+    The imported set is left in the ``loaded`` state. ServiceNow-native
+    preview/commit remains the human review boundary; nothing here commits.
+    """
+    update_set_xml = _update_set_unload_xml(
+        update_set_name=update_set_name,
+        remote_sys_id=remote_sys_id,
+        description=description,
+        customer_updates=customer_updates,
+    )
+    client.import_update_set_xml(
+        service_id="jedi_update_set_import",
+        update_set_xml=update_set_xml,
+    )
+    imported_update_sets = client.fetch_table_records(
+        table="sys_remote_update_set",
+        lookup={"remote_sys_id": remote_sys_id},
+        fields=["sys_id", "name", "state", "remote_sys_id"],
+        limit=1,
+    )
+    update_set_sys_id = str(imported_update_sets[0].get("sys_id") if imported_update_sets else "")
+    if update_set_sys_id.strip() == "":
+        raise RuntimeError("ServiceNow imported Update Set lookup did not include sys_id")
+    return update_set_sys_id
 
 
 def _ready_for_testing_state(client: UpdateSetHandoffClient) -> str:

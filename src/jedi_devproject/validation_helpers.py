@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
 from jedi_devproject.models import CandidateChange
 
 TRUTHY_TOKENS = frozenset({"1", "true", "yes"})
+
+
+def stable_record_sys_id(*parts: str) -> str:
+    """Deterministic 32-character sys_id derived from stable name parts.
+
+    Matches the catalog-family convention (sha256 of pipe-joined parts,
+    truncated to 32 hex characters) so records generated in the same update
+    set can reference each other deterministically.
+    """
+    payload = "|".join(parts)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
 def bool_value(

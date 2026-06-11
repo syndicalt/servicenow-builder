@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
 from jedi_devproject.discovery.fetch import (
     _display_or_value,
     _optional_bool,
@@ -12,6 +14,7 @@ from jedi_devproject.discovery.fetch import (
     _record_name,
     _record_summary,
     _records_surface,
+    _reference_value,
     _unique_record_values,
 )
 from jedi_devproject.discovery.models import (
@@ -20,6 +23,127 @@ from jedi_devproject.discovery.models import (
     ServiceNowSurfaceRecord,
     SurfaceName,
 )
+
+# Stable fail-closed reason codes for resolving an existing fulfillment flow.
+FULFILLMENT_FLOW_NOT_FOUND_REASON_CODE = "fulfillment_flow:not_found"
+FULFILLMENT_FLOW_AMBIGUOUS_REASON_CODE = "fulfillment_flow:ambiguous"
+FULFILLMENT_FLOW_INACTIVE_REASON_CODE = "fulfillment_flow:inactive"
+FULFILLMENT_FLOW_NOT_RECORD_TRIGGERED_REASON_CODE = "fulfillment_flow:not_record_triggered"
+
+
+class ResolvedFulfillmentFlow(BaseModel):
+    """An existing, active, record-triggered flow resolved from the live instance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sys_id: str
+    name: str
+    trigger_type: str
+
+
+class FulfillmentFlowResolutionError(ValueError):
+    """Fail-closed fulfillment flow resolution failure with a stable reason code."""
+
+    def __init__(self, *, reason_code: str, message: str) -> None:
+        super().__init__(f"{reason_code}: {message}")
+        self.reason_code = reason_code
+
+
+def resolve_fulfillment_flow(
+    *,
+    client: InstanceDiscoveryClient,
+    flow_name: str,
+) -> ResolvedFulfillmentFlow:
+    """Resolve an existing flow by name for sc_cat_item fulfillment attachment.
+
+    Fail-closed contract, each failure with a distinct stable reason code:
+
+    - ``fulfillment_flow:not_found`` — no live ``sys_hub_flow`` record matches
+      the name (matched case-insensitively over ``name`` and ``internal_name``);
+    - ``fulfillment_flow:ambiguous`` — more than one record matches;
+    - ``fulfillment_flow:inactive`` — the matched flow is not affirmatively
+      active;
+    - ``fulfillment_flow:not_record_triggered`` — the flow's live
+      ``sys_hub_trigger_instance`` rows carry no record trigger.
+
+    Only attachment of an existing flow is supported; this resolver never
+    creates or modifies flow records.
+    """
+    cleaned_name = flow_name.strip()
+    if not cleaned_name:
+        raise FulfillmentFlowResolutionError(
+            reason_code=FULFILLMENT_FLOW_NOT_FOUND_REASON_CODE,
+            message="fulfillment flow name must not be empty",
+        )
+    records = client.fetch_table_records(
+        table="sys_hub_flow",
+        lookup={},
+        fields=["sys_id", "name", "internal_name", "active", "status", "type"],
+        limit=100,
+    )
+    normalized = cleaned_name.casefold()
+    matches = [
+        record
+        for record in records
+        if any(
+            _display_or_value(record.get(field)).strip().casefold() == normalized
+            for field in ("name", "internal_name")
+        )
+    ]
+    if not matches:
+        raise FulfillmentFlowResolutionError(
+            reason_code=FULFILLMENT_FLOW_NOT_FOUND_REASON_CODE,
+            message=f"fulfillment flow was not found: {cleaned_name}",
+        )
+    if len(matches) > 1:
+        raise FulfillmentFlowResolutionError(
+            reason_code=FULFILLMENT_FLOW_AMBIGUOUS_REASON_CODE,
+            message=f"fulfillment flow is ambiguous: {cleaned_name}",
+        )
+    record = matches[0]
+    if _optional_bool(record.get("active")) is not True:
+        raise FulfillmentFlowResolutionError(
+            reason_code=FULFILLMENT_FLOW_INACTIVE_REASON_CODE,
+            message=f"fulfillment flow is not active: {cleaned_name}",
+        )
+    flow_sys_id = _reference_value(record.get("sys_id")).strip()
+    if not flow_sys_id:
+        raise FulfillmentFlowResolutionError(
+            reason_code=FULFILLMENT_FLOW_NOT_FOUND_REASON_CODE,
+            message=f"fulfillment flow record is missing sys_id: {cleaned_name}",
+        )
+    trigger_records = client.fetch_table_records(
+        table="sys_hub_trigger_instance",
+        lookup={"flow": flow_sys_id},
+        fields=["sys_id", "trigger_type", "trigger_definition", "display_text"],
+        limit=25,
+    )
+    trigger_type = _record_trigger_type(trigger_records)
+    if trigger_type is None:
+        raise FulfillmentFlowResolutionError(
+            reason_code=FULFILLMENT_FLOW_NOT_RECORD_TRIGGERED_REASON_CODE,
+            message=f"fulfillment flow is not record-triggered: {cleaned_name}",
+        )
+    return ResolvedFulfillmentFlow(
+        sys_id=flow_sys_id,
+        name=_record_name(record),
+        trigger_type=trigger_type,
+    )
+
+
+def _record_trigger_type(trigger_records: list[dict[str, Any]]) -> str | None:
+    """Return the first record-trigger label, or ``None`` when there is none.
+
+    A trigger counts as a record trigger only when its trigger metadata
+    (``trigger_type``, ``trigger_definition``, or ``display_text``) mentions
+    ``record`` after normalization. Missing trigger rows fail closed.
+    """
+    for record in trigger_records:
+        for field in ("trigger_type", "trigger_definition", "display_text"):
+            label = _display_or_value(record.get(field)).strip()
+            if "record" in label.casefold().replace("_", " "):
+                return label
+    return None
 
 
 def _flow_surfaces(
