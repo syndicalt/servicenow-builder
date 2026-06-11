@@ -5,6 +5,16 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from jedi_devproject.validation_helpers import reference_value
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    bool_element,
+    container_element,
+    record_update,
+    reference_qualifier_elements,
+    text_element,
+)
+
 
 class DictionaryFormMetadataClient(Protocol):
     def fetch_table_records(
@@ -105,7 +115,7 @@ def _form_updates(
     for section in sections:
         if not _is_global_main_view_section(section):
             continue
-        section_sys_id = _reference_value(section.get("sys_id"))
+        section_sys_id = reference_value(section.get("sys_id"))
         elements = client.fetch_table_records(
             table="sys_ui_element",
             lookup={"name": intent.target_table, "sys_ui_section": section_sys_id},
@@ -169,15 +179,15 @@ def _insert_position(
 
 
 def _is_global_main_view_section(section: dict[str, Any]) -> bool:
-    if _reference_value(section.get("sys_user")).strip() != "":
+    if reference_value(section.get("sys_user")).strip() != "":
         return False
-    if _reference_value(section.get("caption")).strip() != "":
+    if reference_value(section.get("caption")).strip() != "":
         return False
     view = section.get("view")
     if isinstance(view, dict):
         display_value = str(view.get("display_value") or "").strip().lower()
-        reference_value = str(view.get("value") or "").strip().lower()
-        values = {display_value or reference_value}
+        reference = str(view.get("value") or "").strip().lower()
+        values = {display_value or reference}
     else:
         values = {str(view or "").strip().lower()}
     return bool(values.intersection({"", "default", "default view", "scrum"}))
@@ -201,7 +211,7 @@ def _form_elements_with_inserted_field(
             inserted = True
         planned.append(
             {
-                "sys_id": _reference_value(record.get("sys_id")),
+                "sys_id": reference_value(record.get("sys_id")),
                 "element": element,
                 "position": str(position + 1 if position >= insert_position else position),
             }
@@ -213,63 +223,64 @@ def _form_elements_with_inserted_field(
 
 def _dictionary_payload(*, intent: DictionaryFormIntent) -> str:
     update_name = f"sys_dictionary_{intent.target_table}_{intent.field_name}"
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        f'<sys_dictionary action="INSERT_OR_UPDATE" element="{escape(intent.field_name)}" '
-        f'table="{escape(intent.target_table)}">'
-        "<active>true</active>"
-        f"<column_label>{escape(intent.field_label)}</column_label>"
-        f"<default_value>{escape(intent.default_value)}</default_value>"
-        f"<element>{escape(intent.field_name)}</element>"
-        f'<internal_type display_value="{escape(intent.field_type.title())}">'
-        f"{escape(intent.field_type)}</internal_type>"
-        f"<mandatory>{_bool_text(intent.mandatory)}</mandatory>"
-        f"<max_length>{escape(str(intent.max_length or 8000))}</max_length>"
-        f"<name>{escape(intent.target_table)}</name>"
-        f"{_reference_payload(intent)}"
-        "<read_only>false</read_only>"
-        "<sys_class_name>sys_dictionary</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        "</sys_dictionary>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_dictionary",
+            "<active>true</active>",
+            text_element("column_label", intent.field_label),
+            text_element("default_value", intent.default_value),
+            text_element("element", intent.field_name),
+            text_element(
+                "internal_type",
+                intent.field_type,
+                display_value=intent.field_type.title(),
+            ),
+            bool_element("mandatory", intent.mandatory),
+            text_element("max_length", str(intent.max_length or 8000)),
+            text_element("name", intent.target_table),
+            _reference_payload(intent),
+            "<read_only>false</read_only>",
+            "<sys_class_name>sys_dictionary</sys_class_name>",
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            action="INSERT_OR_UPDATE",
+            element=intent.field_name,
+            table=intent.target_table,
+        )
     )
 
 
 def _reference_payload(intent: DictionaryFormIntent) -> str:
     if intent.field_type != "reference":
         return ""
-    reference_table = intent.reference_table or ""
-    reference_qualifier = intent.reference_qualifier or ""
-    use_reference_qualifier = "simple" if reference_qualifier else ""
-    return (
-        f"<reference>{escape(reference_table)}</reference>"
-        f"<reference_qual>{escape(reference_qualifier)}</reference_qual>"
-        f"<reference_qual_condition>{escape(reference_qualifier)}</reference_qual_condition>"
-        f"<use_reference_qualifier>{escape(use_reference_qualifier)}</use_reference_qualifier>"
+    return reference_qualifier_elements(
+        reference_table=intent.reference_table or "",
+        reference_qualifier=intent.reference_qualifier or "",
     )
 
 
 def _documentation_payload(*, intent: DictionaryFormIntent) -> str:
     update_name = f"sys_documentation_{intent.target_table}_{intent.field_name}_en"
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        f'<sys_documentation element="{escape(intent.field_name)}" '
-        f'label="{escape(intent.field_label)}" language="en" table="{escape(intent.target_table)}">'
-        '<sys_documentation action="INSERT_OR_UPDATE">'
-        f"<element>{escape(intent.field_name)}</element>"
-        f"<label>{escape(intent.field_label)}</label>"
-        "<language>en</language>"
-        f"<name>{escape(intent.target_table)}</name>"
-        f"<plural>{escape(intent.field_label)}</plural>"
-        "<sys_class_name>sys_documentation</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        "</sys_documentation>"
-        "</sys_documentation>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_documentation",
+            container_element(
+                "sys_documentation",
+                text_element("element", intent.field_name),
+                text_element("label", intent.field_label),
+                "<language>en</language>",
+                text_element("name", intent.target_table),
+                text_element("plural", intent.field_label),
+                "<sys_class_name>sys_documentation</sys_class_name>",
+                SYS_SCOPE_GLOBAL,
+                text_element("sys_update_name", update_name),
+                action="INSERT_OR_UPDATE",
+            ),
+            element=intent.field_name,
+            label=intent.field_label,
+            language="en",
+            table=intent.target_table,
+        )
     )
 
 
@@ -280,7 +291,7 @@ def _form_layout_payload(
     section: dict[str, Any],
     elements: list[dict[str, str]],
 ) -> str:
-    caption = _reference_value(section.get("caption"))
+    caption = reference_value(section.get("caption"))
     view = section.get("view")
     view_name = _view_payload_value(view)
     if isinstance(view, dict):
@@ -289,44 +300,56 @@ def _form_layout_payload(
         view_display = str(view or "")
     section_update_name = f"sys_ui_section_{section_sys_id}"
     element_xml = "".join(
-        '<sys_ui_element action="INSERT_OR_UPDATE">'
-        f"<element>{escape(element['element'])}</element>"
-        f"<position>{escape(element['position'])}</position>"
-        f"<sys_id>{escape(element.get('sys_id', ''))}</sys_id>"
-        "<sys_mod_count>0</sys_mod_count>"
-        "<sys_ui_formatter/>"
-        f'<sys_ui_section caption="{escape(caption or "NULL")}" display_value="" '
-        f'name="{escape(table_name)}" sys_domain="global" view="{escape(view_display)}">'
-        f"{escape(section_sys_id)}</sys_ui_section>"
-        "<sys_user/>"
-        f"<type>{_element_type(element['element'])}</type>"
-        "</sys_ui_element>"
+        container_element(
+            "sys_ui_element",
+            text_element("element", element["element"]),
+            text_element("position", element["position"]),
+            text_element("sys_id", element.get("sys_id", "")),
+            "<sys_mod_count>0</sys_mod_count>",
+            "<sys_ui_formatter/>",
+            text_element(
+                "sys_ui_section",
+                section_sys_id,
+                caption=caption or "NULL",
+                display_value="",
+                name=table_name,
+                sys_domain="global",
+                view=view_display,
+            ),
+            "<sys_user/>",
+            f"<type>{_element_type(element['element'])}</type>",
+            action="INSERT_OR_UPDATE",
+        )
         for element in elements
     )
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        f'<sys_ui_section caption="{escape(caption)}" section_id="{escape(section_sys_id)}" '
-        f'sys_domain="global" table="{escape(table_name)}" version="3" '
-        f'view="{escape(view_name)}">'
-        f"{element_xml}"
-        '<sys_ui_section action="INSERT_OR_UPDATE">'
-        f"<caption>{escape(caption)}</caption>"
-        "<header>false</header>"
-        f"<name>{escape(table_name)}</name>"
-        "<roles/>"
-        "<sys_class_name>sys_ui_section</sys_class_name>"
-        "<sys_domain>global</sys_domain>"
-        f"<sys_id>{escape(section_sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(section_update_name)}</sys_update_name>"
-        "<sys_user/>"
-        "<title>true</title>"
-        f'<view display_value="{escape(view_display)}" name="NULL">{escape(view_name)}</view>'
-        "<view_name/>"
-        "</sys_ui_section>"
-        "</sys_ui_section>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_ui_section",
+            element_xml,
+            container_element(
+                "sys_ui_section",
+                text_element("caption", caption),
+                "<header>false</header>",
+                text_element("name", table_name),
+                "<roles/>",
+                "<sys_class_name>sys_ui_section</sys_class_name>",
+                "<sys_domain>global</sys_domain>",
+                text_element("sys_id", section_sys_id),
+                SYS_SCOPE_GLOBAL,
+                text_element("sys_update_name", section_update_name),
+                "<sys_user/>",
+                "<title>true</title>",
+                text_element("view", view_name, display_value=view_display, name="NULL"),
+                "<view_name/>",
+                action="INSERT_OR_UPDATE",
+            ),
+            caption=caption,
+            section_id=section_sys_id,
+            sys_domain="global",
+            table=table_name,
+            version="3",
+            view=view_name,
+        )
     )
 
 
@@ -353,15 +376,5 @@ def _table_label(table_name: str) -> str:
     return table_name.replace("_", " ").title()
 
 
-def _reference_value(value: Any) -> str:
-    if isinstance(value, dict):
-        return str(value.get("value") or "")
-    return str(value or "")
-
-
 def _record_position(record: dict[str, Any]) -> int:
     return int(str(record.get("position") or "0"))
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"

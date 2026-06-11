@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import re
-from html import escape
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
+from jedi_devproject.validation_helpers import bool_value, single_insert_change, slug, string_list
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    bool_element,
+    container_element,
+    record_update,
+    text_element,
+)
 
 
 class BusinessRuleIntent(BaseModel):
@@ -52,10 +59,12 @@ def business_rule_customer_updates(
     changes: list[CandidateChange],
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    if len(changes) != 1:
-        raise ValueError("Business Rule handoff requires exactly one sys_script change")
-    intent = _business_rule_intent(changes[0])
-    update_name = f"sys_script_{intent.target_table}_{_slug(intent.rule_name)}"
+    change = single_insert_change(changes, table="sys_script", label="Business Rule")
+    intent = _business_rule_intent(change)
+    update_name = (
+        f"sys_script_{intent.target_table}_"
+        f"{slug(intent.rule_name, default='generated_business_rule')}"
+    )
     return [
         {
             "name": update_name,
@@ -70,10 +79,6 @@ def business_rule_customer_updates(
 
 
 def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
-    if change.table != "sys_script":
-        raise ValueError("Business Rule handoff requires a sys_script change")
-    if change.operation != "insert":
-        raise ValueError("Business Rule handoff supports insert only")
     fields = dict(change.fields)
     script = str(
         fields.get("script") or fields.get("action_script") or fields.get("script_body") or ""
@@ -88,15 +93,15 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
         rule_name=str(fields.get("name") or ""),
         when=str(fields.get("when") or ""),
         action_insert=(
-            _bool_value(fields.get("action_insert"))
-            or _bool_value(fields.get("insert"))
-            or _bool_value(fields.get("operation_insert"))
+            bool_value(fields.get("action_insert"))
+            or bool_value(fields.get("insert"))
+            or bool_value(fields.get("operation_insert"))
             or _operation_mentions(operation_text, "insert")
         ),
         action_update=(
-            _bool_value(fields.get("action_update"))
-            or _bool_value(fields.get("update"))
-            or _bool_value(fields.get("operation_update"))
+            bool_value(fields.get("action_update"))
+            or bool_value(fields.get("update"))
+            or bool_value(fields.get("operation_update"))
             or _operation_mentions(operation_text, "update")
         ),
         filter_condition=str(
@@ -107,35 +112,34 @@ def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
             or ""
         ),
         script=script,
-        fields_read=_string_list(fields.get("fields_read")),
+        fields_read=string_list(fields.get("fields_read")),
         fields_written=(
-            _string_list(fields.get("fields_written")) or _written_fields_from_script(script)
+            string_list(fields.get("fields_written")) or _written_fields_from_script(script)
         ),
     )
 
 
 def _business_rule_payload(*, intent: BusinessRuleIntent, update_name: str) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        '<sys_script action="INSERT_OR_UPDATE">'
-        "<active>true</active>"
-        f"<action_insert>{_bool_text(intent.action_insert)}</action_insert>"
-        f"<action_update>{_bool_text(intent.action_update)}</action_update>"
-        "<action_delete>false</action_delete>"
-        "<action_query>false</action_query>"
-        "<advanced>true</advanced>"
-        f"<collection>{escape(intent.target_table)}</collection>"
-        f"<filter_condition>{escape(intent.filter_condition)}</filter_condition>"
-        f"<name>{escape(intent.rule_name)}</name>"
-        "<order>100</order>"
-        f"<script>{escape(intent.script)}</script>"
-        "<sys_class_name>sys_script</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f"<when>{escape(intent.when)}</when>"
-        "</sys_script>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_script",
+            "<active>true</active>",
+            bool_element("action_insert", intent.action_insert),
+            bool_element("action_update", intent.action_update),
+            "<action_delete>false</action_delete>",
+            "<action_query>false</action_query>",
+            "<advanced>true</advanced>",
+            text_element("collection", intent.target_table),
+            text_element("filter_condition", intent.filter_condition),
+            text_element("name", intent.rule_name),
+            "<order>100</order>",
+            text_element("script", intent.script),
+            "<sys_class_name>sys_script</sys_class_name>",
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("when", intent.when),
+            action="INSERT_OR_UPDATE",
+        )
     )
 
 
@@ -170,14 +174,7 @@ def _validate_field_writes(*, script: str, fields_written: list[str]) -> None:
     declared = {field.strip() for field in fields_written if field.strip()}
     if not declared:
         raise ValueError("Business Rule fields_written must name at least one field")
-    written_fields = set(re.findall(r"\bcurrent\.([a-zA-Z0-9_]+)\s*=(?!=)", script))
-    written_fields.update(
-        re.findall(r"\bcurrent\.setValue\(\s*['\"]([a-zA-Z0-9_]+)['\"]", script)
-    )
-    written_fields.update(
-        re.findall(r"\bcurrent\[\s*['\"]([a-zA-Z0-9_]+)['\"]\s*\]\s*=(?!=)", script)
-    )
-    undeclared = sorted(written_fields - declared)
+    undeclared = sorted(set(_written_fields_from_script(script)) - declared)
     if undeclared:
         raise ValueError(f"Business Rule writes undeclared field: {undeclared[0]}")
 
@@ -195,25 +192,3 @@ def _written_fields_from_script(script: str) -> list[str]:
 
 def _operation_mentions(text: str, operation: str) -> bool:
     return re.search(rf"\b{re.escape(operation)}\b", text, flags=re.IGNORECASE) is not None
-
-
-def _slug(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", value.strip().lower()).strip("_")
-    return cleaned or "generated_business_rule"
-
-
-def _bool_value(value: Any) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes"}
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"
-
-
-def _string_list(value: Any) -> list[str]:
-    if isinstance(value, list):
-        return [str(item) for item in value if str(item).strip()]
-    text = str(value or "").strip()
-    if not text:
-        return []
-    return [item.strip() for item in text.split(",") if item.strip()]

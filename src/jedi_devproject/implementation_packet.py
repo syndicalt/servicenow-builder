@@ -5,6 +5,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from jedi_devproject.builder_maturity import (
+    MaturityEvidenceProvider,
+    baseline_builder_maturity_for_surface,
+    builder_maturity_for_change_tables,
+    score_builder_maturity,
+)
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.context_escalation import plan_context_escalation
@@ -73,32 +79,39 @@ class ImplementationPacket(BaseModel):
     output_contract: dict[str, Any]
 
     def to_model_payload(self) -> dict[str, Any]:
+        instance_context = (
+            None
+            if self.instance_context_bundle is not None
+            else _compact_instance_context(self.instance_context)
+        )
+        instance_context_bundle = _compact_surface_context_bundle(self.instance_context_bundle)
+        controls: dict[str, Any] = {
+            "safety_decision": self.safety_decision,
+            "safety_reasons": self.safety_reasons,
+            "risk_score": self.risk_score,
+            "allowed_tables": self.allowed_tables,
+            "allowed_operations": self.allowed_operations,
+            "capability_assessment": self.capability_assessment,
+            "normalized_intent": self.normalized_intent,
+            "surface_operation_plan": self.surface_operation_plan,
+            "context_sufficiency": self.context_sufficiency,
+            "context_escalation": plan_context_escalation(self.context_sufficiency).model_dump(
+                mode="json"
+            ),
+        }
+        elisions = _model_context_elisions(
+            instance_context=instance_context,
+            instance_context_bundle=instance_context_bundle,
+        )
+        if elisions:
+            controls["model_context_elisions"] = elisions
         return {
             "task": self.task,
             "provider_id": self.provider_id,
             "story": self.story.model_dump(),
-            "controls": {
-                "safety_decision": self.safety_decision,
-                "safety_reasons": self.safety_reasons,
-                "risk_score": self.risk_score,
-                "allowed_tables": self.allowed_tables,
-                "allowed_operations": self.allowed_operations,
-                "capability_assessment": self.capability_assessment,
-                "normalized_intent": self.normalized_intent,
-                "surface_operation_plan": self.surface_operation_plan,
-                "context_sufficiency": self.context_sufficiency,
-                "context_escalation": plan_context_escalation(self.context_sufficiency).model_dump(
-                    mode="json"
-                ),
-            },
-            "instance_context": (
-                None
-                if self.instance_context_bundle is not None
-                else _compact_instance_context(self.instance_context)
-            ),
-            "instance_context_bundle": _compact_surface_context_bundle(
-                self.instance_context_bundle
-            ),
+            "controls": controls,
+            "instance_context": instance_context,
+            "instance_context_bundle": instance_context_bundle,
             "context_dossier": _compact_context_dossier(self.context_dossier),
             "context": self.context_sections,
             "citations": [
@@ -116,6 +129,7 @@ def build_implementation_packet(
     rags: SpecializedRags,
     discovery_context: InstanceDiscoveryContext | None = None,
     surface_context_bundle: ServiceNowSurfaceContextBundle | None = None,
+    maturity_provider: MaturityEvidenceProvider | None = None,
 ) -> ImplementationPacket:
     assessment = analyze_story_capabilities(story)
     safety_reasons = [
@@ -200,6 +214,7 @@ def build_implementation_packet(
             surface_context_bundle=surface_context_bundle,
             context_sufficiency=context_sufficiency,
             surface_operation_plan=surface_operation_plan_payload,
+            maturity_provider=maturity_provider,
         ),
         context_sufficiency=context_sufficiency,
         context_sections=context_sections,
@@ -277,18 +292,52 @@ def _context_sufficiency(
 def _compact_instance_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
     if context is None:
         return None
-    return {
+    fields = list(context.get("fields", []))
+    sections = list(context.get("form_sections", []))
+    compacted = {
         **context,
-        "fields": list(context.get("fields", []))[:MODEL_CONTEXT_RECORD_LIMIT],
+        "fields": fields[:MODEL_CONTEXT_RECORD_LIMIT],
         "form_sections": [
-            {
-                **section,
-                "elements": list(section.get("elements", []))[:MODEL_CONTEXT_RECORD_LIMIT],
-            }
-            for section in list(context.get("form_sections", []))[:MODEL_CONTEXT_SECTION_LIMIT]
+            _compact_form_section(section)
+            for section in sections[:MODEL_CONTEXT_SECTION_LIMIT]
             if isinstance(section, dict)
         ],
     }
+    elisions: list[dict[str, Any]] = []
+    if len(fields) > MODEL_CONTEXT_RECORD_LIMIT:
+        elisions.append(_elision("fields", shown=MODEL_CONTEXT_RECORD_LIMIT, total=len(fields)))
+    if len(sections) > MODEL_CONTEXT_SECTION_LIMIT:
+        elisions.append(
+            _elision(
+                "form_sections",
+                shown=MODEL_CONTEXT_SECTION_LIMIT,
+                total=len(sections),
+                elided_items=[
+                    _form_section_label(section)
+                    for section in sections[MODEL_CONTEXT_SECTION_LIMIT:]
+                    if isinstance(section, dict)
+                ],
+            )
+        )
+    if elisions:
+        compacted["elisions"] = elisions
+    return compacted
+
+
+def _compact_form_section(section: dict[str, Any]) -> dict[str, Any]:
+    elements = list(section.get("elements", []))
+    compacted = {**section, "elements": elements[:MODEL_CONTEXT_RECORD_LIMIT]}
+    if len(elements) > MODEL_CONTEXT_RECORD_LIMIT:
+        compacted["elisions"] = [
+            _elision("elements", shown=MODEL_CONTEXT_RECORD_LIMIT, total=len(elements))
+        ]
+    return compacted
+
+
+def _form_section_label(section: dict[str, Any]) -> str:
+    return str(
+        section.get("caption") or section.get("name") or section.get("sys_id") or "unnamed_section"
+    )
 
 
 def _compact_surface_context_bundle(
@@ -297,23 +346,115 @@ def _compact_surface_context_bundle(
     if bundle is None:
         return None
     required_surfaces = set(str(surface) for surface in bundle.get("required_surfaces", []))
-    return {
+    surfaces = [surface for surface in bundle.get("surfaces", []) if isinstance(surface, dict)]
+    kept_surfaces = [
+        surface for surface in surfaces if str(surface.get("surface")) in required_surfaces
+    ]
+    compacted = {
         **bundle,
         "table_context": _compact_instance_context(bundle.get("table_context")),
-        "surfaces": [
-            _compact_surface_context(surface)
-            for surface in bundle.get("surfaces", [])
-            if isinstance(surface, dict) and str(surface.get("surface")) in required_surfaces
-        ],
+        "surfaces": [_compact_surface_context(surface) for surface in kept_surfaces],
     }
+    if len(kept_surfaces) < len(surfaces):
+        compacted["elisions"] = [
+            _elision(
+                "surfaces",
+                shown=len(kept_surfaces),
+                total=len(surfaces),
+                elided_items=[
+                    str(surface.get("surface"))
+                    for surface in surfaces
+                    if str(surface.get("surface")) not in required_surfaces
+                ],
+            )
+        ]
+    return compacted
 
 
 def _compact_surface_context(surface: dict[str, Any]) -> dict[str, Any]:
-    return {
+    records = list(surface.get("records", []))
+    citations = list(surface.get("citations", []))
+    compacted = {
         **surface,
-        "records": list(surface.get("records", []))[:MODEL_CONTEXT_RECORD_LIMIT],
-        "citations": list(surface.get("citations", []))[:MODEL_CONTEXT_RECORD_LIMIT],
+        "records": records[:MODEL_CONTEXT_RECORD_LIMIT],
+        "citations": citations[:MODEL_CONTEXT_RECORD_LIMIT],
     }
+    elisions: list[dict[str, Any]] = []
+    if len(records) > MODEL_CONTEXT_RECORD_LIMIT:
+        elisions.append(_elision("records", shown=MODEL_CONTEXT_RECORD_LIMIT, total=len(records)))
+    if len(citations) > MODEL_CONTEXT_RECORD_LIMIT:
+        elisions.append(
+            _elision("citations", shown=MODEL_CONTEXT_RECORD_LIMIT, total=len(citations))
+        )
+    if elisions:
+        compacted["elisions"] = elisions
+    return compacted
+
+
+def _elision(
+    content: str,
+    *,
+    shown: int,
+    total: int,
+    elided_items: list[str] | None = None,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "content": content,
+        "shown": shown,
+        "total": total,
+        "elided": total - shown,
+    }
+    if elided_items:
+        entry["elided_items"] = elided_items
+    return entry
+
+
+def _model_context_elisions(
+    *,
+    instance_context: dict[str, Any] | None,
+    instance_context_bundle: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Summarize every truncation the model payload applied, with locations.
+
+    The summary mirrors the model payload exactly: the instance context only
+    contributes when no surface context bundle is present, matching
+    ``to_model_payload``.
+    """
+    if instance_context_bundle is not None:
+        entries = [
+            _located_elision(entry, "instance_context_bundle")
+            for entry in instance_context_bundle.get("elisions", [])
+        ]
+        entries.extend(
+            _instance_context_elisions(
+                instance_context_bundle.get("table_context"),
+                prefix="instance_context_bundle.table_context",
+            )
+        )
+        for surface in instance_context_bundle.get("surfaces", []):
+            prefix = f"instance_context_bundle.surfaces[{surface.get('surface')}]"
+            entries.extend(
+                _located_elision(entry, prefix) for entry in surface.get("elisions", [])
+            )
+        return entries
+    return _instance_context_elisions(instance_context, prefix="instance_context")
+
+
+def _instance_context_elisions(context: Any, *, prefix: str) -> list[dict[str, Any]]:
+    if not isinstance(context, dict):
+        return []
+    entries = [_located_elision(entry, prefix) for entry in context.get("elisions", [])]
+    for section in context.get("form_sections", []):
+        section_prefix = f"{prefix}.form_sections[{_form_section_label(section)}]"
+        entries.extend(
+            _located_elision(entry, section_prefix) for entry in section.get("elisions", [])
+        )
+    return entries
+
+
+def _located_elision(entry: dict[str, Any], prefix: str) -> dict[str, Any]:
+    located = {key: value for key, value in entry.items() if key != "content"}
+    return {"location": f"{prefix}.{entry['content']}", **located}
 
 
 def _compact_context_dossier(dossier: dict[str, Any]) -> dict[str, Any]:
@@ -337,6 +478,7 @@ def _context_dossier(
     surface_context_bundle: ServiceNowSurfaceContextBundle | None,
     context_sufficiency: dict[str, Any],
     surface_operation_plan: dict[str, Any] | None,
+    maturity_provider: MaturityEvidenceProvider | None,
 ) -> dict[str, Any]:
     target_table = (
         surface_context_bundle.target_table
@@ -348,7 +490,15 @@ def _context_dossier(
     required_surfaces = (
         surface_context_bundle.required_surfaces if surface_context_bundle is not None else []
     )
-    return {
+    instance_context_payload = (
+        discovery_context.model_dump(mode="json") if discovery_context is not None else None
+    )
+    bundle_payload = (
+        surface_context_bundle.model_dump(mode="json")
+        if surface_context_bundle is not None
+        else None
+    )
+    dossier = {
         "story": PacketStory(
             number=story.number,
             short_description=story.short_description,
@@ -366,20 +516,28 @@ def _context_dossier(
         "capability_assessment": assessment,
         "surface_operation_plan": surface_operation_plan,
         "context_sufficiency": context_sufficiency,
-        "instance_context": (
-            discovery_context.model_dump(mode="json") if discovery_context is not None else None
-        ),
-        "instance_context_bundle": (
-            surface_context_bundle.model_dump(mode="json")
-            if surface_context_bundle is not None
-            else None
-        ),
+        "instance_context": instance_context_payload,
+        "instance_context_bundle": bundle_payload,
         "xml_shape_references": _xml_shape_references(
             required_surfaces=required_surfaces,
             surface_operation_plan=surface_operation_plan,
         ),
-        "builder_maturity": _builder_maturity_context(required_surfaces=required_surfaces),
+        "builder_maturity": _builder_maturity_context(
+            required_surfaces=required_surfaces,
+            maturity_provider=maturity_provider,
+        ),
     }
+    elisions = _model_context_elisions(
+        instance_context=(
+            None
+            if bundle_payload is not None
+            else _compact_instance_context(instance_context_payload)
+        ),
+        instance_context_bundle=_compact_surface_context_bundle(bundle_payload),
+    )
+    if elisions:
+        dossier["model_context_elisions"] = elisions
+    return dossier
 
 
 def _xml_shape_references(
@@ -416,38 +574,40 @@ def _xml_shape_references(
     return references
 
 
-def _builder_maturity_context(*, required_surfaces: Sequence[str]) -> list[dict[str, Any]]:
+def _builder_maturity_context(
+    *,
+    required_surfaces: Sequence[str],
+    maturity_provider: MaturityEvidenceProvider | None,
+) -> list[dict[str, Any]]:
     surfaces = list(dict.fromkeys(required_surfaces))
     if not surfaces:
         return []
-    return [
-        {
+    notes = "Builder maturity adjusts confidence and routing; it does not suppress reasoning."
+    entries: list[dict[str, Any]] = []
+    for surface in surfaces:
+        if maturity_provider is None:
+            entries.append(
+                {
+                    "surface": surface,
+                    "score": baseline_builder_maturity_for_surface(surface),
+                    "notes": notes,
+                }
+            )
+            continue
+        scored = score_builder_maturity(
+            surface=surface,
+            evidence=maturity_provider.maturity_evidence_for_surface(surface),
+        )
+        entry: dict[str, Any] = {
             "surface": surface,
-            "score": _builder_maturity_for_surface(surface),
-            "notes": (
-                "Builder maturity adjusts confidence and routing; "
-                "it does not suppress reasoning."
-            ),
+            "score": scored.score,
+            "score_source": scored.source,
+            "notes": notes,
         }
-        for surface in surfaces
-    ]
-
-
-def _builder_maturity_for_surface(surface: str) -> float:
-    if surface in {"table_schema", "form_layout"}:
-        return 0.95
-    if surface == "ui_policies":
-        return 0.95
-    if surface == "form_sections":
-        return 0.30
-    if surface in {
-        "catalog_definitions",
-        "catalog_categories",
-        "employee_center_topics",
-        "employee_center_connected_content",
-    }:
-        return 0.60
-    return 0.0
+        if scored.source == "evidence_adjusted":
+            entry["evidence_samples"] = scored.evidence_samples
+        entries.append(entry)
+    return entries
 
 
 def generate_implementation_candidate(
@@ -513,6 +673,7 @@ def generate_implementation_update_set_candidate_from_packet(
     policy: AllowlistPolicy,
     provider: ModelProvider,
     classifier_gate: bool = True,
+    maturity_provider: MaturityEvidenceProvider | None = None,
 ) -> UpdateSetCandidate:
     classifier_gate_disabled = not classifier_gate
     if (
@@ -567,7 +728,7 @@ def generate_implementation_update_set_candidate_from_packet(
     )
     if packet.safety_decision != SuitabilityOutcome.AUTOMATED_BUILD.value:
         candidate = _route_candidate_to_manual_review(candidate)
-    candidate = _route_candidate_by_builder_maturity(candidate)
+    candidate = _route_candidate_by_builder_maturity(candidate, maturity_provider=maturity_provider)
     payload = candidate.model_dump(mode="json", exclude={"artifact_hash"})
     return candidate.model_copy(update={"artifact_hash": stable_artifact_hash(payload)})
 
@@ -592,11 +753,33 @@ def _route_candidate_to_manual_review(candidate: UpdateSetCandidate) -> UpdateSe
     )
 
 
-def _route_candidate_by_builder_maturity(candidate: UpdateSetCandidate) -> UpdateSetCandidate:
-    maturity = _builder_maturity_for_changes(candidate.changes)
+def _route_candidate_by_builder_maturity(
+    candidate: UpdateSetCandidate,
+    *,
+    maturity_provider: MaturityEvidenceProvider | None = None,
+) -> UpdateSetCandidate:
+    change_tables = {change.table for change in candidate.changes}
+    scored = builder_maturity_for_change_tables(change_tables, provider=maturity_provider)
+    maturity = scored.score
+    evidence_notes = (
+        [
+            (
+                "Builder maturity is evidence-adjusted from baseline "
+                f"{scored.baseline:.2f} using {scored.evidence_samples} recorded "
+                "fulfillment outcomes."
+            )
+        ]
+        if scored.source == "evidence_adjusted"
+        else []
+    )
     if maturity >= AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD:
-        return candidate.model_copy(update={"confidence": min(candidate.confidence, maturity)})
-    tables = ",".join(sorted({change.table for change in candidate.changes})) or "none"
+        return candidate.model_copy(
+            update={
+                "confidence": min(candidate.confidence, maturity),
+                "reviewer_notes": [*candidate.reviewer_notes, *evidence_notes],
+            }
+        )
+    tables = ",".join(sorted(change_tables)) or "none"
     reason = f"builder maturity below automated handoff threshold: {tables}={maturity:.2f}"
     return candidate.model_copy(
         update={
@@ -617,29 +800,10 @@ def _route_candidate_by_builder_maturity(candidate: UpdateSetCandidate) -> Updat
                     "Automated handoff skipped because the deterministic builder maturity "
                     f"score is {maturity:.2f}."
                 ),
+                *evidence_notes,
             ],
         }
     )
-
-
-def _builder_maturity_for_changes(changes: list[CandidateChange]) -> float:
-    tables = {change.table for change in changes}
-    if tables and tables.issubset({"sys_dictionary", "sys_ui_form"}):
-        return 0.95
-    if tables and tables.issubset({"sys_ui_policy", "sys_ui_policy_action"}):
-        return 0.95
-    if tables == {"sys_ui_section"}:
-        return 0.30
-    if tables and tables.issubset(
-        {
-            "sc_cat_item",
-            "item_option_new",
-            "sc_cat_item_category",
-            "m2m_connected_content",
-        }
-    ):
-        return 0.60
-    return 0.0
 
 
 def _normalize_placeholder_sys_ids(response: dict[str, Any]) -> dict[str, Any]:

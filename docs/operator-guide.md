@@ -134,6 +134,36 @@ The operational schema is defined in `db/migrations/0001_operational_store.sql` 
 
 The current claim primitive is `claim_next_fulfillment_job(worker_id=...)`. It uses `SELECT ... FOR UPDATE SKIP LOCKED` inside a PostgreSQL transaction to select the oldest queued job, mark it `running`, increment the attempt count, and set `locked_by` and `locked_at`. API and worker processes should use this store instead of treating JSON files as a queue.
 
+### Operational Store Retention
+
+Retention for the operational store is disabled by default and no record is ever deleted unless an explicit retention window is configured. This is intentional for a regulated deployment: prompts, outputs, and review evidence must follow agency/customer retention rules, and deleting operational evidence without an explicit customer policy is worse than storage growth. Enabling retention is therefore an explicit operator decision that must match the customer's approved retention schedule.
+
+Configure retention through the worker environment:
+
+```text
+JEDI_RETENTION_ARTIFACT_BLOB_DAYS=<days, unset means never prune artifact_blobs>
+JEDI_RETENTION_JOB_EVENT_DAYS=<days, unset means never prune job_events>
+JEDI_RETENTION_PRUNE_BATCH_SIZE=500
+JEDI_RETENTION_PRUNE_INTERVAL_SECONDS=3600
+```
+
+Both `*_DAYS` values are unset by default, which disables retention entirely. Each record class is pruned only when its own window is set, so an operator can prune heavy `artifact_blobs` payloads while keeping the full `job_events` history, or vice versa. Windows must be at least 1 day.
+
+What is pruned by `PostgresOperationalStore.prune_expired_records(policy=...)`:
+
+- `artifact_blobs` rows older than `JEDI_RETENTION_ARTIFACT_BLOB_DAYS` whose fulfillment job is terminal (`completed`, `failed`, or `rejected`) and whose job has not been updated inside the window. The matching `artifact_refs` audit rows are kept with `artifact_id` detached; the `db://artifact_blobs/<id>` path and SHA-256 hash remain as durable provenance for the deleted payload.
+- `job_events` rows older than `JEDI_RETENTION_JOB_EVENT_DAYS` for terminal jobs, under the same job-recency guard.
+
+What is never pruned:
+
+- `lifecycle_events`, `fulfillment_jobs`, `artifact_refs`, and `retention_prune_audit` rows. The lifecycle event, job record, and artifact reference chain stays intact so the audit correlation path is never orphaned.
+- Any record attached to a `queued` or `running` job, regardless of age. In-flight work and its evidence always survive a prune.
+- Anything at all when retention is disabled; a disabled policy performs zero queries.
+
+Pruning is audit-safe and lock-friendly. Deletes run in bounded batches (`JEDI_RETENTION_PRUNE_BATCH_SIZE`, default 500 rows), each batch in its own short transaction, so a prune never holds long locks against the webhook or worker paths. Every prune returns a structured `RetentionPruneReport` with the cutoff, deleted count, and batch count per record class, and every run that deletes rows writes matching `retention_prune_audit` rows in PostgreSQL. Re-running a prune deletes nothing new, so the operation is idempotent. The supporting schema (`retention_prune_audit` plus `created_at` prune indexes) is defined in `db/migrations/0002_retention.sql` and applied automatically by `connect_operational_store(database_url=...)`.
+
+The long-lived worker loop (`python -m jedi_devproject.runtime_worker`) hosts periodic pruning. When retention is enabled, the loop calls the pruner at most once per `JEDI_RETENTION_PRUNE_INTERVAL_SECONDS` (default 3600) and prints the prune report JSON to the worker log for audit capture. One-shot or external schedulers can invoke the same behavior directly through `runtime_worker.prune_operational_store(settings=..., policy=...)` or `store.prune_expired_records(policy=load_retention_policy(os.environ))`.
+
 ## Lifecycle Webhook API
 
 The local runtime exposes a FastAPI application from `create_lifecycle_api()` in `jedi_devproject.lifecycle_api`. Production wiring must provide `DATABASE_URL` for `connect_operational_store(database_url=...)`, then inject that store into the API factory.

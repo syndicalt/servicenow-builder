@@ -3,17 +3,100 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib import resources
 from types import TracebackType
 from typing import Any, Protocol, Self, SupportsInt, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.lifecycle_events import LifecycleStateChangeEvent
 
 MIGRATION_PACKAGE = "jedi_devproject.migrations"
 MIGRATION_FILENAME = "0001_operational_store.sql"
+RETENTION_MIGRATION_FILENAME = "0002_retention.sql"
+MIGRATION_FILENAMES = (MIGRATION_FILENAME, RETENTION_MIGRATION_FILENAME)
+
+DEFAULT_RETENTION_PRUNE_BATCH_SIZE = 500
+
+RETENTION_ARTIFACT_BLOB_DAYS_ENV = "JEDI_RETENTION_ARTIFACT_BLOB_DAYS"
+RETENTION_JOB_EVENT_DAYS_ENV = "JEDI_RETENTION_JOB_EVENT_DAYS"
+RETENTION_PRUNE_BATCH_SIZE_ENV = "JEDI_RETENTION_PRUNE_BATCH_SIZE"
+
+_PRUNE_ARTIFACT_BLOBS_SQL = """
+WITH prunable AS (
+    SELECT artifact_blobs.id
+    FROM artifact_blobs
+    JOIN fulfillment_jobs
+      ON fulfillment_jobs.job_id = artifact_blobs.job_id
+    WHERE artifact_blobs.created_at < %s
+      AND fulfillment_jobs.updated_at < %s
+      AND fulfillment_jobs.status IN ('completed', 'failed', 'rejected')
+    ORDER BY artifact_blobs.id
+    LIMIT %s
+),
+detached_refs AS (
+    UPDATE artifact_refs
+    SET artifact_id = NULL
+    WHERE artifact_id IN (SELECT id FROM prunable)
+),
+deleted_blobs AS (
+    DELETE FROM artifact_blobs
+    WHERE id IN (SELECT id FROM prunable)
+    RETURNING id
+)
+SELECT COUNT(*) AS deleted_count FROM deleted_blobs
+"""
+
+_PRUNE_JOB_EVENTS_SQL = """
+WITH prunable AS (
+    SELECT job_events.id
+    FROM job_events
+    JOIN fulfillment_jobs
+      ON fulfillment_jobs.job_id = job_events.job_id
+    WHERE job_events.created_at < %s
+      AND fulfillment_jobs.updated_at < %s
+      AND fulfillment_jobs.status IN ('completed', 'failed', 'rejected')
+    ORDER BY job_events.id
+    LIMIT %s
+),
+deleted_events AS (
+    DELETE FROM job_events
+    WHERE id IN (SELECT id FROM prunable)
+    RETURNING id
+)
+SELECT COUNT(*) AS deleted_count FROM deleted_events
+"""
+
+_SURFACE_MATURITY_EVIDENCE_SQL = """
+WITH surface_jobs AS (
+    SELECT DISTINCT fulfillment_jobs.job_id, fulfillment_jobs.status
+    FROM fulfillment_jobs
+    JOIN artifact_blobs
+      ON artifact_blobs.job_id = fulfillment_jobs.job_id
+    WHERE fulfillment_jobs.status IN ('completed', 'failed', 'rejected')
+      AND artifact_blobs.artifact_kind = 'implementation_packet'
+      AND artifact_blobs.payload_json->'context_dossier'->'target'->'required_surfaces' ? %s
+),
+rework_jobs AS (
+    SELECT DISTINCT job_id
+    FROM job_events
+    WHERE status = 'rework_requested'
+)
+SELECT
+    COUNT(*) AS samples,
+    COUNT(*) FILTER (
+        WHERE surface_jobs.status = 'completed'
+          AND rework_jobs.job_id IS NULL
+    ) AS successes,
+    COUNT(*) FILTER (
+        WHERE surface_jobs.status IN ('failed', 'rejected')
+           OR rework_jobs.job_id IS NOT NULL
+    ) AS failures
+FROM surface_jobs
+LEFT JOIN rework_jobs
+  ON rework_jobs.job_id = surface_jobs.job_id
+"""
 
 
 def _utc_now() -> datetime:
@@ -24,6 +107,70 @@ def load_operational_store_migration() -> str:
     return (
         resources.files(MIGRATION_PACKAGE).joinpath(MIGRATION_FILENAME).read_text(encoding="utf-8")
     )
+
+
+def load_operational_store_migrations() -> tuple[str, ...]:
+    package = resources.files(MIGRATION_PACKAGE)
+    return tuple(
+        package.joinpath(filename).read_text(encoding="utf-8") for filename in MIGRATION_FILENAMES
+    )
+
+
+class RetentionPolicy(BaseModel):
+    """Operational store retention windows. Retention is disabled by default.
+
+    Deletion in a regulated system must follow explicit agency/customer
+    retention rules, so a record class is pruned only when its window is
+    explicitly configured.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_blob_retention_days: int | None = Field(default=None, ge=1)
+    job_event_retention_days: int | None = Field(default=None, ge=1)
+    prune_batch_size: int = Field(default=DEFAULT_RETENTION_PRUNE_BATCH_SIZE, ge=1)
+
+    @property
+    def enabled(self) -> bool:
+        return (
+            self.artifact_blob_retention_days is not None
+            or self.job_event_retention_days is not None
+        )
+
+
+def load_retention_policy(values: Mapping[str, str]) -> RetentionPolicy:
+    batch_size = _optional_int(values.get(RETENTION_PRUNE_BATCH_SIZE_ENV))
+    return RetentionPolicy(
+        artifact_blob_retention_days=_optional_int(values.get(RETENTION_ARTIFACT_BLOB_DAYS_ENV)),
+        job_event_retention_days=_optional_int(values.get(RETENTION_JOB_EVENT_DAYS_ENV)),
+        prune_batch_size=(
+            batch_size if batch_size is not None else DEFAULT_RETENTION_PRUNE_BATCH_SIZE
+        ),
+    )
+
+
+def _optional_int(value: str | None) -> int | None:
+    if value is None or value.strip() == "":
+        return None
+    return int(value)
+
+
+class RetentionClassPruneResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_class: str
+    cutoff: datetime
+    deleted_count: int
+    batches: int
+
+
+class RetentionPruneReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    pruned_at: datetime
+    prune_batch_size: int
+    results: list[RetentionClassPruneResult]
 
 
 class OperationalConnection(Protocol):
@@ -110,6 +257,15 @@ class ArtifactBlobRecord(BaseModel):
     created_at: datetime
 
 
+class SurfaceMaturityEvidenceRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    surface: str
+    samples: int
+    successes: int
+    failures: int
+
+
 class PsycopgOperationalConnection:
     def __init__(self, connection: Any) -> None:
         self._connection = connection
@@ -165,7 +321,8 @@ class PostgresOperationalStore:
 
     def initialize_schema(self) -> None:
         with self._connection.transaction():
-            self._connection.execute(load_operational_store_migration())
+            for migration_sql in load_operational_store_migrations():
+                self._connection.execute(migration_sql)
 
     def record_lifecycle_event(
         self,
@@ -654,6 +811,30 @@ class PostgresOperationalStore:
         )
         return [FulfillmentJobRecord.model_validate(row) for row in rows]
 
+    def builder_maturity_evidence_for_surface(
+        self,
+        surface: str,
+    ) -> SurfaceMaturityEvidenceRecord:
+        """Aggregate terminal fulfillment outcomes for one builder surface.
+
+        Read-only. A job is a sample when it reached a terminal status and its
+        recorded implementation packet required the surface. It counts as a
+        success when the terminal status is ``completed`` and UAT never
+        requested rework; ``failed``, ``rejected``, and reworked jobs count as
+        failures.
+        """
+        row = self._connection.fetch_one(_SURFACE_MATURITY_EVIDENCE_SQL, (surface,))
+        if row is None:
+            raise RuntimeError(
+                f"PostgreSQL did not return surface maturity evidence for {surface}"
+            )
+        return SurfaceMaturityEvidenceRecord(
+            surface=surface,
+            samples=int(cast(SupportsInt, row["samples"])),
+            successes=int(cast(SupportsInt, row["successes"])),
+            failures=int(cast(SupportsInt, row["failures"])),
+        )
+
     def record_artifact_ref(
         self,
         *,
@@ -772,6 +953,114 @@ class PostgresOperationalStore:
         if row is None:
             raise KeyError(f"Artifact blob not found: {artifact_id}")
         return ArtifactBlobRecord.model_validate(row)
+
+    def prune_expired_records(
+        self,
+        *,
+        policy: RetentionPolicy,
+        now: datetime | None = None,
+    ) -> RetentionPruneReport:
+        """Delete expired prunable records and return an audit-ready report.
+
+        Only artifact_blobs and job_events rows older than the configured
+        window whose fulfillment job is terminal are deleted. Deletes run in
+        bounded batches, each in its own short transaction, and every prune
+        run that deletes rows writes retention_prune_audit evidence.
+        """
+        pruned_at = now if now is not None else _utc_now()
+        if not policy.enabled:
+            return RetentionPruneReport(
+                enabled=False,
+                pruned_at=pruned_at,
+                prune_batch_size=policy.prune_batch_size,
+                results=[],
+            )
+        results: list[RetentionClassPruneResult] = []
+        if policy.artifact_blob_retention_days is not None:
+            results.append(
+                self._prune_record_class(
+                    record_class="artifact_blobs",
+                    sql=_PRUNE_ARTIFACT_BLOBS_SQL,
+                    cutoff=pruned_at - timedelta(days=policy.artifact_blob_retention_days),
+                    batch_size=policy.prune_batch_size,
+                )
+            )
+        if policy.job_event_retention_days is not None:
+            results.append(
+                self._prune_record_class(
+                    record_class="job_events",
+                    sql=_PRUNE_JOB_EVENTS_SQL,
+                    cutoff=pruned_at - timedelta(days=policy.job_event_retention_days),
+                    batch_size=policy.prune_batch_size,
+                )
+            )
+        self._record_prune_audit(results=results, pruned_at=pruned_at)
+        return RetentionPruneReport(
+            enabled=True,
+            pruned_at=pruned_at,
+            prune_batch_size=policy.prune_batch_size,
+            results=results,
+        )
+
+    def _prune_record_class(
+        self,
+        *,
+        record_class: str,
+        sql: str,
+        cutoff: datetime,
+        batch_size: int,
+    ) -> RetentionClassPruneResult:
+        deleted_count = 0
+        batches = 0
+        while True:
+            with self._connection.transaction():
+                row = self._connection.fetch_one(sql, (cutoff, cutoff, batch_size))
+            if row is None:
+                raise RuntimeError(
+                    f"PostgreSQL did not return a retention prune count for {record_class}"
+                )
+            deleted_in_batch = int(cast(SupportsInt, row["deleted_count"]))
+            batches += 1
+            deleted_count += deleted_in_batch
+            if deleted_in_batch < batch_size:
+                break
+        return RetentionClassPruneResult(
+            record_class=record_class,
+            cutoff=cutoff,
+            deleted_count=deleted_count,
+            batches=batches,
+        )
+
+    def _record_prune_audit(
+        self,
+        *,
+        results: Sequence[RetentionClassPruneResult],
+        pruned_at: datetime,
+    ) -> None:
+        audited = [result for result in results if result.deleted_count > 0]
+        if not audited:
+            return
+        with self._connection.transaction():
+            for result in audited:
+                self._connection.execute(
+                    """
+                    INSERT INTO retention_prune_audit (
+                        record_class,
+                        cutoff,
+                        deleted_count,
+                        batches,
+                        pruned_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        result.record_class,
+                        result.cutoff,
+                        result.deleted_count,
+                        result.batches,
+                        pruned_at,
+                    ),
+                )
 
 
 OperationalStore = PostgresOperationalStore

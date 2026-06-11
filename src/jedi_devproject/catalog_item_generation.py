@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import hashlib
-import re
-from html import escape
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
+from jedi_devproject.validation_helpers import TRUTHY_TOKENS, bool_value, optional_int, slug
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    bool_element,
+    cdata,
+    container_element,
+    record_update,
+    reference_qualifier_elements,
+    text_element,
+)
 
 
 class CatalogMetadataClient(Protocol):
@@ -114,6 +122,8 @@ CATALOG_VARIABLE_TYPE_IDS = {
     "single_line_text": "6",
 }
 
+_MANDATORY_TRUTHY_TOKENS = TRUTHY_TOKENS | {"required", "mandatory"}
+
 
 def catalog_item_customer_updates(
     *,
@@ -198,11 +208,11 @@ def _catalog_variable_intent(change: CandidateChange) -> CatalogVariableIntent:
     fields = dict(change.fields)
     variable_type = _normalize_variable_type(str(fields.get("type") or ""))
     return CatalogVariableIntent(
-        name=_normalize_name(str(fields.get("name") or fields.get("variable_name") or "")),
+        name=slug(str(fields.get("name") or fields.get("variable_name") or ""), default=""),
         label=str(fields.get("question_text") or fields.get("label") or ""),
         variable_type=variable_type,
-        order=_optional_int(fields.get("order")) or 100,
-        mandatory=_bool_value(fields.get("mandatory")),
+        order=optional_int(fields.get("order")) or 100,
+        mandatory=bool_value(fields.get("mandatory"), truthy=_MANDATORY_TRUTHY_TOKENS),
         reference_table=str(fields.get("reference") or fields.get("reference_table") or ""),
         reference_qualifier=str(
             fields.get("reference_qualifier")
@@ -404,32 +414,38 @@ def _catalog_item_payload(
     catalog_item_sys_id: str,
     update_name: str,
 ) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<record_update table="sc_cat_item">'
-        '<sc_cat_item action="INSERT_OR_UPDATE">'
-        "<access_type>restricted</access_type>"
-        "<active>true</active>"
-        "<availability>on_both</availability>"
-        f'<category display_value="{escape(context.category.display)}">'
-        f"{escape(context.category.sys_id)}</category>"
-        f"<description><![CDATA[{_safe_cdata(intent.description)}]]></description>"
-        "<ignore_price>true</ignore_price>"
-        "<no_cart>false</no_cart>"
-        "<no_order>false</no_order>"
-        "<no_quantity>true</no_quantity>"
-        f"<name>{escape(intent.name)}</name>"
-        "<price>0</price>"
-        f"<sc_catalogs>{escape(context.catalog.sys_id)}</sc_catalogs>"
-        f"<short_description>{escape(intent.short_description)}</short_description>"
-        "<sys_class_name>sc_cat_item</sys_class_name>"
-        f"<sys_id>{escape(catalog_item_sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f'<taxonomy_topic display_value="{escape(context.topic.display)}">'
-        f"{escape(context.topic.sys_id)}</taxonomy_topic>"
-        "</sc_cat_item>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sc_cat_item",
+            "<access_type>restricted</access_type>",
+            "<active>true</active>",
+            "<availability>on_both</availability>",
+            text_element(
+                "category",
+                context.category.sys_id,
+                display_value=context.category.display,
+            ),
+            container_element("description", cdata(intent.description)),
+            "<ignore_price>true</ignore_price>",
+            "<no_cart>false</no_cart>",
+            "<no_order>false</no_order>",
+            "<no_quantity>true</no_quantity>",
+            text_element("name", intent.name),
+            "<price>0</price>",
+            text_element("sc_catalogs", context.catalog.sys_id),
+            text_element("short_description", intent.short_description),
+            "<sys_class_name>sc_cat_item</sys_class_name>",
+            text_element("sys_id", catalog_item_sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element(
+                "taxonomy_topic",
+                context.topic.sys_id,
+                display_value=context.topic.display,
+            ),
+            action="INSERT_OR_UPDATE",
+        ),
+        table="sc_cat_item",
     )
 
 
@@ -441,31 +457,31 @@ def _catalog_variable_payload(
     catalog_item_sys_id: str,
     update_name: str,
 ) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<record_update table="item_option_new">'
-        '<item_option_new action="INSERT_OR_UPDATE">'
-        "<active>true</active>"
-        f'<cat_item display_value="{escape(intent.name)}">{escape(catalog_item_sys_id)}</cat_item>'
-        f"<default_value>{escape(variable.default_value)}</default_value>"
-        f"<help_text>{escape(variable.help_text)}</help_text>"
-        f"<mandatory>{_bool_text(variable.mandatory)}</mandatory>"
-        f"<name>{escape(variable.name)}</name>"
-        f"<order>{variable.order}</order>"
-        f"<question_text>{escape(variable.label)}</question_text>"
-        f"{_reference_variable_payload(variable)}"
-        "<show_help>true</show_help>"
-        "<sys_class_name>item_option_new</sys_class_name>"
-        f"<sys_id>{escape(variable_sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f"<type>{escape(CATALOG_VARIABLE_TYPE_IDS[variable.variable_type])}</type>"
-        f"<variable_name>{escape(variable.name)}</variable_name>"
-        "<visible_bundle>true</visible_bundle>"
-        "<visible_standalone>true</visible_standalone>"
-        "<visible_summary>true</visible_summary>"
-        "</item_option_new>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "item_option_new",
+            "<active>true</active>",
+            text_element("cat_item", catalog_item_sys_id, display_value=intent.name),
+            text_element("default_value", variable.default_value),
+            text_element("help_text", variable.help_text),
+            bool_element("mandatory", variable.mandatory),
+            text_element("name", variable.name),
+            text_element("order", str(variable.order)),
+            text_element("question_text", variable.label),
+            _reference_variable_payload(variable),
+            "<show_help>true</show_help>",
+            "<sys_class_name>item_option_new</sys_class_name>",
+            text_element("sys_id", variable_sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("type", CATALOG_VARIABLE_TYPE_IDS[variable.variable_type]),
+            text_element("variable_name", variable.name),
+            "<visible_bundle>true</visible_bundle>",
+            "<visible_standalone>true</visible_standalone>",
+            "<visible_summary>true</visible_summary>",
+            action="INSERT_OR_UPDATE",
+        ),
+        table="item_option_new",
     )
 
 
@@ -477,20 +493,22 @@ def _catalog_category_payload(
     catalog_item_sys_id: str,
     update_name: str,
 ) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<record_update table="sc_cat_item_category">'
-        '<sc_cat_item_category action="INSERT_OR_UPDATE">'
-        f'<sc_cat_item display_value="{escape(intent.name)}">'
-        f"{escape(catalog_item_sys_id)}</sc_cat_item>"
-        f'<sc_category display_value="{escape(context.category.display)}">'
-        f"{escape(context.category.sys_id)}</sc_category>"
-        "<sys_class_name>sc_cat_item_category</sys_class_name>"
-        f"<sys_id>{escape(relation_sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        "</sc_cat_item_category>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sc_cat_item_category",
+            text_element("sc_cat_item", catalog_item_sys_id, display_value=intent.name),
+            text_element(
+                "sc_category",
+                context.category.sys_id,
+                display_value=context.category.display,
+            ),
+            "<sys_class_name>sc_cat_item_category</sys_class_name>",
+            text_element("sys_id", relation_sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            action="INSERT_OR_UPDATE",
+        ),
+        table="sc_cat_item_category",
     )
 
 
@@ -502,39 +520,34 @@ def _connected_content_payload(
     catalog_item_sys_id: str,
     update_name: str,
 ) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<record_update table="m2m_connected_content">'
-        '<m2m_connected_content action="INSERT_OR_UPDATE">'
-        f'<catalog_item display_value="{escape(intent.name)}">'
-        f"{escape(catalog_item_sys_id)}</catalog_item>"
-        f"<content_display_value>{escape(intent.name)}</content_display_value>"
-        f'<content_type display_value="{escape(context.content_type.display)}">'
-        f"{escape(context.content_type.sys_id)}</content_type>"
-        "<source>Jedi DevProject</source>"
-        "<sys_class_name>m2m_connected_content</sys_class_name>"
-        f"<sys_id>{escape(relation_sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f'<topic display_value="{escape(context.topic.display)}">'
-        f"{escape(context.topic.sys_id)}</topic>"
-        "</m2m_connected_content>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "m2m_connected_content",
+            text_element("catalog_item", catalog_item_sys_id, display_value=intent.name),
+            text_element("content_display_value", intent.name),
+            text_element(
+                "content_type",
+                context.content_type.sys_id,
+                display_value=context.content_type.display,
+            ),
+            "<source>Jedi DevProject</source>",
+            "<sys_class_name>m2m_connected_content</sys_class_name>",
+            text_element("sys_id", relation_sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("topic", context.topic.sys_id, display_value=context.topic.display),
+            action="INSERT_OR_UPDATE",
+        ),
+        table="m2m_connected_content",
     )
 
 
 def _reference_variable_payload(variable: CatalogVariableIntent) -> str:
     if variable.variable_type != "reference":
         return ""
-    reference_table = variable.reference_table or ""
-    reference_qualifier = variable.reference_qualifier or ""
-    return (
-        f"<reference>{escape(reference_table)}</reference>"
-        f"<reference_qual>{escape(reference_qualifier)}</reference_qual>"
-        f"<reference_qual_condition>{escape(reference_qualifier)}</reference_qual_condition>"
-        f"<use_reference_qualifier>"
-        f"{'simple' if reference_qualifier else ''}"
-        f"</use_reference_qualifier>"
+    return reference_qualifier_elements(
+        reference_table=variable.reference_table or "",
+        reference_qualifier=variable.reference_qualifier or "",
     )
 
 
@@ -636,11 +649,6 @@ def _normalize_variable_type(value: str) -> str:
     return aliases.get(cleaned, cleaned)
 
 
-def _normalize_name(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", value.strip().lower()).strip("_")
-    return cleaned
-
-
 def _stable_sys_id(*parts: str) -> str:
     payload = "|".join(parts)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
@@ -666,20 +674,3 @@ def _reference_value(value: Any) -> str:
     if isinstance(value, dict):
         return str(value.get("value") or value.get("display_value") or "")
     return str(value or "")
-
-
-def _optional_int(value: Any) -> int | None:
-    text = str(value or "").strip()
-    return int(text) if text.isdigit() else None
-
-
-def _bool_value(value: Any) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "required", "mandatory"}
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"
-
-
-def _safe_cdata(value: str) -> str:
-    return value.replace("]]>", "]]]]><![CDATA[>")

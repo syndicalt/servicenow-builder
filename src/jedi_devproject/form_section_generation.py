@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import re
-from html import escape
 from typing import Any, Protocol
 
 from jedi_devproject.models import CandidateChange
+from jedi_devproject.validation_helpers import reference_value
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    container_element,
+    record_update,
+    text_element,
+)
 
 
 class FormSectionMetadataClient(Protocol):
@@ -45,7 +51,7 @@ def form_section_customer_updates(
     )
     return [
         {
-            "name": f"sys_ui_section_{_reference_value(section.get('sys_id'))}",
+            "name": f"sys_ui_section_{reference_value(section.get('sys_id'))}",
             "remote_update_set": remote_update_set_sys_id,
             "action": "DELETE",
             "type": "Form Layout",
@@ -106,7 +112,7 @@ def _section_matches(caption: Any, requested: str) -> bool:
 def _view_matches(view: Any, requested_view: str) -> bool:
     requested = _normalize_view(requested_view)
     display = _normalize_view(_reference_display_or_value(view))
-    value = _normalize_view(_reference_value(view))
+    value = _normalize_view(reference_value(view))
     if requested == "default":
         return display in {"", "default"} or value in {"", "default"}
     return requested in {display, value}
@@ -117,32 +123,36 @@ def _form_section_delete_payload(
     target_table: str,
     section: dict[str, Any],
 ) -> str:
-    section_sys_id = _reference_value(section.get("sys_id"))
+    section_sys_id = reference_value(section.get("sys_id"))
     caption = _reference_display_or_value(section.get("caption"))
     view = section.get("view")
-    view_value = _reference_value(view)
+    view_value = reference_value(view)
     view_display = _reference_display_or_value(view)
     update_name = f"sys_ui_section_{section_sys_id}"
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<record_update table="sys_ui_section">'
-        '<sys_ui_section action="DELETE">'
-        f"<caption>{escape(caption)}</caption>"
-        "<header>false</header>"
-        f"<name>{escape(target_table)}</name>"
-        "<roles/>"
-        "<sys_class_name>sys_ui_section</sys_class_name>"
-        "<sys_domain>global</sys_domain>"
-        f"<sys_id>{escape(section_sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f"<sys_user>{escape(_reference_value(section.get('sys_user')))}</sys_user>"
-        "<title>true</title>"
-        f'<view display_value="{escape(view_display)}" name="NULL">'
-        f"{escape(_payload_view_value(view_value))}</view>"
-        "<view_name/>"
-        "</sys_ui_section>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_ui_section",
+            text_element("caption", caption),
+            "<header>false</header>",
+            text_element("name", target_table),
+            "<roles/>",
+            "<sys_class_name>sys_ui_section</sys_class_name>",
+            "<sys_domain>global</sys_domain>",
+            text_element("sys_id", section_sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("sys_user", reference_value(section.get("sys_user"))),
+            "<title>true</title>",
+            text_element(
+                "view",
+                _payload_view_value(view_value),
+                display_value=view_display,
+                name="NULL",
+            ),
+            "<view_name/>",
+            action="DELETE",
+        ),
+        table="sys_ui_section",
     )
 
 
@@ -165,12 +175,6 @@ def _required_text(fields: dict[str, Any], key: str) -> str:
     if not value:
         raise ValueError(f"form section removal missing required field: {key}")
     return value
-
-
-def _reference_value(value: Any) -> str:
-    if isinstance(value, dict):
-        return str(value.get("value") or "")
-    return str(value or "")
 
 
 def _reference_display_or_value(value: Any) -> str:

@@ -16,3 +16,9 @@
 - `pytest --cov=src/jedi_devproject --cov-report=term-missing`
 - Result: `794 passed`, total coverage `90.23%`.
 - UAT rerun: `STRY0010025` moved to `Ready for testing`, created retrieved Update Set `JEDI STRY0010025 - AI Candidate`, and produced six customer updates for the catalog item, three variables, catalog category relation, and Employee Center connected-content relation.
+
+## Status update (2026-06-11)
+
+- The Sprint 161 builder-maturity routing model moved `catalog_item_create` to candidate generation only. Catalog surfaces score 0.60 builder maturity, below `AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75`, so catalog candidates now route to manual review and the automated retrieved Update Set handoff exercised in the UAT rerun above is no longer created.
+- The reconciliation and handoff hardening from this sprint remains in the codebase; automated handoff re-enables when catalog builder maturity crosses the threshold.
+- See `_builder_maturity_for_surface()` in `src/jedi_devproject/implementation_packet.py` and the Sprint 161 change log. This note records a later routing change and does not alter the historical record above.

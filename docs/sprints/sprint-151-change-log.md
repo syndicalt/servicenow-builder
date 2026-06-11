@@ -18,3 +18,9 @@
 - Result: `794 passed`, total coverage `90.23%`.
 - UAT rerun: created corrective story `STRY0010026` with sys_id `df38eefac3348b10913fbf12b4013117`; the workflow moved it to `Ready for testing` and created retrieved Update Set `JEDI STRY0010026 - AI Candidate` with sys_id `698c49611f3dc09d0e44dd9a9c2078cc`.
 - Verified the retrieved Update Set contains six customer updates and all three generated Catalog Variable payloads include `visible_standalone=true`, `visible_bundle=true`, and `visible_summary=true`.
+
+## Status update (2026-06-11)
+
+- The Sprint 161 builder-maturity routing model moved `catalog_item_create` to candidate generation only. Catalog surfaces score 0.60 builder maturity, below `AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75`, so catalog candidates now route to manual review and the automated retrieved Update Set handoff verified above is no longer created.
+- The catalog variable visibility fix remains in the XML builder; automated handoff re-enables when catalog builder maturity crosses the threshold.
+- See `_builder_maturity_for_surface()` in `src/jedi_devproject/implementation_packet.py` and the Sprint 161 change log. This note records a later routing change and does not alter the historical record above.

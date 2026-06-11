@@ -4,6 +4,10 @@
 
 Add a constrained, production-shaped automation capability for standard ServiceNow Catalog Items that can be reviewed through retrieved Update Sets and surfaced in Employee Center through an existing topic.
 
+## Current Status (2026-06-11)
+
+`catalog_item_create` currently runs in candidate-generation mode only. The Sprint 161 builder-maturity routing model scores the catalog surfaces (`catalog_definitions`, `catalog_categories`, `employee_center_topics`, `employee_center_connected_content`) at 0.60, below `AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75` in `src/jedi_devproject/implementation_packet.py` (`_builder_maturity_for_surface()`), so catalog candidates route to manual review and no retrieved Update Set handoff is created automatically. The Handoff Contract below describes the implemented builder and re-applies when catalog builder maturity crosses the threshold.
+
 ## Decision
 
 Implement a first-class `catalog_item_create` capability. Do not fold catalog work into dictionary/form generation.

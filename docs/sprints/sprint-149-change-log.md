@@ -19,3 +19,9 @@
 - `mypy src tests`
 - `pytest --cov=src/jedi_devproject --cov-report=term-missing`
 - Result: `793 passed`, total coverage `90.34%`.
+
+## Status update (2026-06-11)
+
+- The Sprint 161 builder-maturity routing model moved `catalog_item_create` to candidate generation only. Catalog surfaces (`catalog_definitions`, `catalog_categories`, `employee_center_topics`, `employee_center_connected_content`) score 0.60 builder maturity, below `AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75`, so catalog candidates now route to manual review and no retrieved Update Set handoff is created automatically.
+- The catalog customer-update builder described above remains in the codebase; automated handoff re-enables when catalog builder maturity crosses the threshold.
+- See `_builder_maturity_for_surface()` in `src/jedi_devproject/implementation_packet.py` and the Sprint 161 change log. This note records a later routing change and does not alter the historical record above.
