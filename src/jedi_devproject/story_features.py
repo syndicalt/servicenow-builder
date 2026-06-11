@@ -5,8 +5,88 @@ from __future__ import annotations
 import re
 
 from jedi_devproject.capabilities import FieldFormIntent
+from jedi_devproject.catalog_item_generation import is_declarative_reference_qualifier
 from jedi_devproject.models import Story
 from jedi_devproject.requirement_text import positive_requirement_text
+
+_QUALIFIER_FILTER_PREFIX = re.compile(
+    r"^(?:filtered|limited|restricted)\s+(?:to|by|on)\s+(?P<criteria>.+)$|"
+    r"^where\s+(?P<condition>.+)$",
+    re.IGNORECASE,
+)
+_QUALIFIER_ACTIVE_PHRASE = re.compile(
+    r"^(?:only\s+)?active(?:\s+[a-z][a-z0-9_ ]*)?$",
+    re.IGNORECASE,
+)
+_QUALIFIER_ATTEMPT_PATTERN = re.compile(r"[=();:]|\bjavascript\b|\bgs\b|\bcurrent\b")
+
+
+def explicit_reference_qualifier(value: str) -> str | None:
+    """Return a reference qualifier only when the story states one explicitly.
+
+    Accepted forms, in order:
+
+    - a declarative encoded query stated verbatim (``active=true``);
+    - a filter phrase wrapping an encoded query (``filtered to active=true``,
+      ``where active=true``);
+    - the unambiguous active-records phrase (``filtered to active groups``),
+      which maps to ``active=true``.
+
+    Anything else returns ``None`` — the qualifier is omitted rather than
+    invented. Use :func:`looks_like_reference_qualifier_attempt` to decide
+    whether ambiguous text should still be carried for fail-closed review.
+    """
+    cleaned = value.strip().strip(".")
+    if not cleaned:
+        return None
+    if is_declarative_reference_qualifier(cleaned):
+        return cleaned
+    match = _QUALIFIER_FILTER_PREFIX.fullmatch(cleaned)
+    if match is None:
+        return None
+    criteria = (match.group("criteria") or match.group("condition") or "").strip().strip(".")
+    if is_declarative_reference_qualifier(criteria):
+        return criteria
+    if _QUALIFIER_ACTIVE_PHRASE.fullmatch(criteria):
+        return "active=true"
+    return None
+
+
+def looks_like_reference_qualifier_attempt(value: str) -> bool:
+    """Return True when free text plausibly attempts an encoded query or script.
+
+    Such text is carried through normalized intent unchanged so the
+    deterministic qualifier gate rejects it into manual review instead of the
+    extractor silently dropping a stated (but unsafe or malformed) filter.
+    """
+    return _QUALIFIER_ATTEMPT_PATTERN.search(value.strip().lower()) is not None
+
+
+_RECORD_PRODUCER_MAPPING_PATTERN = re.compile(
+    r"fields?\s+"
+    r"(?P<sources>[a-z][a-z0-9_]*(?:(?:\s*,\s*|\s+and\s+)[a-z][a-z0-9_]*)*)"
+    r"\s+mapped\s+to\s+"
+    r"(?P<targets>[a-z][a-z0-9_]*(?:(?:\s*,\s*|\s+and\s+)[a-z][a-z0-9_]*)*)"
+)
+_MAPPING_LIST_SEPARATOR = re.compile(r"\s*,\s*|\s+and\s+")
+
+
+def _record_producer_field_mappings(text: str) -> list[tuple[str, str]]:
+    """Extract declarative variable-to-field mappings stated in free text.
+
+    Recognizes only the unambiguous positional form ``fields a, b mapped to
+    x, y`` where each variable pairs with the target field at the same
+    position. Anything else (including mismatched counts) returns no mappings,
+    so the gap surfaces as a missing detail instead of an invented mapping.
+    """
+    match = _RECORD_PRODUCER_MAPPING_PATTERN.search(text)
+    if match is None:
+        return []
+    sources = [part for part in _MAPPING_LIST_SEPARATOR.split(match.group("sources")) if part]
+    targets = [part for part in _MAPPING_LIST_SEPARATOR.split(match.group("targets")) if part]
+    if not sources or len(sources) != len(targets):
+        return []
+    return list(zip(sources, targets, strict=True))
 
 
 def _story_text(story: Story) -> str:

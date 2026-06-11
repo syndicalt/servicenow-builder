@@ -1,8 +1,12 @@
 import math
 
+import pytest
+
 from jedi_devproject.builder_maturity import MaturityEvidence
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
+    _catalog_item_changes_from_normalized_intent,
+    _record_producer_changes_from_normalized_intent,
     build_implementation_packet,
     generate_implementation_candidate,
     generate_implementation_update_set_candidate,
@@ -1308,6 +1312,177 @@ def test_catalog_candidate_reconciles_variables_from_normalized_intent() -> None
         "sc_cat_item_category",
         "m2m_connected_content",
     }
+    sc_cat_item_change = next(
+        change for change in candidate.changes if change.table == "sc_cat_item"
+    )
+    assert "variable_sets" not in sc_cat_item_change.fields
+    assert "variable_groups" not in sc_cat_item_change.fields
+
+
+def _catalog_normalized_intent(**overrides: object) -> dict[str, object]:
+    intent: dict[str, object] = {
+        "artifact_name": "Request Temporary Badge",
+        "catalog_item_short_description": "Request a temporary access badge.",
+        "catalog_name": "Service Catalog",
+        "category_name": "Services",
+        "taxonomy_name": "Employee",
+        "employee_center_topic": "Technology services / Software / Access issues",
+        "catalog_variables": [
+            {"name": "visitor_name", "label": "Visitor name", "type": "single_line_text"},
+            {"name": "start_date", "label": "Start date", "type": "date"},
+            {"name": "end_date", "label": "End date", "type": "date"},
+        ],
+    }
+    intent.update(overrides)
+    return intent
+
+
+def test_catalog_changes_carry_variable_sets_and_groups_from_normalized_intent() -> None:
+    changes = _catalog_item_changes_from_normalized_intent(
+        _catalog_normalized_intent(
+            catalog_variable_sets=["Common Visitor Questions"],
+            catalog_variable_groups=[
+                {"title": "Schedule", "variables": ["start_date", "end_date"]}
+            ],
+        )
+    )
+
+    sc_cat_item_fields = changes[0]["fields"]
+    assert sc_cat_item_fields["variable_sets"] == ["Common Visitor Questions"]
+    assert sc_cat_item_fields["variable_groups"] == [
+        {"title": "Schedule", "variables": ["start_date", "end_date"]}
+    ]
+
+
+def test_catalog_changes_reject_variable_set_creation() -> None:
+    with pytest.raises(ModelResponseError, match="must not create variable sets"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(catalog_variable_set_creation=True)
+        )
+
+
+def test_catalog_changes_reject_group_referencing_unknown_variable() -> None:
+    with pytest.raises(ModelResponseError, match="references unknown variable: badge_color"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_variable_groups=[{"title": "Schedule", "variables": ["badge_color"]}]
+            )
+        )
+
+
+def test_catalog_changes_reject_non_declarative_reference_qualifier() -> None:
+    with pytest.raises(ModelResponseError, match="reference qualifier rejected"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_variables=[
+                    {
+                        "name": "sponsor",
+                        "label": "Sponsor",
+                        "type": "reference",
+                        "reference_table": "sys_user",
+                        "reference_qualifier": "javascript:gs.getUser()",
+                    }
+                ]
+            )
+        )
+
+
+def test_catalog_changes_carry_fulfillment_flow_from_normalized_intent() -> None:
+    changes = _catalog_item_changes_from_normalized_intent(
+        _catalog_normalized_intent(
+            fulfillment_flow=(
+                "Attach the existing flow Badge Access Fulfillment as the fulfillment flow"
+            ),
+            fulfillment_flow_name="Badge Access Fulfillment",
+            fulfillment_flow_attachment_requested=True,
+        )
+    )
+
+    assert changes[0]["fields"]["fulfillment_flow"] == "Badge Access Fulfillment"
+    assert {change["table"] for change in changes} == {
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+    }
+    assert all(
+        "fulfillment_flow" not in change["fields"] for change in changes[1:]
+    )
+
+
+def test_catalog_changes_without_fulfillment_flow_carry_no_flow_field() -> None:
+    changes = _catalog_item_changes_from_normalized_intent(_catalog_normalized_intent())
+
+    assert "fulfillment_flow" not in changes[0]["fields"]
+
+
+def test_catalog_changes_reject_fulfillment_flow_creation_or_modification() -> None:
+    with pytest.raises(ModelResponseError, match="must not create or modify fulfillment flows"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(fulfillment_flow="Create a new Badge Fulfillment flow")
+        )
+
+
+def test_catalog_changes_reject_flow_attachment_without_a_name() -> None:
+    with pytest.raises(ModelResponseError, match="requires a flow name"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                fulfillment_flow="Attach an existing flow as the fulfillment flow",
+                fulfillment_flow_attachment_requested=True,
+            )
+        )
+
+
+def test_catalog_candidate_carries_variable_sets_and_groups_end_to_end() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sc_cat_item",
+                    "operation": "insert",
+                    "fields": {"name": "Request Temporary Visitor Badge"},
+                    "sys_id": None,
+                    "rationale": "Create the catalog item.",
+                }
+            ],
+            "test_plan": ["Preview the retrieved Update Set."],
+            "rollback_notes": ["Back out the retrieved Update Set."],
+        }
+    )
+    bundle = _catalog_context_bundle()
+    story = _catalog_story()
+    story = story.model_copy(
+        update={
+            "description": story.description.replace(
+                "Forbidden behavior:",
+                "Variable sets: Common Visitor Questions\n"
+                "Variable groups: Visitor|visitor_name, business_justification\n"
+                "Forbidden behavior:",
+            )
+        }
+    )
+    packet = build_implementation_packet(
+        story=story,
+        policy=_catalog_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_catalog_policy(),
+        provider=provider,
+    )
+
+    sc_cat_item_change = next(
+        change for change in candidate.changes if change.table == "sc_cat_item"
+    )
+    assert sc_cat_item_change.fields["variable_sets"] == ["Common Visitor Questions"]
+    assert sc_cat_item_change.fields["variable_groups"] == [
+        {"title": "Visitor", "variables": ["visitor_name", "business_justification"]}
+    ]
 
 
 def test_form_section_remove_candidate_uses_model_output_and_routes_manual() -> None:
@@ -1824,3 +1999,714 @@ def test_evidence_promotes_catalog_routing_to_automated_handoff() -> None:
         "Builder maturity is evidence-adjusted from baseline 0.60 using 60 recorded "
         "fulfillment outcomes."
     ) in promoted_candidate.reviewer_notes
+
+
+def test_catalog_candidate_with_fulfillment_flow_routes_to_manual_review() -> None:
+    catalog_response: dict[str, object] = {
+        "changes": [
+            {
+                "table": "sc_cat_item",
+                "operation": "insert",
+                "fields": {"name": "Request Temporary Visitor Badge"},
+                "sys_id": None,
+                "rationale": "Create the catalog item.",
+            }
+        ],
+        "test_plan": ["Preview the retrieved Update Set."],
+        "rollback_notes": ["Back out the retrieved Update Set."],
+    }
+    bundle = _catalog_context_bundle()
+    story = _catalog_story()
+    story = story.model_copy(
+        update={
+            "description": story.description.replace(
+                "Forbidden behavior:",
+                "Fulfillment flow: Attach the existing flow Badge Access Fulfillment "
+                "as the fulfillment flow\n"
+                "Forbidden behavior:",
+            )
+        }
+    )
+    packet = build_implementation_packet(
+        story=story,
+        policy=_catalog_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+    earned_catalog_evidence = {
+        surface: MaturityEvidence(surface=surface, samples=60, successes=57, failures=3)
+        for surface in [
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+        ]
+    }
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_catalog_policy(),
+        provider=RecordingImplementationProvider(catalog_response),
+        maturity_provider=StubMaturityProvider(earned_catalog_evidence),
+    )
+
+    assert packet.safety_decision == "automated_build"
+    sc_cat_item_change = next(
+        change for change in candidate.changes if change.table == "sc_cat_item"
+    )
+    assert sc_cat_item_change.fields["fulfillment_flow"] == "Badge Access Fulfillment"
+    # The flow reference rides on sc_cat_item; no extra change tables appear.
+    assert {change.table for change in candidate.changes} == {
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+    }
+    # Even with earned catalog-surface evidence, the UAT-unconfirmed
+    # fulfillment-flow surface keeps the candidate in manual review.
+    assert candidate.status is CandidateStatus.MANUAL_BUILD
+    assert candidate.eligibility_decision == "manual_review"
+    assert any(
+        reason.startswith("builder maturity below automated handoff threshold:")
+        and reason.endswith("=0.30")
+        for reason in candidate.eligibility_reasons
+    )
+
+
+def _catalog_behavior_intent_overrides() -> dict[str, object]:
+    return {
+        "catalog_ui_policies": [
+            {
+                "title": "Show schedule",
+                "condition": "visitor_name=external",
+                "reverse_if_false": True,
+                "actions": [
+                    {"variable": "start_date", "visible": "true", "mandatory": "true"},
+                    {"variable": "end_date", "visible": "true"},
+                ],
+            }
+        ],
+        "catalog_client_scripts": [
+            {
+                "name": "populate_visitor",
+                "script_type": "onLoad",
+                "variable": "",
+                "actions": [
+                    {"kind": "set_value", "variable": "visitor_name", "value": "New visitor"}
+                ],
+            },
+            {
+                "name": "clear_end",
+                "script_type": "onChange",
+                "variable": "start_date",
+                "actions": [{"kind": "clear_value", "variable": "end_date"}],
+            },
+        ],
+    }
+
+
+def test_catalog_changes_render_variable_behavior_from_normalized_intent() -> None:
+    changes = _catalog_item_changes_from_normalized_intent(
+        _catalog_normalized_intent(**_catalog_behavior_intent_overrides())
+    )
+
+    policy_changes = [change for change in changes if change["table"] == "catalog_ui_policy"]
+    action_changes = [
+        change for change in changes if change["table"] == "catalog_ui_policy_action"
+    ]
+    script_changes = [change for change in changes if change["table"] == "catalog_script_client"]
+    assert len(policy_changes) == 1
+    assert policy_changes[0]["fields"] == {
+        "short_description": "Show schedule",
+        "catalog_item": "Request Temporary Badge",
+        "catalog_conditions": "visitor_name=external",
+        "reverse_if_false": True,
+        "on_load": True,
+        "order": 100,
+    }
+    assert [change["fields"]["variable"] for change in action_changes] == [
+        "start_date",
+        "end_date",
+    ]
+    assert action_changes[0]["fields"]["ui_policy"] == "Show schedule"
+    assert action_changes[0]["fields"]["mandatory"] == "true"
+    assert action_changes[1]["fields"]["mandatory"] == "ignore"
+    assert [change["fields"]["name"] for change in script_changes] == [
+        "populate_visitor",
+        "clear_end",
+    ]
+    assert script_changes[0]["fields"]["script"] == (
+        "function onLoad() {\n"
+        "    g_form.setValue('visitor_name', 'New visitor');\n"
+        "}"
+    )
+    assert script_changes[0]["fields"]["fields_written"] == ["visitor_name"]
+    assert script_changes[1]["fields"]["field"] == "start_date"
+    assert script_changes[1]["fields"]["script"] == (
+        "function onChange(control, oldValue, newValue, isLoading, isTemplate) {\n"
+        "    if (isLoading) {\n"
+        "        return;\n"
+        "    }\n"
+        "    g_form.clearValue('end_date');\n"
+        "}"
+    )
+
+
+def test_catalog_changes_without_variable_behavior_stay_unchanged() -> None:
+    changes = _catalog_item_changes_from_normalized_intent(_catalog_normalized_intent())
+
+    assert {change["table"] for change in changes} == {
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+    }
+
+
+def test_catalog_changes_reject_rule_on_unknown_variable() -> None:
+    with pytest.raises(ModelResponseError, match="references unknown variable: badge_color"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {
+                        "title": "Show badge color",
+                        "condition": "visitor_name=external",
+                        "actions": [{"variable": "badge_color", "visible": "true"}],
+                    }
+                ]
+            )
+        )
+
+
+def test_catalog_changes_reject_rule_with_non_declarative_condition() -> None:
+    with pytest.raises(ModelResponseError, match="condition rejected"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {
+                        "title": "Show schedule",
+                        "condition": "javascript:gs.getUser()",
+                        "actions": [{"variable": "start_date", "visible": "true"}],
+                    }
+                ]
+            )
+        )
+
+
+def test_catalog_changes_reject_rule_without_actions_or_invalid_tristate() -> None:
+    with pytest.raises(ModelResponseError, match="requires actions"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {"title": "Show schedule", "condition": "visitor_name=external"}
+                ]
+            )
+        )
+    with pytest.raises(ModelResponseError, match="must be true, false, or ignore"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {
+                        "title": "Show schedule",
+                        "condition": "visitor_name=external",
+                        "actions": [{"variable": "start_date", "visible": "sometimes"}],
+                    }
+                ]
+            )
+        )
+
+
+def test_catalog_changes_reject_script_on_unknown_variable() -> None:
+    with pytest.raises(ModelResponseError, match="references unknown variable: badge_color"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_client_scripts=[
+                    {
+                        "name": "populate_color",
+                        "script_type": "onLoad",
+                        "actions": [
+                            {"kind": "set_value", "variable": "badge_color", "value": "blue"}
+                        ],
+                    }
+                ]
+            )
+        )
+
+
+def test_catalog_changes_reject_script_with_invalid_action_or_type() -> None:
+    with pytest.raises(ModelResponseError, match="action rejected"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_client_scripts=[
+                    {
+                        "name": "populate_visitor",
+                        "script_type": "onLoad",
+                        "actions": [
+                            {"kind": "run_script", "variable": "visitor_name", "value": "x"}
+                        ],
+                    }
+                ]
+            )
+        )
+    with pytest.raises(ModelResponseError, match="rejected"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_client_scripts=[
+                    {
+                        "name": "populate_visitor",
+                        "script_type": "onCellEdit",
+                        "actions": [
+                            {"kind": "set_value", "variable": "visitor_name", "value": "x"}
+                        ],
+                    }
+                ]
+            )
+        )
+
+
+def test_catalog_changes_reject_script_value_with_forbidden_token() -> None:
+    with pytest.raises(ModelResponseError, match="rejected"):
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_client_scripts=[
+                    {
+                        "name": "populate_visitor",
+                        "script_type": "onLoad",
+                        "actions": [
+                            {
+                                "kind": "set_value",
+                                "variable": "visitor_name",
+                                "value": "see https://example.com",
+                            }
+                        ],
+                    }
+                ]
+            )
+        )
+
+
+def _catalog_behavior_policy() -> AllowlistPolicy:
+    return AllowlistPolicy(
+        story_types={StoryType.DICTIONARY_FORM},
+        tables={
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+            "catalog_ui_policy",
+            "catalog_ui_policy_action",
+            "catalog_script_client",
+        },
+        operations={"insert", "update"},
+        max_points=3,
+    )
+
+
+def test_catalog_candidate_with_variable_behavior_routes_to_manual_review() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sc_cat_item",
+                    "operation": "insert",
+                    "fields": {"name": "Request Temporary Visitor Badge"},
+                    "sys_id": None,
+                    "rationale": "Create the catalog item.",
+                }
+            ],
+            "test_plan": ["Preview the retrieved Update Set."],
+            "rollback_notes": ["Back out the retrieved Update Set."],
+        }
+    )
+    bundle = _catalog_context_bundle()
+    story = _catalog_story()
+    story = story.model_copy(
+        update={
+            "description": story.description.replace(
+                "Forbidden behavior:",
+                "Variable rules: Require sponsor|visitor_name=external|"
+                "require=sponsor|show=sponsor\n"
+                "Variable scripts: populate_visitor|onload|set=visitor_name=New visitor\n"
+                "Forbidden behavior:",
+            )
+        }
+    )
+    packet = build_implementation_packet(
+        story=story,
+        policy=_catalog_behavior_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_catalog_behavior_policy(),
+        provider=provider,
+    )
+
+    assert packet.safety_decision == "automated_build"
+    assert {change.table for change in candidate.changes} == {
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+        "catalog_ui_policy",
+        "catalog_ui_policy_action",
+        "catalog_script_client",
+    }
+    script_change = next(
+        change for change in candidate.changes if change.table == "catalog_script_client"
+    )
+    assert "g_form.setValue('visitor_name', 'New visitor');" in str(
+        script_change.fields["script"]
+    )
+    # The new behavior surfaces start below the automated handoff threshold by
+    # design, so the candidate is preserved for manual review.
+    assert candidate.status is CandidateStatus.MANUAL_BUILD
+    assert candidate.eligibility_decision == "manual_review"
+    assert any(
+        reason.startswith("builder maturity below automated handoff threshold:")
+        and "=0.30" in reason
+        for reason in candidate.eligibility_reasons
+    )
+
+
+def test_catalog_variable_rule_intent_parser_fails_closed_on_malformed_shapes() -> None:
+    cases: list[tuple[object, str]] = [
+        ("not-a-list", "catalog variable rules must be a list"),
+        (["not-an-object"], "catalog variable rule intent must be an object"),
+        ([{"condition": "visitor_name=external"}], "catalog variable rule intent missing title"),
+        ([{"title": "Show schedule"}], "catalog variable rule Show schedule missing condition"),
+        (
+            [
+                {
+                    "title": "Show schedule",
+                    "condition": "visitor_name=external",
+                    "actions": ["not-an-object"],
+                }
+            ],
+            "action must be an object",
+        ),
+        (
+            [
+                {
+                    "title": "Show schedule",
+                    "condition": "visitor_name=external",
+                    "actions": [{"visible": "true"}],
+                }
+            ],
+            "action missing variable",
+        ),
+    ]
+    for raw_rules, message in cases:
+        with pytest.raises(ModelResponseError, match=message):
+            _catalog_item_changes_from_normalized_intent(
+                _catalog_normalized_intent(catalog_ui_policies=raw_rules)
+            )
+
+
+def test_catalog_client_script_intent_parser_fails_closed_on_malformed_shapes() -> None:
+    cases: list[tuple[object, str]] = [
+        ("not-a-list", "catalog client scripts must be a list"),
+        (["not-an-object"], "catalog client script intent must be an object"),
+        ([{"script_type": "onLoad"}], "catalog client script intent missing name"),
+        (
+            [{"name": "populate_visitor"}],
+            "catalog client script populate_visitor missing script type",
+        ),
+        (
+            [{"name": "populate_visitor", "script_type": "onLoad", "actions": []}],
+            "catalog client script populate_visitor requires actions",
+        ),
+        (
+            [
+                {
+                    "name": "populate_visitor",
+                    "script_type": "onLoad",
+                    "actions": ["not-an-object"],
+                }
+            ],
+            "action must be an object",
+        ),
+    ]
+    for raw_scripts, message in cases:
+        with pytest.raises(ModelResponseError, match=message):
+            _catalog_item_changes_from_normalized_intent(
+                _catalog_normalized_intent(catalog_client_scripts=raw_scripts)
+            )
+
+
+def _record_producer_policy() -> AllowlistPolicy:
+    return AllowlistPolicy(
+        story_types={StoryType.DICTIONARY_FORM},
+        tables={"sc_cat_item_producer", "item_option_new", "sc_cat_item_category"},
+        operations={"insert", "update"},
+        max_points=3,
+    )
+
+
+def _record_producer_story() -> Story:
+    return Story(
+        sys_id="record-producer-story-sys-id",
+        number="STRY0010140",
+        short_description="JEDI UAT: Report Security Incident record producer",
+        description=(
+            "Target artifact type: Record Producer\n"
+            "Artifact name: Report Security Incident\n"
+            "Short description: Report a security incident for triage.\n"
+            "Target table: incident\n"
+            "Catalog: Service Catalog\n"
+            "Category: Services\n"
+            "Variables: summary|Summary|single_line_text|map=short_description|"
+            "mandatory=true|order=100; "
+            "caller|Caller|reference|sys_user|active=true|map=caller_id|order=200\n"
+            "Forbidden behavior: Do not create producer scripts, flows, approvals, "
+            "user criteria, or integrations."
+        ),
+        acceptance_criteria="Delivery is a retrieved Update Set ready for preview and commit.",
+        story_points=3,
+        priority=4,
+        state="Work in Progress",
+        data_classification=DataClassification.PUBLIC,
+    )
+
+
+def _record_producer_context_bundle() -> ServiceNowSurfaceContextBundle:
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element="short_description",
+                column_label="Short description",
+                internal_type="string",
+            ),
+            DiscoveredField(
+                element="caller_id",
+                column_label="Caller",
+                internal_type="reference",
+            ),
+        ],
+        form_sections=[],
+        evidence=["sys_db_object:incident", "sys_dictionary:incident"],
+    )
+    return ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "catalog_definitions", "catalog_categories"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="table_schema",
+                source_table="sys_dictionary",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_dictionary",
+                        name="short_description",
+                        active=True,
+                        summary="Short description",
+                        metadata={"internal_type": "string"},
+                    ),
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_dictionary",
+                        name="caller_id",
+                        active=True,
+                        summary="Caller",
+                        metadata={"internal_type": "reference"},
+                    ),
+                ],
+                evidence=["sys_dictionary:incident"],
+                confidence=1.0,
+            ),
+            ServiceNowSurfaceContext(
+                surface="catalog_definitions",
+                source_table="sc_catalog",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sc_catalog",
+                        name="Service Catalog",
+                        active=True,
+                    )
+                ],
+                evidence=["sc_catalog:active"],
+                confidence=0.95,
+            ),
+            ServiceNowSurfaceContext(
+                surface="catalog_categories",
+                source_table="sc_category",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sc_category",
+                        name="Services",
+                        active=True,
+                    )
+                ],
+                evidence=["sc_category:active"],
+                confidence=0.95,
+            ),
+        ],
+        evidence=["sys_dictionary:incident", "sc_catalog:active", "sc_category:active"],
+    )
+
+
+def test_record_producer_candidate_reconciles_changes_from_normalized_intent() -> None:
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sc_cat_item_producer",
+                    "operation": "insert",
+                    "fields": {"name": "Report Security Incident"},
+                    "sys_id": None,
+                    "rationale": "Create the record producer.",
+                }
+            ],
+            "test_plan": ["Preview the retrieved Update Set."],
+            "rollback_notes": ["Back out the retrieved Update Set."],
+        }
+    )
+    bundle = _record_producer_context_bundle()
+    packet = build_implementation_packet(
+        story=_record_producer_story(),
+        policy=_record_producer_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_record_producer_policy(),
+        provider=provider,
+    )
+
+    assert {change.table for change in candidate.changes} == {
+        "sc_cat_item_producer",
+        "item_option_new",
+        "sc_cat_item_category",
+    }
+    producer_change = next(
+        change for change in candidate.changes if change.table == "sc_cat_item_producer"
+    )
+    assert producer_change.fields["table_name"] == "incident"
+    assert "script" not in producer_change.fields
+    variable_changes = [
+        change for change in candidate.changes if change.table == "item_option_new"
+    ]
+    assert [change.fields["field"] for change in variable_changes] == [
+        "short_description",
+        "caller_id",
+    ]
+    assert all(change.fields["map_to_field"] is True for change in variable_changes)
+    assert variable_changes[1].fields["reference"] == "sys_user"
+    assert variable_changes[1].fields["reference_qualifier"] == "active=true"
+    # The record producer builder is below the automated handoff maturity
+    # threshold (0.30), so the candidate routes to manual review by design.
+    assert candidate.eligibility_decision == "manual_review"
+    assert candidate.status is CandidateStatus.MANUAL_BUILD
+    assert any(
+        "builder maturity below automated handoff threshold" in reason
+        and "0.30" in reason
+        for reason in candidate.eligibility_reasons
+    )
+
+
+def _record_producer_normalized_intent(**overrides: object) -> dict[str, object]:
+    producer: dict[str, object] = {
+        "name": "Report Security Incident",
+        "short_description": "Report a security incident for triage.",
+        "target_table": "incident",
+        "catalog": "Service Catalog",
+        "category": "Services",
+        "variables": [
+            {
+                "name": "summary",
+                "label": "Summary",
+                "type": "single_line_text",
+                "field": "short_description",
+            },
+            {
+                "name": "caller",
+                "label": "Caller",
+                "type": "reference",
+                "reference_table": "sys_user",
+                "reference_qualifier": "active=true",
+                "field": "caller_id",
+            },
+        ],
+    }
+    producer.update(overrides)
+    return {"record_producer": producer}
+
+
+def test_record_producer_changes_reject_producer_script() -> None:
+    intent = _record_producer_normalized_intent()
+    intent["record_producer_script"] = "current.short_description = producer.summary;"
+
+    with pytest.raises(ModelResponseError, match="must not carry a producer script"):
+        _record_producer_changes_from_normalized_intent(intent)
+
+
+def test_record_producer_changes_require_normalized_record_producer_intent() -> None:
+    with pytest.raises(ModelResponseError, match="requires normalized record producer intent"):
+        _record_producer_changes_from_normalized_intent({"artifact_name": "Producer"})
+
+
+def test_record_producer_changes_require_field_mapping_on_every_variable() -> None:
+    with pytest.raises(ModelResponseError, match="requires a target field mapping"):
+        _record_producer_changes_from_normalized_intent(
+            _record_producer_normalized_intent(
+                variables=[
+                    {"name": "summary", "label": "Summary", "type": "single_line_text"}
+                ]
+            )
+        )
+
+
+def test_record_producer_changes_reject_duplicate_field_mappings() -> None:
+    with pytest.raises(ModelResponseError, match="more than once"):
+        _record_producer_changes_from_normalized_intent(
+            _record_producer_normalized_intent(
+                variables=[
+                    {
+                        "name": "summary",
+                        "label": "Summary",
+                        "type": "single_line_text",
+                        "field": "short_description",
+                    },
+                    {
+                        "name": "details",
+                        "label": "Details",
+                        "type": "multi_line_text",
+                        "field": "short_description",
+                    },
+                ]
+            )
+        )
+
+
+def test_record_producer_changes_reject_non_declarative_reference_qualifier() -> None:
+    with pytest.raises(ModelResponseError, match="reference qualifier rejected"):
+        _record_producer_changes_from_normalized_intent(
+            _record_producer_normalized_intent(
+                variables=[
+                    {
+                        "name": "caller",
+                        "label": "Caller",
+                        "type": "reference",
+                        "reference_table": "sys_user",
+                        "reference_qualifier": "javascript:gs.getUser()",
+                        "field": "caller_id",
+                    }
+                ]
+            )
+        )

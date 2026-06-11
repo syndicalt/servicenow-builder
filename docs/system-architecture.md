@@ -136,14 +136,18 @@ flowchart TD
 |---|---|---|---|
 | `dictionary_field_create` / `form_layout_place_field` | Automated build for low-complexity stories | `table_schema`, `form_layout` | Retrieved Update Set. |
 | `form_section_remove` | Candidate generation | `form_sections`, `form_layout` | No handoff until deterministic section XML evidence is restored. |
-| `catalog_item_create` | Candidate generation | Catalog, category, Employee Center topic, connected content | No handoff until catalog builder maturity reaches the handoff threshold. |
+| `catalog_item_create` | Candidate generation (reference qualifiers, container grouping, existing variable set attachment, existing fulfillment-flow attachment) | Catalog, category, Employee Center topic, connected content, variable sets, fulfillment flows | No handoff until catalog builder maturity reaches the handoff threshold. |
+| `record_producer_create` | Candidate generation | Catalog, category, target table schema | No handoff until producer XML shape evidence is confirmed in UAT; producer scripts route to manual review. |
+| `catalog_ui_policy_generate` / `catalog_client_script_generate` | Candidate generation | Catalog item and its own generated variables | No handoff until catalog behavior XML shape evidence is confirmed in UAT. |
 | `business_rule_generate` | Candidate generation | `table_schema`, `business_rules` | No handoff until executable-code XML evidence and validators are approved. |
 | `client_script_generate` | Candidate generation | `table_schema`, `client_scripts` | No handoff until browser-side safety and XML evidence are approved. |
 | `script_include_generate` | Candidate generation | `script_includes` | No handoff until executable-code XML evidence and validators are approved. |
 | `ui_policy_generate` | Supported declarative subset | `table_schema`, `form_layout`, `ui_policies` | Retrieved Update Set for validated actions. |
-| `flow_modify` | Context/preflight only | `flows`, `flow_graph` | No handoff. |
+| `flow_modify` | Context/preflight with evidence-driven readiness; deterministic builder and round-trip harness implemented | `flows`, `flow_graph`, flow XML shape and snapshot evidence | No handoff until real instance XML shape and snapshot evidence is collected; runtime generation stays dark. |
 | `cmdb_ire_analyze` / `cmdb_ire_generate` | Analysis and candidate generation | IRE rules, data sources, class hierarchy | No handoff until CMDB IRE XML shape evidence exists. |
 | Unknown, unsupported, high-risk, or missing details | Clarification or human review | Varies | No handoff. |
+
+Gate-failing stories additionally receive an `intake_feedback` artifact (`intake-feedback-v1`) with stable reason codes and a suggested rewrite, delivered through the allowlisted work-notes writeback, idempotent by content hash, and fail-open. Generated candidates also receive an advisory `atf_test_plan` artifact (`atf-test-plan-v1`) proposing declarative `sys_atf_test`/`sys_atf_step` records; plan generation is fail-open and produces no XML until ATF shape evidence exists.
 
 ## Live Context Dossier
 
@@ -226,7 +230,7 @@ Operational records are durable audit evidence:
 - `lifecycle_events` preserves inbound event payloads and validation status.
 - `fulfillment_jobs` preserves queue, claim, retry, terminal status, lock metadata, and failure text.
 - `job_events` records append-only state changes.
-- `artifact_blobs` stores implementation packets, context bundles, candidate artifacts, and analysis artifacts.
+- `artifact_blobs` stores implementation packets, context bundles, candidate artifacts, analysis artifacts, ATF test plan artifacts, and intake feedback artifacts.
 - `artifact_refs` links persisted artifacts to jobs with SHA-256 hashes.
 
 ### Model Data Flow
@@ -244,7 +248,7 @@ flowchart TD
     RawXml -- "No" --> Candidate["UpdateSetCandidate artifact"]
 ```
 
-Provider calls are disabled unless runtime configuration, provider policy, data classification, context sufficiency, and capability maturity allow them. `JEDI_CLASSIFIER_GATE=false` is a development control for exploratory structured reasoning; it does not authorize retrieved Update Set handoff for non-automated classifier outcomes. Capability status uses `enabled` only for builders that can create retrieved Update Set handoff artifacts now; lower maturity builders use `candidate_generation`, `context_only`, or `designed`.
+Provider calls are disabled unless runtime configuration, provider policy, data classification, context sufficiency, and capability maturity allow them. An Anthropic Messages API adapter exists at request/contract parity with the OpenAI adapter (structured output, fail-closed refusal and max-tokens handling, key redaction); it is not yet wired into runtime provider selection, and provider policy approval is still required before use. `JEDI_CLASSIFIER_GATE=false` is a development control for exploratory structured reasoning; it does not authorize retrieved Update Set handoff for non-automated classifier outcomes. Capability status uses `enabled` only for builders that can create retrieved Update Set handoff artifacts now; lower maturity builders use `candidate_generation`, `context_only`, or `designed`.
 
 ### Retrieved Update Set Handoff Flow
 
@@ -346,6 +350,8 @@ Bootstrap should be treated as controlled platform configuration and reviewed li
 
 - Production role-backed admin authentication is reserved but not implemented.
 - Several ServiceNow surfaces remain context-only or design-only.
-- Flow Designer and CMDB IRE retrieved Update Set mutation builders are not approved.
+- The Flow Designer graph-diff builder and round-trip harness are implemented, but readiness is evidence-driven: retrieved Update Set handoff and runtime generation stay dark until real instance XML shape and snapshot evidence is collected. CMDB IRE retrieved Update Set mutation builders are not approved.
+- Catalog behavior surfaces (catalog UI policies, catalog client scripts), record producers, and catalog fulfillment-flow attachment are candidate generation only at maturity baseline 0.30 until UAT confirms their XML shape assumptions.
+- The Anthropic provider adapter is implemented but not wired into runtime provider selection; the provider registry decision is deferred and policy approval is still required.
 - Public documentation retrieval can be enabled for the worker with `JEDI_PUBLIC_WEB_ACCESS=worker`; it is allowlist-only, HTTPS-only, bounded, cited, hash-backed, and fail-closed before model invocation when required public docs cannot be fetched.
 - Production deployment still needs customer boundary review for hosting, logs, database, secrets, and model provider.

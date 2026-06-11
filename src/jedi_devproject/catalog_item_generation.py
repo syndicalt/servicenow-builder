@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from jedi_devproject.catalog_client_script_generation import (
+    CATALOG_CLIENT_SCRIPT_TABLE,
+    catalog_client_script_customer_updates,
+)
+from jedi_devproject.catalog_ui_policy_generation import (
+    CATALOG_UI_POLICY_TABLES,
+    catalog_ui_policy_customer_updates,
+)
+from jedi_devproject.discovery.flows import resolve_fulfillment_flow
 from jedi_devproject.models import CandidateChange
 from jedi_devproject.validation_helpers import TRUTHY_TOKENS, bool_value, optional_int, slug
 from jedi_devproject.xml_builder import (
@@ -36,6 +46,122 @@ class CatalogResolvedReference(BaseModel):
     display: str
 
 
+REFERENCE_QUALIFIER_MAX_LENGTH = 255
+
+_QUALIFIER_SCRIPT_INDICATOR_PATTERN = re.compile(
+    r"javascript:|\bgs\s*\.|\bcurrent\s*\.|[;(){}]",
+    re.IGNORECASE,
+)
+_QUALIFIER_CONDITION_PATTERN = re.compile(
+    r"^(?P<field>[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){0,2})"
+    r"(?P<operator>ISNOTEMPTY|ISEMPTY|STARTSWITH|ENDSWITH|NOT LIKE|NOT IN|LIKE|IN|!=|>=|<=|=|>|<)"
+    r"(?P<value>.*)$"
+)
+_QUALIFIER_UNARY_OPERATORS = frozenset({"ISEMPTY", "ISNOTEMPTY"})
+
+
+def validated_reference_qualifier(qualifier: str) -> str:
+    """Validate a declarative encoded-query reference qualifier and return it.
+
+    Allowed grammar (everything else fails closed with ``ValueError``)::
+
+        qualifier := condition ( ("^" | "^OR") condition )*
+        condition := field operator value | field unary-operator
+        field     := segment ( "." segment )*        (at most three segments)
+        segment   := [a-z][a-z0-9_]*                 (plausible ServiceNow field name)
+        operator  := "=" | "!=" | ">" | ">=" | "<" | "<=" | "IN" | "NOT IN"
+                     | "LIKE" | "NOT LIKE" | "STARTSWITH" | "ENDSWITH"
+        unary-operator := "ISEMPTY" | "ISNOTEMPTY"   (carries no value)
+        value     := non-empty text without script indicators
+
+    Script indicators are rejected anywhere in the qualifier: ``javascript:``,
+    ``gs.``, ``current.``, semicolons, parentheses, and braces. Dynamic
+    filters, scripted qualifiers, and anything that is not a simple
+    field-operator-value encoded query are therefore rejected. An empty
+    qualifier is allowed and normalizes to the empty string.
+    """
+    cleaned = qualifier.strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) > REFERENCE_QUALIFIER_MAX_LENGTH:
+        raise ValueError(
+            f"reference qualifier exceeds {REFERENCE_QUALIFIER_MAX_LENGTH} characters"
+        )
+    indicator = _QUALIFIER_SCRIPT_INDICATOR_PATTERN.search(cleaned)
+    if indicator is not None:
+        raise ValueError(
+            f"reference qualifier contains script indicator: {indicator.group(0)}"
+        )
+    for index, raw_condition in enumerate(cleaned.split("^")):
+        condition = raw_condition
+        if index > 0 and condition.startswith("OR"):
+            condition = condition[2:]
+        match = _QUALIFIER_CONDITION_PATTERN.fullmatch(condition)
+        if match is None:
+            raise ValueError(
+                "reference qualifier is not a declarative field-operator-value "
+                f"encoded query: {raw_condition}"
+            )
+        operator = match.group("operator")
+        value = match.group("value")
+        if operator in _QUALIFIER_UNARY_OPERATORS and value:
+            raise ValueError(
+                f"reference qualifier operator {operator} must not carry a value"
+            )
+        if operator not in _QUALIFIER_UNARY_OPERATORS and not value:
+            raise ValueError(
+                f"reference qualifier condition is missing a value: {raw_condition}"
+            )
+    return cleaned
+
+
+def is_declarative_reference_qualifier(qualifier: str) -> bool:
+    try:
+        validated_reference_qualifier(qualifier)
+    except ValueError:
+        return False
+    return True
+
+
+class CatalogVariableGroup(BaseModel):
+    """A titled container section grouping the item's own new variables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    variables: list[str]
+
+    @field_validator("title")
+    @classmethod
+    def require_title(cls, value: str) -> str:
+        cleaned = value.strip()
+        if cleaned == "":
+            raise ValueError("must not be empty")
+        return cleaned
+
+    @model_validator(mode="after")
+    def require_members(self) -> CatalogVariableGroup:
+        members = [member.strip() for member in self.variables]
+        if not members or any(member == "" for member in members):
+            raise ValueError(
+                f"catalog variable group {self.title} requires at least one member variable"
+            )
+        if len(set(members)) != len(members):
+            raise ValueError(
+                f"catalog variable group {self.title} lists a member variable twice"
+            )
+        self.variables = members
+        return self
+
+    @property
+    def container_start_name(self) -> str:
+        return f"{slug(self.title, default='group')}_container"
+
+    @property
+    def container_end_name(self) -> str:
+        return f"{slug(self.title, default='group')}_container_end"
+
+
 class CatalogVariableIntent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -63,6 +189,13 @@ class CatalogVariableIntent(BaseModel):
             raise ValueError(f"unsupported catalog variable type: {self.variable_type}")
         if self.variable_type == "reference" and not (self.reference_table or "").strip():
             raise ValueError("reference catalog variables require reference_table")
+        if self.reference_qualifier:
+            try:
+                self.reference_qualifier = validated_reference_qualifier(self.reference_qualifier)
+            except ValueError as error:
+                raise ValueError(
+                    f"reference qualifier rejected for {self.name}: {error}"
+                ) from error
         return self
 
 
@@ -77,6 +210,13 @@ class CatalogItemIntent(BaseModel):
     taxonomy: str
     employee_center_topic: str
     variables: list[CatalogVariableIntent]
+    variable_sets: list[str] = Field(default_factory=list)
+    variable_groups: list[CatalogVariableGroup] = Field(default_factory=list)
+    # Name of an EXISTING, ACTIVE, record-triggered flow to attach as the
+    # item's fulfillment flow (sc_cat_item.flow_designer_flow). Resolution is
+    # live and fail-closed; flow creation or modification is never represented
+    # here.
+    fulfillment_flow: str | None = None
 
     @field_validator(
         "name",
@@ -100,7 +240,48 @@ class CatalogItemIntent(BaseModel):
         names = [variable.name for variable in self.variables]
         if len(set(names)) != len(names):
             raise ValueError("catalog variable names must be unique")
+        self._require_valid_variable_sets()
+        self._require_valid_variable_groups(set(names))
         return self
+
+    def _require_valid_variable_sets(self) -> None:
+        cleaned = [name.strip() for name in self.variable_sets]
+        if any(name == "" for name in cleaned):
+            raise ValueError("catalog variable set names must not be empty")
+        normalized = [name.casefold() for name in cleaned]
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("catalog variable set names must be unique")
+        self.variable_sets = cleaned
+
+    def _require_valid_variable_groups(self, variable_names: set[str]) -> None:
+        if not self.variable_groups:
+            return
+        titles = [group.title.casefold() for group in self.variable_groups]
+        if len(set(titles)) != len(titles):
+            raise ValueError("catalog variable group titles must be unique")
+        grouped: set[str] = set()
+        container_names: set[str] = set()
+        for group in self.variable_groups:
+            for member in group.variables:
+                if member not in variable_names:
+                    raise ValueError(
+                        f"catalog variable group {group.title} references "
+                        f"unknown variable: {member}"
+                    )
+                if member in grouped:
+                    raise ValueError(
+                        f"catalog variable {member} is assigned to more than one group"
+                    )
+                grouped.add(member)
+            container_names.update({group.container_start_name, group.container_end_name})
+        if len(container_names) != 2 * len(self.variable_groups):
+            raise ValueError("catalog variable group titles must produce unique container names")
+        collisions = container_names & variable_names
+        if collisions:
+            raise ValueError(
+                "catalog variable group container names collide with variables: "
+                f"{', '.join(sorted(collisions))}"
+            )
 
 
 class CatalogResolvedContext(BaseModel):
@@ -111,6 +292,8 @@ class CatalogResolvedContext(BaseModel):
     taxonomy: CatalogResolvedReference
     topic: CatalogResolvedReference
     content_type: CatalogResolvedReference
+    variable_sets: list[CatalogResolvedReference] = Field(default_factory=list)
+    fulfillment_flow: CatalogResolvedReference | None = None
 
 
 CATALOG_VARIABLE_TYPE_IDS = {
@@ -120,6 +303,13 @@ CATALOG_VARIABLE_TYPE_IDS = {
     "reference": "8",
     "date": "9",
     "single_line_text": "6",
+}
+
+# item_option_new container rows are generated only from validated variable
+# groups; stories cannot request these types directly through Variables.
+CATALOG_CONTAINER_TYPE_IDS = {
+    "container_start": "19",
+    "container_end": "20",
 }
 
 _MANDATORY_TRUTHY_TOKENS = TRUTHY_TOKENS | {"required", "mandatory"}
@@ -134,10 +324,6 @@ def catalog_item_customer_updates(
     intent = _catalog_item_intent(changes)
     context = _resolve_catalog_context(client=client, intent=intent)
     catalog_item_sys_id = _stable_sys_id("sc_cat_item", intent.name)
-    variable_sys_ids = {
-        variable.name: _stable_sys_id("item_option_new", intent.name, variable.name)
-        for variable in intent.variables
-    }
     return [
         _catalog_item_update(
             intent=intent,
@@ -145,16 +331,11 @@ def catalog_item_customer_updates(
             catalog_item_sys_id=catalog_item_sys_id,
             remote_update_set_sys_id=remote_update_set_sys_id,
         ),
-        *[
-            _catalog_variable_update(
-                intent=intent,
-                variable=variable,
-                variable_sys_id=variable_sys_ids[variable.name],
-                catalog_item_sys_id=catalog_item_sys_id,
-                remote_update_set_sys_id=remote_update_set_sys_id,
-            )
-            for variable in intent.variables
-        ],
+        *_catalog_variable_updates(
+            intent=intent,
+            catalog_item_sys_id=catalog_item_sys_id,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        ),
         _catalog_category_update(
             intent=intent,
             context=context,
@@ -167,7 +348,161 @@ def catalog_item_customer_updates(
             catalog_item_sys_id=catalog_item_sys_id,
             remote_update_set_sys_id=remote_update_set_sys_id,
         ),
+        *[
+            _variable_set_link_update(
+                intent=intent,
+                variable_set=variable_set,
+                catalog_item_sys_id=catalog_item_sys_id,
+                remote_update_set_sys_id=remote_update_set_sys_id,
+            )
+            for variable_set in context.variable_sets
+        ],
+        *_variable_behavior_updates(
+            intent=intent,
+            changes=changes,
+            catalog_item_sys_id=catalog_item_sys_id,
+            remote_update_set_sys_id=remote_update_set_sys_id,
+        ),
     ]
+
+
+def _variable_behavior_updates(
+    *,
+    intent: CatalogItemIntent,
+    changes: list[CandidateChange],
+    catalog_item_sys_id: str,
+    remote_update_set_sys_id: str,
+) -> list[dict[str, Any]]:
+    """Render catalog UI policy and catalog client script updates, if requested.
+
+    Stories without variable behavior contribute no changes here, so their
+    catalog payloads stay byte-identical. Behavior changes may only reference
+    the item's OWN generated variables; the delegated builders fail closed on
+    anything else.
+    """
+    policy_changes = [change for change in changes if change.table in CATALOG_UI_POLICY_TABLES]
+    script_changes = [
+        change for change in changes if change.table == CATALOG_CLIENT_SCRIPT_TABLE
+    ]
+    if not policy_changes and not script_changes:
+        return []
+    variable_sys_ids = {
+        variable.name: _stable_sys_id("item_option_new", intent.name, variable.name)
+        for variable in intent.variables
+    }
+    updates: list[dict[str, Any]] = []
+    if policy_changes:
+        updates.extend(
+            catalog_ui_policy_customer_updates(
+                changes=policy_changes,
+                remote_update_set_sys_id=remote_update_set_sys_id,
+                catalog_item_name=intent.name,
+                catalog_item_sys_id=catalog_item_sys_id,
+                variable_sys_ids=variable_sys_ids,
+            )
+        )
+    if script_changes:
+        updates.extend(
+            catalog_client_script_customer_updates(
+                changes=script_changes,
+                remote_update_set_sys_id=remote_update_set_sys_id,
+                catalog_item_name=intent.name,
+                catalog_item_sys_id=catalog_item_sys_id,
+                item_variable_names=set(variable_sys_ids),
+            )
+        )
+    return updates
+
+
+def _catalog_variable_updates(
+    *,
+    intent: CatalogItemIntent,
+    catalog_item_sys_id: str,
+    remote_update_set_sys_id: str,
+) -> list[dict[str, Any]]:
+    """Render variable rows, interleaving container start/end rows for groups.
+
+    Without groups the variables render exactly as declared (payloads stay
+    byte-identical to the ungrouped builder). With groups, rows are emitted in
+    declaration order, each group expands in place at its first member, every
+    container is closed, and ``order`` is re-sequenced 100, 200, ... across the
+    interleaved rows so review order matches render order.
+    """
+    if not intent.variable_groups:
+        return [
+            _catalog_variable_update(
+                intent=intent,
+                variable=variable,
+                variable_sys_id=_stable_sys_id("item_option_new", intent.name, variable.name),
+                catalog_item_sys_id=catalog_item_sys_id,
+                remote_update_set_sys_id=remote_update_set_sys_id,
+            )
+            for variable in intent.variables
+        ]
+    group_for_member = {
+        member: group for group in intent.variable_groups for member in group.variables
+    }
+    variables_by_name = {variable.name: variable for variable in intent.variables}
+    updates: list[dict[str, Any]] = []
+    emitted: set[str] = set()
+    position = 0
+    for variable in intent.variables:
+        if variable.name in emitted:
+            continue
+        group = group_for_member.get(variable.name)
+        if group is None:
+            position += 1
+            updates.append(
+                _catalog_variable_update(
+                    intent=intent,
+                    variable=variable.model_copy(update={"order": position * 100}),
+                    variable_sys_id=_stable_sys_id(
+                        "item_option_new", intent.name, variable.name
+                    ),
+                    catalog_item_sys_id=catalog_item_sys_id,
+                    remote_update_set_sys_id=remote_update_set_sys_id,
+                )
+            )
+            continue
+        position += 1
+        updates.append(
+            _container_variable_update(
+                intent=intent,
+                group=group,
+                container_kind="container_start",
+                order=position * 100,
+                catalog_item_sys_id=catalog_item_sys_id,
+                remote_update_set_sys_id=remote_update_set_sys_id,
+            )
+        )
+        for member_name in group.variables:
+            emitted.add(member_name)
+            position += 1
+            updates.append(
+                _catalog_variable_update(
+                    intent=intent,
+                    variable=variables_by_name[member_name].model_copy(
+                        update={"order": position * 100}
+                    ),
+                    variable_sys_id=_stable_sys_id(
+                        "item_option_new", intent.name, member_name
+                    ),
+                    catalog_item_sys_id=catalog_item_sys_id,
+                    remote_update_set_sys_id=remote_update_set_sys_id,
+                )
+            )
+        position += 1
+        updates.append(
+            _container_variable_update(
+                intent=intent,
+                group=group,
+                container_kind="container_end",
+                order=position * 100,
+                catalog_item_sys_id=catalog_item_sys_id,
+                remote_update_set_sys_id=remote_update_set_sys_id,
+            )
+        )
+    return updates
 
 
 def _catalog_item_intent(changes: list[CandidateChange]) -> CatalogItemIntent:
@@ -199,7 +534,50 @@ def _catalog_item_intent(changes: list[CandidateChange]) -> CatalogItemIntent:
             or ""
         ),
         variables=variables,
+        variable_sets=_variable_set_names(item_fields.get("variable_sets")),
+        variable_groups=_variable_group_intents(item_fields.get("variable_groups")),
+        fulfillment_flow=str(item_fields.get("fulfillment_flow") or "").strip() or None,
     )
+
+
+def _variable_set_names(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [part.strip() for part in re.split(r"[;,]", str(value)) if part.strip()]
+
+
+def _variable_group_intents(value: Any) -> list[CatalogVariableGroup]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        groups: list[CatalogVariableGroup] = []
+        for item in value:
+            if isinstance(item, CatalogVariableGroup):
+                groups.append(item)
+            elif isinstance(item, dict):
+                groups.append(CatalogVariableGroup.model_validate(item))
+            else:
+                raise ValueError("catalog variable group must be an object")
+        return groups
+    groups = []
+    for raw_entry in str(value).split(";"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        title, _, raw_members = entry.partition("|")
+        groups.append(
+            CatalogVariableGroup(
+                title=title.strip(),
+                variables=[
+                    slug(member, default="")
+                    for member in raw_members.split(",")
+                    if member.strip()
+                ],
+            )
+        )
+    return groups
 
 
 def _catalog_variable_intent(change: CandidateChange) -> CatalogVariableIntent:
@@ -294,7 +672,50 @@ def _resolve_catalog_context(
         taxonomy=taxonomy,
         topic=topic,
         content_type=content_type,
+        variable_sets=_resolve_variable_sets(client=client, intent=intent),
+        fulfillment_flow=_resolve_fulfillment_flow_reference(client=client, intent=intent),
     )
+
+
+def _resolve_fulfillment_flow_reference(
+    *,
+    client: CatalogMetadataClient,
+    intent: CatalogItemIntent,
+) -> CatalogResolvedReference | None:
+    """Resolve the named fulfillment flow live, or skip entirely when unused.
+
+    Stories without a fulfillment flow never touch the flow surface, so their
+    payloads stay byte-identical. Resolution fails closed with the stable
+    ``fulfillment_flow:*`` reason codes from ``discovery.flows``.
+    """
+    if intent.fulfillment_flow is None:
+        return None
+    resolved = resolve_fulfillment_flow(client=client, flow_name=intent.fulfillment_flow)
+    return CatalogResolvedReference(sys_id=resolved.sys_id, display=resolved.name)
+
+
+def _resolve_variable_sets(
+    *,
+    client: CatalogMetadataClient,
+    intent: CatalogItemIntent,
+) -> list[CatalogResolvedReference]:
+    if not intent.variable_sets:
+        return []
+    records = client.fetch_table_records(
+        table="item_option_new_set",
+        lookup={},
+        fields=["sys_id", "title", "internal_name", "active"],
+        limit=250,
+    )
+    return [
+        _resolve_named_record(
+            records=records,
+            display_name=name,
+            label="catalog variable set",
+            name_fields=("title", "internal_name", "name"),
+        )
+        for name in intent.variable_sets
+    ]
 
 
 def _catalog_item_update(
@@ -426,6 +847,7 @@ def _catalog_item_payload(
                 display_value=context.category.display,
             ),
             container_element("description", cdata(intent.description)),
+            _fulfillment_flow_element(context),
             "<ignore_price>true</ignore_price>",
             "<no_cart>false</no_cart>",
             "<no_order>false</no_order>",
@@ -449,6 +871,21 @@ def _catalog_item_payload(
     )
 
 
+def _fulfillment_flow_element(context: CatalogResolvedContext) -> str:
+    """Render the sc_cat_item flow reference, or nothing when no flow attaches.
+
+    The empty string keeps payloads byte-identical for stories that do not
+    attach a fulfillment flow.
+    """
+    if context.fulfillment_flow is None:
+        return ""
+    return text_element(
+        "flow_designer_flow",
+        context.fulfillment_flow.sys_id,
+        display_value=context.fulfillment_flow.display,
+    )
+
+
 def _catalog_variable_payload(
     *,
     intent: CatalogItemIntent,
@@ -457,31 +894,167 @@ def _catalog_variable_payload(
     catalog_item_sys_id: str,
     update_name: str,
 ) -> str:
+    return _item_option_payload(
+        item_name=intent.name,
+        name=variable.name,
+        label=variable.label,
+        type_id=CATALOG_VARIABLE_TYPE_IDS[variable.variable_type],
+        order=variable.order,
+        mandatory=variable.mandatory,
+        default_value=variable.default_value,
+        help_text=variable.help_text,
+        reference_part=_reference_variable_payload(variable),
+        variable_sys_id=variable_sys_id,
+        catalog_item_sys_id=catalog_item_sys_id,
+        update_name=update_name,
+    )
+
+
+def _container_variable_update(
+    *,
+    intent: CatalogItemIntent,
+    group: CatalogVariableGroup,
+    container_kind: str,
+    order: int,
+    catalog_item_sys_id: str,
+    remote_update_set_sys_id: str,
+) -> dict[str, Any]:
+    name = (
+        group.container_start_name
+        if container_kind == "container_start"
+        else group.container_end_name
+    )
+    variable_sys_id = _stable_sys_id("item_option_new", intent.name, name)
+    update_name = f"item_option_new_{variable_sys_id}"
+    is_start = container_kind == "container_start"
+    target_suffix = group.title if is_start else f"{group.title} (container end)"
+    return {
+        "name": update_name,
+        "remote_update_set": remote_update_set_sys_id,
+        "action": "INSERT_OR_UPDATE",
+        "type": "Catalog Variable",
+        "target_name": f"{intent.name}.{target_suffix}",
+        "payload": _item_option_payload(
+            item_name=intent.name,
+            name=name,
+            label=group.title if is_start else "",
+            type_id=CATALOG_CONTAINER_TYPE_IDS[container_kind],
+            order=order,
+            mandatory=False,
+            default_value="",
+            help_text="",
+            reference_part="",
+            variable_sys_id=variable_sys_id,
+            catalog_item_sys_id=catalog_item_sys_id,
+            update_name=update_name,
+        ),
+        "application": "global",
+    }
+
+
+def _item_option_payload(
+    *,
+    item_name: str,
+    name: str,
+    label: str,
+    type_id: str,
+    order: int,
+    mandatory: bool,
+    default_value: str,
+    help_text: str,
+    reference_part: str,
+    variable_sys_id: str,
+    catalog_item_sys_id: str,
+    update_name: str,
+    field_part: str = "",
+    mapping_part: str = "",
+) -> str:
+    """Render one item_option_new customer-update payload.
+
+    Shared by catalog items and record producers: ``field_part`` and
+    ``mapping_part`` carry the record-producer field-mapping elements and
+    default to empty strings, so catalog item payloads stay byte-identical.
+    """
     return record_update(
         container_element(
             "item_option_new",
             "<active>true</active>",
-            text_element("cat_item", catalog_item_sys_id, display_value=intent.name),
-            text_element("default_value", variable.default_value),
-            text_element("help_text", variable.help_text),
-            bool_element("mandatory", variable.mandatory),
-            text_element("name", variable.name),
-            text_element("order", str(variable.order)),
-            text_element("question_text", variable.label),
-            _reference_variable_payload(variable),
+            text_element("cat_item", catalog_item_sys_id, display_value=item_name),
+            text_element("default_value", default_value),
+            field_part,
+            text_element("help_text", help_text),
+            bool_element("mandatory", mandatory),
+            mapping_part,
+            text_element("name", name),
+            text_element("order", str(order)),
+            text_element("question_text", label),
+            reference_part,
             "<show_help>true</show_help>",
             "<sys_class_name>item_option_new</sys_class_name>",
             text_element("sys_id", variable_sys_id),
             SYS_SCOPE_GLOBAL,
             text_element("sys_update_name", update_name),
-            text_element("type", CATALOG_VARIABLE_TYPE_IDS[variable.variable_type]),
-            text_element("variable_name", variable.name),
+            text_element("type", type_id),
+            text_element("variable_name", name),
             "<visible_bundle>true</visible_bundle>",
             "<visible_standalone>true</visible_standalone>",
             "<visible_summary>true</visible_summary>",
             action="INSERT_OR_UPDATE",
         ),
         table="item_option_new",
+    )
+
+
+def _variable_set_link_update(
+    *,
+    intent: CatalogItemIntent,
+    variable_set: CatalogResolvedReference,
+    catalog_item_sys_id: str,
+    remote_update_set_sys_id: str,
+) -> dict[str, Any]:
+    relation_sys_id = _stable_sys_id("io_set_item", catalog_item_sys_id, variable_set.sys_id)
+    update_name = f"io_set_item_{relation_sys_id}"
+    return {
+        "name": update_name,
+        "remote_update_set": remote_update_set_sys_id,
+        "action": "INSERT_OR_UPDATE",
+        "type": "Catalog Variable Set Link",
+        "target_name": f"{intent.name}.{variable_set.display}",
+        "payload": _variable_set_link_payload(
+            intent=intent,
+            variable_set=variable_set,
+            relation_sys_id=relation_sys_id,
+            catalog_item_sys_id=catalog_item_sys_id,
+            update_name=update_name,
+        ),
+        "application": "global",
+    }
+
+
+def _variable_set_link_payload(
+    *,
+    intent: CatalogItemIntent,
+    variable_set: CatalogResolvedReference,
+    relation_sys_id: str,
+    catalog_item_sys_id: str,
+    update_name: str,
+) -> str:
+    return record_update(
+        container_element(
+            "io_set_item",
+            text_element("sc_cat_item", catalog_item_sys_id, display_value=intent.name),
+            "<sys_class_name>io_set_item</sys_class_name>",
+            text_element("sys_id", relation_sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element(
+                "variable_set",
+                variable_set.sys_id,
+                display_value=variable_set.display,
+            ),
+            action="INSERT_OR_UPDATE",
+        ),
+        table="io_set_item",
     )
 
 

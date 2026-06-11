@@ -8,6 +8,16 @@ Add a constrained, production-shaped automation capability for standard ServiceN
 
 `catalog_item_create` currently runs in candidate-generation mode only. The Sprint 161 builder-maturity routing model scores the catalog surfaces (`catalog_definitions`, `catalog_categories`, `employee_center_topics`, `employee_center_connected_content`) at 0.60, below `AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75` in `src/jedi_devproject/implementation_packet.py` (`_builder_maturity_for_surface()`), so catalog candidates route to manual review and no retrieved Update Set handoff is created automatically. The Handoff Contract below describes the implemented builder and re-applies when catalog builder maturity crosses the threshold.
 
+**Sprint 163 update.** The builder now additionally supports:
+
+- declarative reference qualifier serialization for reference variables (encoded-query grammar, fail-closed validation, script indicators rejected);
+- attachment of EXISTING variable sets via `io_set_item` link updates (variable set creation remains refused);
+- container grouping of the item's own variables via `container_start`/`container_end` variables (type ids 19/20);
+- sibling catalog behavior capabilities `catalog_ui_policy_generate` (`catalog_ui_policy` / `catalog_ui_policy_action`) and `catalog_client_script_generate` (`catalog_script_client`, deterministic g_form-only rendered scripts), candidate generation only at maturity baseline 0.30 with UAT-unconfirmed XML shape assumptions;
+- attachment of an EXISTING active record-triggered fulfillment flow via `sc_cat_item.flow_designer_flow`, resolved fail-closed with reason codes `fulfillment_flow:not_found` / `ambiguous` / `inactive` / `not_record_triggered` (flow creation and modification remain forbidden; new maturity surface `catalog_fulfillment_flows` at 0.30 routes attaching candidates to manual review).
+
+The "Variable Sets and multi-row variable sets" entry in Explicit Non-Scope below is therefore partially superseded: attaching existing variable sets is supported as of Sprint 163, while creating variable sets (including multi-row variable sets) is still refused. The "Fulfillment flow or workflow creation" entry is likewise narrowed: attaching an existing flow is supported; creating or modifying flows is still refused.
+
 ## Decision
 
 Implement a first-class `catalog_item_create` capability. Do not fold catalog work into dictionary/form generation.

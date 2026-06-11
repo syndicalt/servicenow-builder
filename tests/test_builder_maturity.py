@@ -4,6 +4,7 @@ import math
 
 from jedi_devproject.builder_maturity import (
     BASELINE_BUILDER_MATURITY,
+    CATALOG_FULFILLMENT_FLOW_SURFACE,
     MATURITY_EVIDENCE_BLEND_PIVOT_SAMPLES,
     MAX_BUILDER_MATURITY_SCORE,
     MIN_MATURITY_EVIDENCE_SAMPLES,
@@ -68,6 +69,10 @@ def test_baseline_table_preserves_authoritative_constants() -> None:
     assert baseline_builder_maturity_for_surface("catalog_categories") == 0.60
     assert baseline_builder_maturity_for_surface("employee_center_topics") == 0.60
     assert baseline_builder_maturity_for_surface("employee_center_connected_content") == 0.60
+    assert baseline_builder_maturity_for_surface("catalog_ui_policies") == 0.30
+    assert baseline_builder_maturity_for_surface("catalog_client_scripts") == 0.30
+    assert baseline_builder_maturity_for_surface("record_producers") == 0.30
+    assert baseline_builder_maturity_for_surface("catalog_fulfillment_flows") == 0.30
     assert baseline_builder_maturity_for_surface("flows") == 0.0
     assert set(BASELINE_BUILDER_MATURITY) == {
         "table_schema",
@@ -78,6 +83,10 @@ def test_baseline_table_preserves_authoritative_constants() -> None:
         "catalog_categories",
         "employee_center_topics",
         "employee_center_connected_content",
+        "catalog_ui_policies",
+        "catalog_client_scripts",
+        "record_producers",
+        "catalog_fulfillment_flows",
     }
 
 
@@ -215,6 +224,36 @@ def test_builder_maturity_for_change_tables_takes_conservative_minimum() -> None
     assert scored.score < 0.95
 
 
+def test_fulfillment_flow_extra_surface_takes_conservative_minimum() -> None:
+    catalog_tables = {
+        "sc_cat_item",
+        "item_option_new",
+        "sc_cat_item_category",
+        "m2m_connected_content",
+    }
+
+    without_flow = builder_maturity_for_change_tables(catalog_tables)
+    with_flow = builder_maturity_for_change_tables(
+        catalog_tables,
+        extra_surfaces=(CATALOG_FULFILLMENT_FLOW_SURFACE,),
+    )
+
+    assert without_flow.score == 0.60
+    assert with_flow.surface == "catalog_fulfillment_flows"
+    assert with_flow.score == 0.30
+    assert with_flow.source == "baseline"
+
+
+def test_extra_surfaces_do_not_rescue_unmapped_change_tables() -> None:
+    scored = builder_maturity_for_change_tables(
+        {"sys_script"},
+        extra_surfaces=(CATALOG_FULFILLMENT_FLOW_SURFACE,),
+    )
+
+    assert scored.surface == "unmapped_change_tables"
+    assert scored.score == 0.0
+
+
 def test_operational_store_provider_converts_store_record_to_evidence() -> None:
     store = FakeEvidenceStore(
         SurfaceMaturityEvidenceRecord(
@@ -235,4 +274,80 @@ def test_operational_store_provider_converts_store_record_to_evidence() -> None:
         samples=12,
         successes=9,
         failures=3,
+    )
+
+
+_CATALOG_ITEM_TABLES = frozenset(
+    {"sc_cat_item", "item_option_new", "sc_cat_item_category", "m2m_connected_content"}
+)
+_CATALOG_SURFACES = (
+    "catalog_definitions",
+    "catalog_categories",
+    "employee_center_topics",
+    "employee_center_connected_content",
+)
+
+
+def test_catalog_behavior_tables_map_to_behavior_surfaces() -> None:
+    assert surfaces_for_change_tables(set(_CATALOG_ITEM_TABLES)) == _CATALOG_SURFACES
+    assert surfaces_for_change_tables(
+        _CATALOG_ITEM_TABLES | {"catalog_ui_policy", "catalog_ui_policy_action"}
+    ) == (*_CATALOG_SURFACES, "catalog_ui_policies")
+    assert surfaces_for_change_tables(
+        _CATALOG_ITEM_TABLES | {"catalog_script_client"}
+    ) == (*_CATALOG_SURFACES, "catalog_client_scripts")
+    assert surfaces_for_change_tables(
+        _CATALOG_ITEM_TABLES
+        | {"catalog_ui_policy", "catalog_ui_policy_action", "catalog_script_client"}
+    ) == (*_CATALOG_SURFACES, "catalog_ui_policies", "catalog_client_scripts")
+
+
+def test_catalog_behavior_tables_score_at_conservative_baseline() -> None:
+    scored = builder_maturity_for_change_tables(
+        _CATALOG_ITEM_TABLES
+        | {"catalog_ui_policy", "catalog_ui_policy_action", "catalog_script_client"}
+    )
+
+    assert scored.score == 0.30
+    assert scored.source == "baseline"
+    assert scored.surface in {"catalog_ui_policies", "catalog_client_scripts"}
+
+
+def test_record_producer_change_tables_map_to_record_producer_surfaces() -> None:
+    surfaces = surfaces_for_change_tables(
+        {"sc_cat_item_producer", "item_option_new", "sc_cat_item_category"}
+    )
+
+    assert surfaces == (
+        "catalog_definitions",
+        "catalog_categories",
+        "record_producers",
+    )
+
+
+def test_record_producer_candidates_score_at_conservative_baseline() -> None:
+    scored = builder_maturity_for_change_tables(
+        {"sc_cat_item_producer", "item_option_new", "sc_cat_item_category"}
+    )
+
+    assert scored.surface == "record_producers"
+    assert scored.score == 0.30
+    assert scored.source == "baseline"
+
+
+def test_catalog_change_tables_keep_their_existing_surface_mapping() -> None:
+    surfaces = surfaces_for_change_tables(
+        {
+            "sc_cat_item",
+            "item_option_new",
+            "sc_cat_item_category",
+            "m2m_connected_content",
+        }
+    )
+
+    assert surfaces == (
+        "catalog_definitions",
+        "catalog_categories",
+        "employee_center_topics",
+        "employee_center_connected_content",
     )

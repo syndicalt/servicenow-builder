@@ -123,6 +123,22 @@ The most valuable single capability neither track delivers alone: attaching a fu
 - **Second provider adapter** (Bedrock/Anthropic via a GovCloud-approved path) — the provider registry design anticipates it; today OpenAI is a single point of policy failure.
 - **Feedback-driven story rewriting at intake** — Sprint 157's rewrite suggestions could move upstream into the intake flow, raising the share of stories that pass gates at all.
 
+### Status update (Sprint 163)
+
+- **4.1.1 Reference qualifier serialization** — delivered (declarative encoded-query grammar, fail-closed validation).
+- **4.1.2 Catalog UI policies** — delivered (`catalog_ui_policy_generate`, candidate generation only at 0.30; XML shapes are UAT-unconfirmed evidence assumptions).
+- **4.1.3 Catalog client scripts** — delivered (`catalog_client_script_generate`, deterministic g_form-only rendered scripts, candidate generation only at 0.30).
+- **4.1.4 Variable sets and container grouping** — delivered for the narrow scope: attaching EXISTING variable sets via `io_set_item` and container grouping via container_start/end variables; variable set creation remains refused.
+- **4.1.5 Record producers** — delivered (`record_producer_create`, script-free `map_to_field` mapping, candidate generation only at 0.30; producer scripts route to manual review).
+- **4.1.6 Evidence-driven maturity promotion** — the evidence-driven maturity mechanism was delivered earlier in Sprint 162; catalog promotion above 0.75 is pending UAT evidence.
+- **4.2.1 XML shape evidence collection** — collector delivered (`flow_xml_evidence.py`, validated against `flow-xml-shapes-v1`, SHA-256 audit hashes, redaction); the run against the real DEV instance is still pending.
+- **4.2.2 Deterministic graph-diff builder** — delivered (`flow_builder.py`, one additive action or one condition update, deterministic sys_ids, never mutates snapshots).
+- **4.2.3 Snapshot strategy implementation** — delivered (`latest_snapshot` currency evidence coded into the evidence collector and readiness contract).
+- **4.2.4 Round-trip harness** — delivered (`flow_roundtrip.py`; never commits — preview/commit stays the human boundary). The readiness contract is now evidence-driven instead of hardcoded not-ready; runtime generation stays dark until instance evidence is collected.
+- **4.2.5 Staged expansion** — NOT delivered; templates for new record-triggered flow creation remain future work.
+- **4.3 Catalog fulfillment flows** — delivered for the narrow attach-existing scope: `sc_cat_item.flow_designer_flow` references an EXISTING active record-triggered flow (fail-closed resolver with `fulfillment_flow:*` reason codes; new `catalog_fulfillment_flows` surface at 0.30). Flow create/modify remains forbidden.
+- **4.4 Other candidates** — ATF test plan generation delivered (`atf_test_generation.py`, `atf-test-plan-v1`, fail-open attachment); Anthropic provider adapter delivered (`anthropic_provider.py`, not yet wired into runtime provider selection — registry decision deferred); intake story rewrite feedback delivered (`intake-feedback-v1` via allowlisted work-notes writeback, idempotent, fail-open).
+
 ---
 
 ## 5. Recommended Sequencing

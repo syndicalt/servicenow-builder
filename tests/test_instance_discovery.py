@@ -1,5 +1,11 @@
 from typing import Any
 
+import pytest
+
+from jedi_devproject.discovery.flows import (
+    FulfillmentFlowResolutionError,
+    resolve_fulfillment_flow,
+)
 from jedi_devproject.instance_discovery import (
     DiscoveredField,
     DiscoveredFormElement,
@@ -354,6 +360,15 @@ class FakeDiscoveryClient:
                     "active": "true",
                 }
             ]
+        if table == "item_option_new_set" and lookup == {}:
+            return [
+                {
+                    "sys_id": "variable-set-sys-id",
+                    "title": "Common Visitor Questions",
+                    "internal_name": "common_visitor_questions",
+                    "active": "true",
+                }
+            ]
         if table == "m2m_connected_content" and lookup == {}:
             return [
                 {
@@ -509,6 +524,70 @@ def test_discover_servicenow_surface_context_collects_catalog_employee_center_su
     assert connected_content.records[0].name == "Catalog Item"
     assert connected_content.records[0].metadata["sys_id"] == "catalog-item-content-type-sys-id"
     assert any(call["table"] == "taxonomy" for call in client.calls)
+
+
+def test_discover_servicenow_surface_context_collects_catalog_variable_sets_surface() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="sc_cat_item",
+        story_text=(
+            "Create a catalog item in the Service Catalog and attach the "
+            "Common Visitor Questions variable set."
+        ),
+        public_doc_queries=[],
+    )
+
+    assert "catalog_variable_sets" in bundle.required_surfaces
+    variable_sets = bundle.surface("catalog_variable_sets")
+    assert variable_sets.required is True
+    assert variable_sets.source_table == "item_option_new_set"
+    assert variable_sets.records[0].name == "Common Visitor Questions"
+    assert variable_sets.records[0].metadata["internal_name"] == "common_visitor_questions"
+    assert "catalog_variable_sets" not in bundle.missing_required_surfaces
+
+
+def test_catalog_variable_sets_surface_fails_closed_when_required_but_empty() -> None:
+    class EmptyVariableSetClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "item_option_new_set":
+                return []
+            return super().fetch_table_records(
+                table=table, lookup=lookup, fields=fields, limit=limit
+            )
+
+    bundle = discover_servicenow_surface_context(
+        client=EmptyVariableSetClient(),
+        target_table="sc_cat_item",
+        story_text="Create a catalog item and attach an existing variable set.",
+        public_doc_queries=[],
+    )
+
+    assert "catalog_variable_sets" in bundle.missing_required_surfaces
+    assert bundle.context_sufficient is False
+
+
+def test_catalog_variable_sets_surface_is_not_fetched_when_not_required() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text="Add a field to the incident form.",
+        public_doc_queries=[],
+    )
+
+    assert "catalog_variable_sets" not in bundle.required_surfaces
+    assert bundle.surface("catalog_variable_sets").records == []
+    assert all(call["table"] != "item_option_new_set" for call in client.calls)
 
 
 def test_discover_servicenow_surface_context_collects_cmdb_ire_surfaces() -> None:
@@ -817,3 +896,194 @@ def test_script_include_only_context_does_not_require_table_schema_or_form_layou
     assert bundle.surface("table_schema").required is False
     assert bundle.surface("form_layout").required is False
     assert bundle.surface("script_includes").required is True
+
+
+def test_record_producer_story_requires_catalog_placement_surfaces() -> None:
+    client = FakeDiscoveryClient()
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text=(
+            "Create a record producer for incident with fields summary, details "
+            "mapped to short_description, description."
+        ),
+        public_doc_queries=[],
+    )
+
+    assert "catalog_definitions" in bundle.required_surfaces
+    assert "catalog_categories" in bundle.required_surfaces
+    catalogs = bundle.surface("catalog_definitions")
+    assert catalogs.required is True
+    assert catalogs.records[0].name == "Service Catalog"
+    categories = bundle.surface("catalog_categories")
+    assert categories.required is True
+
+
+class FakeFulfillmentFlowClient:
+    """Configurable sys_hub_flow / sys_hub_trigger_instance fixture."""
+
+    def __init__(
+        self,
+        *,
+        flows: list[dict[str, Any]] | None = None,
+        triggers: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.flows = (
+            flows
+            if flows is not None
+            else [
+                {
+                    "sys_id": "badge-flow-sys-id",
+                    "name": "Badge Access Fulfillment",
+                    "internal_name": "badge_access_fulfillment",
+                    "active": "true",
+                    "status": "published",
+                    "type": "flow",
+                }
+            ]
+        )
+        self.triggers = (
+            triggers
+            if triggers is not None
+            else [
+                {
+                    "sys_id": "badge-trigger-sys-id",
+                    "trigger_type": {
+                        "value": "record-trigger-type-sys-id",
+                        "display_value": "Record Created",
+                    },
+                    "trigger_definition": "record_create",
+                    "display_text": "Created [sc_req_item]",
+                }
+            ]
+        )
+        self.fetches: list[dict[str, object]] = []
+
+    def fetch_table_records(
+        self,
+        *,
+        table: str,
+        lookup: dict[str, str],
+        fields: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        self.fetches.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
+        if table == "sys_hub_flow":
+            return self.flows
+        if table == "sys_hub_trigger_instance":
+            return [
+                trigger
+                for trigger in self.triggers
+                if lookup == {"flow": "badge-flow-sys-id"} or not lookup
+            ]
+        return []
+
+
+def test_resolve_fulfillment_flow_returns_active_record_triggered_flow() -> None:
+    client = FakeFulfillmentFlowClient()
+
+    resolved = resolve_fulfillment_flow(client=client, flow_name="badge access fulfillment")
+
+    assert resolved.sys_id == "badge-flow-sys-id"
+    assert resolved.name == "Badge Access Fulfillment"
+    assert resolved.trigger_type == "Record Created"
+    assert [fetch["table"] for fetch in client.fetches] == [
+        "sys_hub_flow",
+        "sys_hub_trigger_instance",
+    ]
+    assert client.fetches[1]["lookup"] == {"flow": "badge-flow-sys-id"}
+
+
+def test_resolve_fulfillment_flow_fails_closed_when_missing() -> None:
+    client = FakeFulfillmentFlowClient(flows=[])
+
+    with pytest.raises(FulfillmentFlowResolutionError, match="was not found") as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:not_found"
+
+
+def test_resolve_fulfillment_flow_fails_closed_on_empty_name() -> None:
+    client = FakeFulfillmentFlowClient()
+
+    with pytest.raises(FulfillmentFlowResolutionError, match="must not be empty") as raised:
+        resolve_fulfillment_flow(client=client, flow_name="   ")
+
+    assert raised.value.reason_code == "fulfillment_flow:not_found"
+    assert client.fetches == []
+
+
+def test_resolve_fulfillment_flow_fails_closed_when_ambiguous() -> None:
+    client = FakeFulfillmentFlowClient()
+    client.flows = [
+        client.flows[0],
+        {**client.flows[0], "sys_id": "duplicate-badge-flow-sys-id"},
+    ]
+
+    with pytest.raises(FulfillmentFlowResolutionError, match="is ambiguous") as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:ambiguous"
+
+
+def test_resolve_fulfillment_flow_fails_closed_when_inactive() -> None:
+    client = FakeFulfillmentFlowClient()
+    client.flows = [{**client.flows[0], "active": "false"}]
+
+    with pytest.raises(FulfillmentFlowResolutionError, match="is not active") as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:inactive"
+
+
+def test_resolve_fulfillment_flow_fails_closed_when_activity_is_unknown() -> None:
+    client = FakeFulfillmentFlowClient()
+    client.flows = [{**client.flows[0], "active": ""}]
+
+    with pytest.raises(FulfillmentFlowResolutionError) as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:inactive"
+
+
+def test_resolve_fulfillment_flow_fails_closed_without_record_trigger() -> None:
+    client = FakeFulfillmentFlowClient(
+        triggers=[
+            {
+                "sys_id": "scheduled-trigger-sys-id",
+                "trigger_type": {
+                    "value": "scheduled-trigger-type-sys-id",
+                    "display_value": "Scheduled",
+                },
+                "trigger_definition": "daily",
+                "display_text": "Daily at 09:00",
+            }
+        ]
+    )
+
+    with pytest.raises(
+        FulfillmentFlowResolutionError, match="not record-triggered"
+    ) as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:not_record_triggered"
+
+
+def test_resolve_fulfillment_flow_fails_closed_without_any_trigger() -> None:
+    client = FakeFulfillmentFlowClient(triggers=[])
+
+    with pytest.raises(FulfillmentFlowResolutionError) as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:not_record_triggered"
+
+
+def test_resolve_fulfillment_flow_fails_closed_on_missing_sys_id() -> None:
+    client = FakeFulfillmentFlowClient()
+    client.flows = [{**client.flows[0], "sys_id": ""}]
+
+    with pytest.raises(FulfillmentFlowResolutionError, match="missing sys_id") as raised:
+        resolve_fulfillment_flow(client=client, flow_name="Badge Access Fulfillment")
+
+    assert raised.value.reason_code == "fulfillment_flow:not_found"

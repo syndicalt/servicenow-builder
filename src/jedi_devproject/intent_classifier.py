@@ -11,12 +11,36 @@ from jedi_devproject.story_features import (
     _field_type,
     _form_section_names,
     _is_cmdb_ire_analysis_request,
+    _record_producer_field_mappings,
     _target_table,
 )
 
 
+def _is_catalog_ui_policy_request(text: str) -> bool:
+    return "catalog ui policy" in text or "catalog ui policies" in text
+
+
+def _is_record_producer_request(text: str) -> bool:
+    return "record producer" in text
+
+
+def _is_catalog_item_creation_request(text: str) -> bool:
+    """A catalog item request: drives request fulfillment, not record creation."""
+    return "catalog item" in text
+
+
+def _is_catalog_client_script_request(text: str) -> bool:
+    return "catalog client script" in text or "catalog client scripts" in text
+
+
 def _requested_capabilities(text: str) -> set[Capability]:
     capabilities: set[Capability] = set()
+    if _is_catalog_ui_policy_request(text):
+        capabilities.add(Capability.CATALOG_UI_POLICY_GENERATE)
+    if _is_catalog_client_script_request(text):
+        capabilities.add(Capability.CATALOG_CLIENT_SCRIPT_GENERATE)
+    if _is_record_producer_request(text):
+        capabilities.add(Capability.RECORD_PRODUCER_CREATE)
     if _is_dictionary_form_request(text):
         capabilities.update(
             {
@@ -73,6 +97,8 @@ def _missing_details(text: str) -> list[str]:
             missing.append("target table")
         if not _form_section_names(text):
             missing.append("sections")
+    if _is_record_producer_request(text):
+        missing.extend(_missing_record_producer_details(text))
     if _is_business_rule_generation_request(text):
         missing.extend(_missing_business_rule_generation_details(text))
     elif _is_business_rule_request(text) and _target_table(text) is None:
@@ -86,6 +112,16 @@ def _missing_details(text: str) -> list[str]:
     if _is_ui_policy_generation_request(text):
         missing.extend(_missing_ui_policy_generation_details(text))
     return missing
+
+
+def _missing_record_producer_details(text: str) -> list[str]:
+    mappings = _record_producer_field_mappings(text)
+    checks = [
+        ("target table", _target_table(text) is not None),
+        ("variables", bool(mappings) or "variables:" in text),
+        ("variable field mappings", bool(mappings)),
+    ]
+    return [label for label, present in checks if not present]
 
 
 def _is_business_rule_request(text: str) -> bool:
@@ -353,6 +389,7 @@ def _is_dictionary_form_request(text: str) -> bool:
         or "script include" in text
         or "ui policy" in text
         or "ui policies" in text
+        or _is_record_producer_request(text)
         or _is_form_section_request(text)
     ):
         return False

@@ -82,6 +82,7 @@ SurfaceName = Literal[
     "form_layout",
     "catalog_definitions",
     "catalog_categories",
+    "catalog_variable_sets",
     "employee_center_topics",
     "employee_center_connected_content",
     "business_rules",

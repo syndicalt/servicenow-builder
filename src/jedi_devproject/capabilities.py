@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class Capability(StrEnum):
     CATALOG_ITEM_CREATE = "catalog_item_create"
+    RECORD_PRODUCER_CREATE = "record_producer_create"
+    CATALOG_UI_POLICY_GENERATE = "catalog_ui_policy_generate"
+    CATALOG_CLIENT_SCRIPT_GENERATE = "catalog_client_script_generate"
     BUSINESS_RULE_ANALYZE = "business_rule_analyze"
     BUSINESS_RULE_GENERATE = "business_rule_generate"
     CLIENT_SCRIPT_ANALYZE = "client_script_analyze"
@@ -389,8 +392,8 @@ def _catalog_item_generation_profile() -> CapabilityProfile:
         ],
         unsupported_cases=[
             "Record Producers",
-            "Catalog Client Scripts",
-            "Catalog UI Policies",
+            "Catalog Client Scripts on existing catalog items",
+            "Catalog UI Policies on existing catalog items",
             "Variable Sets",
             "multi-row variable sets",
             "fulfillment flow or workflow creation",
@@ -411,6 +414,138 @@ def _catalog_item_generation_profile() -> CapabilityProfile:
         ],
         researcher="catalog_item_researcher",
         build_pipeline="catalog_item_update_set_pipeline",
+        current_max_story_points=3,
+        target_max_story_points=5,
+        creates_update_set=False,
+    )
+
+
+CATALOG_ITEM_REQUIRED_INSTANCE_CONTEXT = [
+    "catalog_definitions",
+    "catalog_categories",
+    "employee_center_topics",
+    "employee_center_connected_content",
+]
+
+
+def _record_producer_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.RECORD_PRODUCER_CREATE,
+        status="candidate_generation",
+        supported_artifacts=[
+            "sc_cat_item_producer",
+            "item_option_new",
+            "sc_cat_item_category",
+        ],
+        required_instance_context=[
+            "table_schema",
+            "catalog_definitions",
+            "catalog_categories",
+        ],
+        deterministic_validators=[
+            "target_table_resolved",
+            "mapped_fields_resolved_on_target_table",
+            "catalog_resolved",
+            "category_resolved_under_catalog",
+            "record_producer_variables_validated",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "producer scripts and script-based field mapping",
+            "catalog item creation in the same story",
+            "fulfillment flow or workflow creation",
+            "approval orchestration",
+            "Variable Sets",
+            "user criteria or entitlement changes",
+            "redirect and portal view settings",
+            "Employee Center topic or taxonomy association",
+        ],
+        uat_story_shape=[
+            "record producer name",
+            "short description",
+            "target table",
+            "catalog",
+            "category",
+            "variables with target field mappings",
+            "test evidence",
+        ],
+        researcher="catalog_item_researcher",
+        build_pipeline="record_producer_candidate_pipeline",
+        current_max_story_points=3,
+        target_max_story_points=5,
+        creates_update_set=False,
+    )
+
+
+def _catalog_ui_policy_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.CATALOG_UI_POLICY_GENERATE,
+        status="candidate_generation",
+        supported_artifacts=["catalog_ui_policy", "catalog_ui_policy_action"],
+        required_instance_context=list(CATALOG_ITEM_REQUIRED_INSTANCE_CONTEXT),
+        deterministic_validators=[
+            "catalog_item_intent_present",
+            "policy_variables_resolved_against_item_variables",
+            "declarative_condition_validated",
+            "ui_policy_actions_validated",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "run scripts",
+            "advanced scripts",
+            "policies on existing catalog items",
+            "conditions outside the item's own variables",
+            "Catalog Client Script behavior",
+            "ACL changes",
+            "integration calls",
+        ],
+        uat_story_shape=[
+            "catalog item story with variables",
+            "rule title",
+            "declarative condition on item variables",
+            "show/hide, require/optional, read-only actions",
+            "reverse if false decision",
+            "test evidence",
+        ],
+        researcher="catalog_item_researcher",
+        build_pipeline="catalog_ui_policy_candidate_pipeline",
+        current_max_story_points=3,
+        target_max_story_points=5,
+        creates_update_set=False,
+    )
+
+
+def _catalog_client_script_generation_profile() -> CapabilityProfile:
+    return CapabilityProfile(
+        capability=Capability.CATALOG_CLIENT_SCRIPT_GENERATE,
+        status="candidate_generation",
+        supported_artifacts=["catalog_script_client"],
+        required_instance_context=list(CATALOG_ITEM_REQUIRED_INSTANCE_CONTEXT),
+        deterministic_validators=[
+            "catalog_item_intent_present",
+            "script_variables_resolved_against_item_variables",
+            "script_safety_validated",
+            "declared_field_writes_validated",
+            "xml_customer_update_validated",
+        ],
+        unsupported_cases=[
+            "DOM manipulation outside g_form APIs",
+            "GlideAjax dependency creation",
+            "external calls",
+            "credentials",
+            "scripts on existing catalog items",
+            "free-form script bodies",
+        ],
+        uat_story_shape=[
+            "catalog item story with variables",
+            "script name",
+            "script type (onLoad/onChange/onSubmit)",
+            "watched variable for onChange",
+            "declarative set/clear actions on item variables",
+            "test evidence",
+        ],
+        researcher="catalog_item_researcher",
+        build_pipeline="catalog_client_script_candidate_pipeline",
         current_max_story_points=3,
         target_max_story_points=5,
         creates_update_set=False,
@@ -520,6 +655,9 @@ CAPABILITY_REGISTRY: dict[Capability, CapabilityProfile] = {
     ),
     Capability.FORM_SECTION_REMOVE: _form_section_profile(),
     Capability.CATALOG_ITEM_CREATE: _catalog_item_generation_profile(),
+    Capability.RECORD_PRODUCER_CREATE: _record_producer_generation_profile(),
+    Capability.CATALOG_UI_POLICY_GENERATE: _catalog_ui_policy_generation_profile(),
+    Capability.CATALOG_CLIENT_SCRIPT_GENERATE: _catalog_client_script_generation_profile(),
     Capability.BUSINESS_RULE_ANALYZE: _code_surface_profile(
         capability=Capability.BUSINESS_RULE_ANALYZE,
         supported_artifact="sys_script",
@@ -603,6 +741,9 @@ def generation_capability_profiles() -> list[CapabilityProfile]:
         CAPABILITY_REGISTRY[Capability.FORM_LAYOUT_PLACE_FIELD],
         CAPABILITY_REGISTRY[Capability.FORM_SECTION_REMOVE],
         CAPABILITY_REGISTRY[Capability.CATALOG_ITEM_CREATE],
+        CAPABILITY_REGISTRY[Capability.RECORD_PRODUCER_CREATE],
+        CAPABILITY_REGISTRY[Capability.CATALOG_UI_POLICY_GENERATE],
+        CAPABILITY_REGISTRY[Capability.CATALOG_CLIENT_SCRIPT_GENERATE],
         CAPABILITY_REGISTRY[Capability.BUSINESS_RULE_GENERATE],
         CAPABILITY_REGISTRY[Capability.CLIENT_SCRIPT_GENERATE],
         CAPABILITY_REGISTRY[Capability.SCRIPT_INCLUDE_GENERATE],

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+
+import pytest
 
 from jedi_devproject.fulfillment_worker import FulfillmentPersistedArtifact
 from jedi_devproject.model_fulfillment import (
@@ -506,13 +509,20 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
         "instance_context_bundle",
         "implementation_packet",
         "implementation_candidate",
+        "atf_test_plan",
     ]
     assert result.artifacts[0].schema_version == "servicenow-surface-context-v1"
     assert result.artifacts[1].schema_version == "implementation-packet-v1"
     assert result.artifacts[2].schema_version == "implementation-candidate-v1"
+    assert result.artifacts[3].schema_version == "atf-test-plan-v1"
     context_bundle = result.artifacts[0].payload_json
     packet = result.artifacts[1].payload_json
     candidate = result.artifacts[2].payload_json
+    atf_test_plan = result.artifacts[3].payload_json
+    assert atf_test_plan is not None
+    assert atf_test_plan["schema_version"] == "atf-test-plan-v1"
+    assert atf_test_plan["story_number"] == "STRY0010013"
+    assert atf_test_plan["tests"]
     assert context_bundle is not None
     assert packet is not None
     assert candidate is not None
@@ -796,8 +806,13 @@ def test_model_candidate_handler_fetches_story_by_sys_id_when_job_has_sys_id() -
         )
     )
 
-    assert result.artifacts[-1].payload_json is not None
-    assert result.artifacts[-1].payload_json["changes"][0]["fields"]["name"] == (
+    candidate_artifact = next(
+        artifact
+        for artifact in result.artifacts
+        if artifact.artifact_kind == "implementation_candidate"
+    )
+    assert candidate_artifact.payload_json is not None
+    assert candidate_artifact.payload_json["changes"][0]["fields"]["name"] == (
         "JEDI Duplicate Safe Client Script"
     )
     assert client.fetches[0]["lookup"] == {"query": "sys_id=correct-story-sys-id"}
@@ -974,15 +989,21 @@ def test_model_candidate_handler_emits_flow_preflight_guidance_artifact() -> Non
     assert guidance["readiness_contract_version"] == "flow-builder-readiness-v1"
     assert guidance["ready_for_runtime_generation"] is False
     assert guidance["ready_for_retrieved_update_set_handoff"] is False
+    # The deterministic builder is now available, so the builder requirement
+    # is satisfied, but no runtime XML shape or snapshot evidence has been
+    # collected from a real instance: generation stays dark and the story
+    # still routes to manual review.
     assert guidance["unsupported_reason_codes"] == [
-        "flow_builder_not_implemented",
         "runtime_generation_disabled",
         "retrieved_update_set_handoff_disabled",
     ]
+    assert "flow_builder_implemented" not in guidance["missing_evidence"]
+    assert "flow_snapshot_evidence_current" in guidance["missing_evidence"]
+    assert guidance["blocked_reason"] == "Flow Designer runtime evidence is incomplete"
     assert guidance["unsupported_reason_guidance"][0]["operator_action"] == (
         "route_to_human_review"
     )
-    assert "Flow Designer automation is context/preflight-only" in (
+    assert "The Flow Designer generation path is disabled until XML builder evidence" in (
         guidance["unsupported_reason_guidance"][0]["work_note"]
     )
     assert candidate["status"] == CandidateStatus.MANUAL_BUILD.value
@@ -1023,9 +1044,11 @@ def test_model_candidate_handler_emits_flow_preflight_guidance_artifact() -> Non
     assert "Flow preflight guidance artifact: db://artifact_blobs/1171." in (
         feedback_fields["work_notes"]
     )
-    assert "Flow Designer automation is context/preflight-only" in (
+    assert "The Flow Designer generation path is disabled until XML builder evidence" in (
         feedback_fields["work_notes"]
     )
+    # Routing is unchanged for non-ready flows: no retrieved Update Set import.
+    assert client.imports == []
 
 
 def test_model_candidate_handler_emits_form_section_context_artifact() -> None:
@@ -1087,6 +1110,7 @@ def test_model_candidate_handler_emits_form_section_context_artifact() -> None:
         "form_layout_analysis",
         "implementation_packet",
         "implementation_candidate",
+        "atf_test_plan",
     ]
     analysis = result.artifacts[1].payload_json
     candidate = result.artifacts[3].payload_json
@@ -1320,6 +1344,7 @@ def test_model_candidate_handler_generates_business_rule_update_set_handoff() ->
         "instance_context_bundle",
         "implementation_packet",
         "implementation_candidate",
+        "atf_test_plan",
     ]
     candidate = result.artifacts[2].payload_json
     assert candidate is not None
@@ -2088,7 +2113,11 @@ def test_model_candidate_handler_adds_live_public_docs_to_packet() -> None:
     result = handler(_job().model_copy(update={"story_number": "STRY0010994"}))
 
     assert transport.urls == ["https://docs.servicenow.com/ui-policy"]
-    packet = result.artifacts[-2].payload_json
+    packet = next(
+        artifact
+        for artifact in result.artifacts
+        if artifact.artifact_kind == "implementation_packet"
+    ).payload_json
     assert packet is not None
     assert packet["context_sufficiency"]["status"] == "sufficient"
     public_docs = [
@@ -2352,7 +2381,11 @@ def test_model_fulfillment_can_disable_classifier_gate_for_exploratory_reasoning
     )
 
     result = handler(_job().model_copy(update={"story_number": "STRY0010112"}))
-    candidate = result.artifacts[-1].payload_json
+    candidate = next(
+        artifact
+        for artifact in result.artifacts
+        if artifact.artifact_kind == "implementation_candidate"
+    ).payload_json
     assert candidate is not None
 
     assert provider.payloads
@@ -2437,3 +2470,41 @@ def test_model_candidate_handler_fails_closed_for_invalid_model_response(
 
     assert client.updated_fields == []
     assert list(tmp_path.rglob("*.json")) == []
+
+
+def test_model_candidate_handler_omits_atf_plan_when_generation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def explode(candidate: object) -> object:
+        raise RuntimeError("atf plan generation exploded")
+
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment.generate_atf_test_plan",
+        explode,
+    )
+    client = FakeModelClient()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=RecordingModelProvider(),
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="jedi_devproject.model_fulfillment"):
+        result = handler(_job())
+
+    assert result.message == "Implementation candidate generated for STRY0010013"
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    assert any(
+        "ATF test plan generation failed for STRY0010013" in record.message
+        for record in caplog.records
+    )

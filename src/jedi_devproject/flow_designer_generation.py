@@ -218,11 +218,33 @@ class FlowBuilderReadinessContract(BaseModel):
     version: Literal["flow-builder-readiness-v1"]
     required_evidence: list[str]
     missing_evidence: list[str]
+    requirement_status: dict[str, Literal["satisfied", "missing"]]
+    evidence_notes: list[str] = Field(default_factory=list)
     ready_for_runtime_generation: bool
     ready_for_retrieved_update_set_handoff: bool
     blocked_reason: str
     unsupported_reason_codes: list[str]
     unsupported_reason_guidance: list[FlowUnsupportedReasonGuidance]
+
+
+class FlowRuntimeEvidenceSummary(BaseModel):
+    """Persisted summary of a collected ``FlowXmlEvidenceBundle``.
+
+    The readiness contract consumes this summary so that evidence collection
+    (``flow_xml_evidence``) and the readiness gate stay decoupled. Shape tables
+    listed in ``validated_shape_tables`` have been retrieved and validated
+    against ``flow-xml-shapes-v1``. ``snapshot_current`` is true only when the
+    latest snapshot evidence was collected and matches the currently retrieved
+    flow graph hash.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    bundle_version: Literal["flow-xml-evidence-v1"]
+    flow_name: str
+    validated_shape_tables: list[str]
+    snapshot_current: bool
+    snapshot_staleness_reason: str = ""
 
 
 class FlowUnsupportedReasonGuidance(BaseModel):
@@ -423,37 +445,126 @@ def flow_preview_commit_review_strategy() -> FlowPreviewCommitReviewStrategy:
     )
 
 
+FLOW_DESIGN_EVIDENCE_REQUIREMENTS = [
+    "retrieved_graph_hash_matches_existing_graph_hash",
+    "diff_references_only_retrieved_nodes",
+    "diff_operation_is_add_action_or_update_condition",
+    "xml_shape_repository_available",
+    "xml_shape_evidence_validator_available",
+    "customer_update_name_strategy_defined",
+    "flow_snapshot_update_strategy_defined",
+    "rollback_customer_update_strategy_defined",
+    "servicenow_preview_commit_review_required",
+]
+
+FLOW_RUNTIME_SHAPE_EVIDENCE_TABLES = [
+    "sys_hub_flow",
+    "sys_hub_action_instance",
+    "sys_hub_flow_logic_instance_v2",
+]
+
+FLOW_SNAPSHOT_EVIDENCE_CURRENT_REQUIREMENT = "flow_snapshot_evidence_current"
+
+# Explicit named requirement for the deterministic graph-diff builder. It is
+# satisfied only when the caller passes the builder availability signal
+# (``flow_builder.flow_builder_available()``). The default path keeps it
+# missing so legacy consumers continue to fail closed
+# (reason code: flow_builder_not_implemented).
+FLOW_BUILDER_IMPLEMENTED_REQUIREMENT = "flow_builder_implemented"
+
+
+def flow_runtime_evidence_requirements() -> list[str]:
+    return [
+        *(
+            f"flow_xml_shape_evidence_validated:{table}"
+            for table in FLOW_RUNTIME_SHAPE_EVIDENCE_TABLES
+        ),
+        FLOW_SNAPSHOT_EVIDENCE_CURRENT_REQUIREMENT,
+    ]
+
+
 def flow_builder_readiness_contract(
     *,
     available_evidence: set[str] | None = None,
+    runtime_evidence: FlowRuntimeEvidenceSummary | None = None,
+    builder_available: bool = False,
 ) -> FlowBuilderReadinessContract:
+    """Aggregate design-time, runtime, and builder evidence into readiness.
+
+    Design-time strategy evidence (``FLOW_DESIGN_EVIDENCE_REQUIREMENTS``) is
+    defined in code and satisfied unless ``available_evidence`` narrows it.
+    Runtime evidence (validated XML shapes and current snapshot) is missing
+    unless a collected ``FlowRuntimeEvidenceSummary`` proves it.
+    ``ready_for_runtime_generation`` is true only when every evidence
+    requirement is satisfied. The ``flow_builder_implemented`` requirement is
+    satisfied only when the caller passes the deterministic builder
+    availability signal (``flow_builder.flow_builder_available()``);
+    ``ready_for_retrieved_update_set_handoff`` flips true only when that
+    signal is present and every evidence requirement is satisfied. The
+    default path (no signal, no evidence) is unchanged and fails closed.
+    """
+    design_required = list(FLOW_DESIGN_EVIDENCE_REQUIREMENTS)
     required_evidence = [
-        "retrieved_graph_hash_matches_existing_graph_hash",
-        "diff_references_only_retrieved_nodes",
-        "diff_operation_is_add_action_or_update_condition",
-        "xml_shape_repository_available",
-        "xml_shape_evidence_validator_available",
-        "customer_update_name_strategy_defined",
-        "flow_snapshot_update_strategy_defined",
-        "rollback_customer_update_strategy_defined",
-        "servicenow_preview_commit_review_required",
+        *design_required,
+        *flow_runtime_evidence_requirements(),
+        FLOW_BUILDER_IMPLEMENTED_REQUIREMENT,
     ]
-    evidence = set(required_evidence) if available_evidence is None else available_evidence
-    missing_evidence = [item for item in required_evidence if item not in evidence]
+    design_available = (
+        set(design_required) if available_evidence is None else set(available_evidence)
+    )
+    satisfied = {item for item in design_required if item in design_available}
+    evidence_notes: list[str] = []
+    if runtime_evidence is not None:
+        for table in FLOW_RUNTIME_SHAPE_EVIDENCE_TABLES:
+            if table in runtime_evidence.validated_shape_tables:
+                satisfied.add(f"flow_xml_shape_evidence_validated:{table}")
+        if runtime_evidence.snapshot_current:
+            satisfied.add(FLOW_SNAPSHOT_EVIDENCE_CURRENT_REQUIREMENT)
+        elif runtime_evidence.snapshot_staleness_reason:
+            evidence_notes.append(runtime_evidence.snapshot_staleness_reason)
+    if builder_available:
+        satisfied.add(FLOW_BUILDER_IMPLEMENTED_REQUIREMENT)
+    missing_evidence = [item for item in required_evidence if item not in satisfied]
+    builder_missing = FLOW_BUILDER_IMPLEMENTED_REQUIREMENT in missing_evidence
+    ready_for_runtime_generation = all(
+        item == FLOW_BUILDER_IMPLEMENTED_REQUIREMENT for item in missing_evidence
+    )
+    ready_for_retrieved_update_set_handoff = missing_evidence == []
+    unsupported_reason_codes: list[str] = []
+    if builder_missing:
+        unsupported_reason_codes.append("flow_builder_not_implemented")
+    if not ready_for_runtime_generation:
+        unsupported_reason_codes.append("runtime_generation_disabled")
+    if not ready_for_retrieved_update_set_handoff:
+        unsupported_reason_codes.append("retrieved_update_set_handoff_disabled")
+    if builder_missing:
+        blocked_reason = "Flow Designer builder is not implemented"
+    elif ready_for_retrieved_update_set_handoff:
+        blocked_reason = ""
+    else:
+        blocked_reason = "Flow Designer runtime evidence is incomplete"
     return FlowBuilderReadinessContract(
         version="flow-builder-readiness-v1",
         required_evidence=required_evidence,
         missing_evidence=missing_evidence,
-        ready_for_runtime_generation=False,
-        ready_for_retrieved_update_set_handoff=False,
-        blocked_reason="Flow Designer builder is not implemented",
-        unsupported_reason_codes=[
-            "flow_builder_not_implemented",
-            "runtime_generation_disabled",
-            "retrieved_update_set_handoff_disabled",
+        requirement_status={
+            item: _requirement_state(item=item, satisfied=satisfied) for item in required_evidence
+        },
+        evidence_notes=evidence_notes,
+        ready_for_runtime_generation=ready_for_runtime_generation,
+        ready_for_retrieved_update_set_handoff=ready_for_retrieved_update_set_handoff,
+        blocked_reason=blocked_reason,
+        unsupported_reason_codes=unsupported_reason_codes,
+        unsupported_reason_guidance=[
+            guidance
+            for guidance in flow_unsupported_reason_guidance()
+            if guidance.code in unsupported_reason_codes
         ],
-        unsupported_reason_guidance=flow_unsupported_reason_guidance(),
     )
+
+
+def _requirement_state(*, item: str, satisfied: set[str]) -> Literal["satisfied", "missing"]:
+    return "satisfied" if item in satisfied else "missing"
 
 
 def flow_unsupported_reason_guidance() -> list[FlowUnsupportedReasonGuidance]:

@@ -292,7 +292,13 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
     ]
     assert [item.code for item in plan.unsupported_reason_guidance] == plan.unsupported_reason_codes
     assert plan.unsupported_reason_guidance[0].operator_action == "route_to_human_review"
-    assert plan.missing_builder_evidence == []
+    assert plan.missing_builder_evidence == [
+        "flow_xml_shape_evidence_validated:sys_hub_flow",
+        "flow_xml_shape_evidence_validated:sys_hub_action_instance",
+        "flow_xml_shape_evidence_validated:sys_hub_flow_logic_instance_v2",
+        "flow_snapshot_evidence_current",
+        "flow_builder_implemented",
+    ]
     assert "rollback_customer_update_strategy_defined" in plan.required_builder_evidence
 
 
@@ -539,8 +545,21 @@ def test_flow_builder_readiness_contract_reports_all_required_evidence() -> None
         "flow_snapshot_update_strategy_defined",
         "rollback_customer_update_strategy_defined",
         "servicenow_preview_commit_review_required",
+        "flow_xml_shape_evidence_validated:sys_hub_flow",
+        "flow_xml_shape_evidence_validated:sys_hub_action_instance",
+        "flow_xml_shape_evidence_validated:sys_hub_flow_logic_instance_v2",
+        "flow_snapshot_evidence_current",
+        "flow_builder_implemented",
     ]
-    assert readiness.missing_evidence == []
+    assert readiness.missing_evidence == [
+        "flow_xml_shape_evidence_validated:sys_hub_flow",
+        "flow_xml_shape_evidence_validated:sys_hub_action_instance",
+        "flow_xml_shape_evidence_validated:sys_hub_flow_logic_instance_v2",
+        "flow_snapshot_evidence_current",
+        "flow_builder_implemented",
+    ]
+    assert readiness.requirement_status["xml_shape_repository_available"] == "satisfied"
+    assert readiness.requirement_status["flow_builder_implemented"] == "missing"
 
 
 def test_flow_builder_readiness_contract_reports_missing_evidence() -> None:
