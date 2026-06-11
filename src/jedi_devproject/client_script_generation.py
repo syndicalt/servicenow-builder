@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import re
-from html import escape
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
+from jedi_devproject.validation_helpers import single_insert_change, slug, string_list
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    container_element,
+    record_update,
+    text_element,
+)
 
 
 class ClientScriptIntent(BaseModel):
@@ -56,10 +62,12 @@ def client_script_customer_updates(
     changes: list[CandidateChange],
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    if len(changes) != 1:
-        raise ValueError("Client Script handoff requires exactly one sys_script_client change")
-    intent = _client_script_intent(changes[0])
-    update_name = f"sys_script_client_{intent.target_table}_{_slug(intent.script_name)}"
+    change = single_insert_change(changes, table="sys_script_client", label="Client Script")
+    intent = _client_script_intent(change)
+    update_name = (
+        f"sys_script_client_{intent.target_table}_"
+        f"{slug(intent.script_name, default='generated_client_script')}"
+    )
     return [
         {
             "name": update_name,
@@ -74,10 +82,6 @@ def client_script_customer_updates(
 
 
 def _client_script_intent(change: CandidateChange) -> ClientScriptIntent:
-    if change.table != "sys_script_client":
-        raise ValueError("Client Script handoff requires a sys_script_client change")
-    if change.operation != "insert":
-        raise ValueError("Client Script handoff supports insert only")
     fields = dict(change.fields)
     return ClientScriptIntent(
         target_table=str(fields.get("table") or fields.get("target_table") or ""),
@@ -85,29 +89,28 @@ def _client_script_intent(change: CandidateChange) -> ClientScriptIntent:
         script_type=str(fields.get("type") or fields.get("client_script_type") or ""),
         field_name=str(fields.get("field") or fields.get("field_name") or ""),
         script=str(fields.get("script") or fields.get("script_body") or ""),
-        fields_read=_string_list(fields.get("fields_read")),
-        fields_written=_string_list(fields.get("fields_written")),
-        messages_shown=_string_list(fields.get("messages_shown")),
+        fields_read=string_list(fields.get("fields_read"), ignore_none_token=True),
+        fields_written=string_list(fields.get("fields_written"), ignore_none_token=True),
+        messages_shown=string_list(fields.get("messages_shown"), ignore_none_token=True),
     )
 
 
 def _client_script_payload(*, intent: ClientScriptIntent, update_name: str) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        '<sys_script_client action="INSERT_OR_UPDATE">'
-        "<active>true</active>"
-        f"<field>{escape(intent.field_name)}</field>"
-        f"<name>{escape(intent.script_name)}</name>"
-        f"<script>{escape(intent.script)}</script>"
-        "<sys_class_name>sys_script_client</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f"<table>{escape(intent.target_table)}</table>"
-        f"<type>{escape(intent.script_type)}</type>"
-        "<ui_type>10</ui_type>"
-        "</sys_script_client>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_script_client",
+            "<active>true</active>",
+            text_element("field", intent.field_name),
+            text_element("name", intent.script_name),
+            text_element("script", intent.script),
+            "<sys_class_name>sys_script_client</sys_class_name>",
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("table", intent.target_table),
+            text_element("type", intent.script_type),
+            "<ui_type>10</ui_type>",
+            action="INSERT_OR_UPDATE",
+        )
     )
 
 
@@ -147,19 +150,3 @@ def _validate_field_writes(*, script: str, fields_written: list[str]) -> None:
     undeclared = sorted(written_fields - declared)
     if undeclared:
         raise ValueError(f"Client Script writes undeclared field: {undeclared[0]}")
-
-
-def _slug(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", value.strip().lower()).strip("_")
-    return cleaned or "generated_client_script"
-
-
-def _string_list(value: Any) -> list[str]:
-    if isinstance(value, list):
-        return [str(item) for item in value if str(item).strip()]
-    text = str(value or "").strip()
-    if not text:
-        return []
-    if text.lower() == "none":
-        return []
-    return [item.strip() for item in text.split(",") if item.strip()]

@@ -3,10 +3,12 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
+
+from pydantic import ValidationError
 
 from jedi_devproject.lifecycle_events import (
     LifecycleEventType,
@@ -19,8 +21,12 @@ from jedi_devproject.operational_store import (
     LifecycleEventRecord,
     OperationalConnection,
     PostgresOperationalStore,
+    RetentionPolicy,
+    SurfaceMaturityEvidenceRecord,
     connect_operational_store,
     load_operational_store_migration,
+    load_operational_store_migrations,
+    load_retention_policy,
 )
 
 ScriptedRow = dict[str, object]
@@ -520,6 +526,234 @@ def test_recent_lifecycle_events_returns_newest_events() -> None:
     assert "ORDER BY received_at DESC, event_id DESC" in joined_sql
     assert connection.executed[0][1] == (10,)
     assert events == [LifecycleEventRecord.model_validate(row)]
+
+
+def test_retention_migration_defines_prune_audit_and_created_at_indexes() -> None:
+    migration = Path("db/migrations/0002_retention.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS retention_prune_audit" in migration
+    assert "record_class TEXT NOT NULL" in migration
+    assert "cutoff TIMESTAMPTZ NOT NULL" in migration
+    assert "deleted_count BIGINT NOT NULL" in migration
+    assert "pruned_at TIMESTAMPTZ NOT NULL" in migration
+    assert "idx_artifact_blobs_created_at" in migration
+    assert "idx_job_events_created_at" in migration
+
+
+def test_packaged_migrations_match_reviewed_sql_in_order() -> None:
+    reviewed_retention = Path("db/migrations/0002_retention.sql").read_text(encoding="utf-8")
+
+    assert load_operational_store_migrations() == (
+        load_operational_store_migration(),
+        reviewed_retention,
+    )
+
+
+def test_initialize_schema_applies_all_migrations_in_order() -> None:
+    connection = ScriptedPostgresConnection(rows=[])
+    store = _store(connection)
+
+    store.initialize_schema()
+
+    assert len(connection.executed) == 2
+    assert "CREATE TABLE IF NOT EXISTS lifecycle_events" in connection.executed[0][0]
+    assert "CREATE TABLE IF NOT EXISTS retention_prune_audit" in connection.executed[1][0]
+    assert connection.transaction_count == 1
+
+
+def test_retention_policy_is_disabled_by_default() -> None:
+    policy = load_retention_policy({})
+
+    assert policy.enabled is False
+    assert policy.artifact_blob_retention_days is None
+    assert policy.job_event_retention_days is None
+    assert policy.prune_batch_size == 500
+
+
+def test_load_retention_policy_enables_explicit_windows() -> None:
+    policy = load_retention_policy(
+        {
+            "JEDI_RETENTION_ARTIFACT_BLOB_DAYS": "90",
+            "JEDI_RETENTION_JOB_EVENT_DAYS": "365",
+            "JEDI_RETENTION_PRUNE_BATCH_SIZE": "200",
+        }
+    )
+
+    assert policy.enabled is True
+    assert policy.artifact_blob_retention_days == 90
+    assert policy.job_event_retention_days == 365
+    assert policy.prune_batch_size == 200
+
+
+def test_load_retention_policy_treats_blank_values_as_disabled() -> None:
+    policy = load_retention_policy(
+        {
+            "JEDI_RETENTION_ARTIFACT_BLOB_DAYS": " ",
+            "JEDI_RETENTION_JOB_EVENT_DAYS": "",
+            "JEDI_RETENTION_PRUNE_BATCH_SIZE": "",
+        }
+    )
+
+    assert policy.enabled is False
+    assert policy.prune_batch_size == 500
+
+
+def test_load_retention_policy_rejects_non_positive_windows() -> None:
+    try:
+        load_retention_policy({"JEDI_RETENTION_ARTIFACT_BLOB_DAYS": "0"})
+    except ValidationError as exc:
+        assert "artifact_blob_retention_days" in str(exc)
+    else:
+        raise AssertionError("non-positive retention window did not raise")
+
+
+def test_prune_expired_records_is_noop_when_retention_disabled() -> None:
+    connection = ScriptedPostgresConnection(rows=[])
+    store = _store(connection)
+
+    report = store.prune_expired_records(policy=RetentionPolicy())
+
+    assert report.enabled is False
+    assert report.results == []
+    assert connection.executed == []
+    assert connection.transaction_count == 0
+
+
+def test_prune_expired_records_deletes_only_terminal_expired_records() -> None:
+    connection = ScriptedPostgresConnection(rows=[{"deleted_count": 2}, {"deleted_count": 1}])
+    store = _store(connection)
+    now = datetime(2026, 6, 11, 12, 0, tzinfo=UTC)
+    policy = RetentionPolicy(artifact_blob_retention_days=90, job_event_retention_days=365)
+
+    report = store.prune_expired_records(policy=policy, now=now)
+
+    blob_sql, blob_params = connection.executed[0]
+    event_sql, event_params = connection.executed[1]
+    assert "FROM artifact_blobs" in blob_sql
+    assert "status IN ('completed', 'failed', 'rejected')" in blob_sql
+    assert "fulfillment_jobs.updated_at < %s" in blob_sql
+    assert "SET artifact_id = NULL" in blob_sql
+    assert "DELETE FROM artifact_blobs" in blob_sql
+    assert "DELETE FROM artifact_refs" not in blob_sql
+    assert "LIMIT %s" in blob_sql
+    assert blob_params == (now - timedelta(days=90), now - timedelta(days=90), 500)
+    assert "DELETE FROM job_events" in event_sql
+    assert "status IN ('completed', 'failed', 'rejected')" in event_sql
+    assert event_params == (now - timedelta(days=365), now - timedelta(days=365), 500)
+    audit_calls = [
+        params
+        for sql, params in connection.executed
+        if "INSERT INTO retention_prune_audit" in sql
+    ]
+    assert audit_calls == [
+        ("artifact_blobs", now - timedelta(days=90), 2, 1, now),
+        ("job_events", now - timedelta(days=365), 1, 1, now),
+    ]
+    assert report.enabled is True
+    assert report.pruned_at == now
+    assert report.prune_batch_size == 500
+    assert [
+        (result.record_class, result.cutoff, result.deleted_count, result.batches)
+        for result in report.results
+    ] == [
+        ("artifact_blobs", now - timedelta(days=90), 2, 1),
+        ("job_events", now - timedelta(days=365), 1, 1),
+    ]
+
+
+def test_prune_expired_records_batches_deletes_until_drained() -> None:
+    connection = ScriptedPostgresConnection(
+        rows=[{"deleted_count": 2}, {"deleted_count": 2}, {"deleted_count": 0}]
+    )
+    store = _store(connection)
+    policy = RetentionPolicy(artifact_blob_retention_days=30, prune_batch_size=2)
+
+    report = store.prune_expired_records(policy=policy)
+
+    delete_calls = [
+        params for sql, params in connection.executed if "DELETE FROM artifact_blobs" in sql
+    ]
+    assert [params[2] for params in delete_calls] == [2, 2, 2]
+    assert all("DELETE FROM job_events" not in sql for sql, _params in connection.executed)
+    assert [
+        (result.record_class, result.deleted_count, result.batches) for result in report.results
+    ] == [("artifact_blobs", 4, 3)]
+
+
+def test_prune_expired_records_supports_job_event_only_window() -> None:
+    connection = ScriptedPostgresConnection(rows=[{"deleted_count": 1}])
+    store = _store(connection)
+    policy = RetentionPolicy(job_event_retention_days=365)
+
+    report = store.prune_expired_records(policy=policy)
+
+    assert all("DELETE FROM artifact_blobs" not in sql for sql, _params in connection.executed)
+    assert any("DELETE FROM job_events" in sql for sql, _params in connection.executed)
+    assert [result.record_class for result in report.results] == ["job_events"]
+
+
+def test_prune_expired_records_rerun_deletes_nothing_and_writes_no_audit() -> None:
+    connection = ScriptedPostgresConnection(rows=[{"deleted_count": 0}, {"deleted_count": 0}])
+    store = _store(connection)
+    policy = RetentionPolicy(artifact_blob_retention_days=90, job_event_retention_days=90)
+
+    report = store.prune_expired_records(policy=policy)
+
+    assert all(result.deleted_count == 0 for result in report.results)
+    assert all(
+        "INSERT INTO retention_prune_audit" not in sql for sql, _params in connection.executed
+    )
+
+
+def test_prune_expired_records_raises_when_postgres_returns_no_count() -> None:
+    connection = ScriptedPostgresConnection(rows=[None])
+    store = _store(connection)
+    policy = RetentionPolicy(artifact_blob_retention_days=90)
+
+    try:
+        store.prune_expired_records(policy=policy)
+    except RuntimeError as exc:
+        assert "retention prune count" in str(exc)
+        assert "artifact_blobs" in str(exc)
+    else:
+        raise AssertionError("missing prune count row did not raise")
+
+
+def test_builder_maturity_evidence_for_surface_aggregates_terminal_outcomes() -> None:
+    connection = ScriptedPostgresConnection(rows=[{"samples": 12, "successes": 9, "failures": 3}])
+    store = _store(connection)
+
+    evidence = store.builder_maturity_evidence_for_surface("form_sections")
+
+    executed_sql, executed_params = connection.executed[0]
+    assert "FROM fulfillment_jobs" in executed_sql
+    assert "status IN ('completed', 'failed', 'rejected')" in executed_sql
+    assert "artifact_blobs.artifact_kind = 'implementation_packet'" in executed_sql
+    assert "'context_dossier'->'target'->'required_surfaces' ? %s" in executed_sql
+    assert "status = 'rework_requested'" in executed_sql
+    assert executed_params == ("form_sections",)
+    assert all(
+        token not in executed_sql for token in ["INSERT", "UPDATE", "DELETE"]
+    ), "maturity evidence aggregation must be read-only"
+    assert evidence == SurfaceMaturityEvidenceRecord(
+        surface="form_sections",
+        samples=12,
+        successes=9,
+        failures=3,
+    )
+
+
+def test_builder_maturity_evidence_for_surface_raises_when_no_count_row() -> None:
+    connection = ScriptedPostgresConnection(rows=[None])
+    store = _store(connection)
+
+    try:
+        store.builder_maturity_evidence_for_surface("form_sections")
+    except RuntimeError as exc:
+        assert "surface maturity evidence" in str(exc)
+        assert "form_sections" in str(exc)
+    else:
+        raise AssertionError("missing maturity evidence row did not raise")
 
 
 def test_recent_fulfillment_jobs_returns_newest_jobs() -> None:

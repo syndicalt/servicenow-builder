@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import re
-from html import escape
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
+from jedi_devproject.validation_helpers import bool_value, single_insert_change, slug, string_list
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    bool_element,
+    container_element,
+    record_update,
+    text_element,
+)
 
 
 class ScriptIncludeIntent(BaseModel):
@@ -55,10 +62,9 @@ def script_include_customer_updates(
     changes: list[CandidateChange],
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    if len(changes) != 1:
-        raise ValueError("Script Include handoff requires exactly one sys_script_include change")
-    intent = _script_include_intent(changes[0])
-    update_name = f"sys_script_include_{_slug(intent.name)}"
+    change = single_insert_change(changes, table="sys_script_include", label="Script Include")
+    intent = _script_include_intent(change)
+    update_name = f"sys_script_include_{slug(intent.name, default='generated_script_include')}"
     return [
         {
             "name": update_name,
@@ -73,10 +79,6 @@ def script_include_customer_updates(
 
 
 def _script_include_intent(change: CandidateChange) -> ScriptIncludeIntent:
-    if change.table != "sys_script_include":
-        raise ValueError("Script Include handoff requires a sys_script_include change")
-    if change.operation != "insert":
-        raise ValueError("Script Include handoff supports insert only")
     fields = dict(change.fields)
     script = str(fields.get("script") or fields.get("script_body") or "")
     name = str(fields.get("name") or fields.get("script_include_name") or "")
@@ -84,37 +86,37 @@ def _script_include_intent(change: CandidateChange) -> ScriptIncludeIntent:
         name=name,
         api_name=str(fields.get("api_name") or f"global.{name}"),
         scope=str(fields.get("scope") or "global"),
-        client_callable=_bool_value(fields.get("client_callable")),
-        active=_bool_value(fields.get("active"), default=True),
+        client_callable=bool_value(fields.get("client_callable")),
+        active=bool_value(fields.get("active"), default=True),
         description=str(fields.get("description") or ""),
         script=script,
         public_methods=(
-            _string_list(fields.get("public_methods")) or _public_methods_from_script(script)
+            string_list(fields.get("public_methods"), ignore_none_token=True)
+            or _public_methods_from_script(script)
         ),
-        tables_read=_string_list(fields.get("tables_read")),
-        tables_written=_string_list(fields.get("tables_written")),
-        fields_read=_string_list(fields.get("fields_read")),
-        fields_written=_string_list(fields.get("fields_written")),
+        tables_read=string_list(fields.get("tables_read"), ignore_none_token=True),
+        tables_written=string_list(fields.get("tables_written"), ignore_none_token=True),
+        fields_read=string_list(fields.get("fields_read"), ignore_none_token=True),
+        fields_written=string_list(fields.get("fields_written"), ignore_none_token=True),
     )
 
 
 def _script_include_payload(*, intent: ScriptIncludeIntent, update_name: str) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        '<sys_script_include action="INSERT_OR_UPDATE">'
-        f"<access>public</access>"
-        f"<active>{_bool_text(intent.active)}</active>"
-        f"<api_name>{escape(intent.api_name)}</api_name>"
-        f"<client_callable>{_bool_text(intent.client_callable)}</client_callable>"
-        f"<description>{escape(intent.description)}</description>"
-        f"<name>{escape(intent.name)}</name>"
-        f"<script>{escape(intent.script)}</script>"
-        "<sys_class_name>sys_script_include</sys_class_name>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        "</sys_script_include>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_script_include",
+            "<access>public</access>",
+            bool_element("active", intent.active),
+            text_element("api_name", intent.api_name),
+            bool_element("client_callable", intent.client_callable),
+            text_element("description", intent.description),
+            text_element("name", intent.name),
+            text_element("script", intent.script),
+            "<sys_class_name>sys_script_include</sys_class_name>",
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            action="INSERT_OR_UPDATE",
+        )
     )
 
 
@@ -158,27 +160,3 @@ def _public_methods_from_script(script: str) -> list[str]:
         if match not in {"initialize", "type"}
     }
     return sorted(methods)
-
-
-def _slug(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", value.strip().lower()).strip("_")
-    return cleaned or "generated_script_include"
-
-
-def _bool_value(value: Any, *, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return str(value).strip().lower() in {"1", "true", "yes"}
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"
-
-
-def _string_list(value: Any) -> list[str]:
-    if isinstance(value, list):
-        return [str(item) for item in value if str(item).strip()]
-    text = str(value or "").strip()
-    if not text or text.lower() == "none":
-        return []
-    return [item.strip() for item in text.split(",") if item.strip()]

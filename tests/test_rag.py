@@ -1,16 +1,20 @@
 import pytest
 
+from jedi_devproject.models import RetrievalCitation
 from jedi_devproject.rag import (
     Document,
+    LocalRagIndex,
     PublicWebAccessConfig,
     PublicWebResponse,
     PublicWebRetrievalBlocked,
     PublicWebRetriever,
     RagDomain,
     RetrievalBlocked,
+    RetrievalResult,
     SpecializedRags,
     cache_key,
 )
+from jedi_devproject.rag_cache import RetrievalCache, RetrievalCacheStats
 
 
 def _rags() -> SpecializedRags:
@@ -203,3 +207,212 @@ def test_public_web_retriever_fails_closed_on_redirect_to_disallowed_domain() ->
             "redirect docs",
             urls=["https://docs.servicenow.com/bundle/yokohama-platform"],
         )
+
+
+class CountingIndex(LocalRagIndex):
+    def __init__(self, *, domain: RagDomain, documents: list[Document]) -> None:
+        super().__init__(domain=domain, documents=documents)
+        self.retrieve_calls = 0
+
+    def retrieve(self, query: str) -> list[RetrievalResult]:
+        self.retrieve_calls += 1
+        return super().retrieve(query)
+
+
+def _base_documents(*, compliance_version: str = "2026-05") -> list[Document]:
+    return [
+        Document(
+            domain=RagDomain.SERVICENOW_PLATFORM,
+            source="servicenow-docs/update-sets",
+            content="Update sets capture portal configuration changes for review.",
+            version="washington",
+        ),
+        Document(
+            domain=RagDomain.COMPLIANCE,
+            source="policy/model-use",
+            content="Portal work must not use public AI endpoints unless explicitly approved.",
+            version=compliance_version,
+        ),
+        Document(
+            domain=RagDomain.PUBLIC_DOCUMENTATION,
+            source="public_web:https://docs.servicenow.com/ui-policy",
+            content="UI policies control portal field behavior.",
+            version="live-public-web",
+        ),
+    ]
+
+
+def _counting_rags(
+    documents: list[Document],
+    *,
+    cache: RetrievalCache[RetrievalResult] | None = None,
+    cache_enabled: bool = True,
+) -> tuple[SpecializedRags, dict[RagDomain, CountingIndex]]:
+    indexes = {domain: CountingIndex(domain=domain, documents=documents) for domain in RagDomain}
+    rags = SpecializedRags(indexes=dict(indexes), cache=cache, cache_enabled=cache_enabled)
+    return rags, indexes
+
+
+def test_repeated_retrieval_is_served_from_cache() -> None:
+    rags, indexes = _counting_rags(_base_documents())
+
+    first = rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")
+    second = rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")
+
+    assert first
+    assert indexes[RagDomain.SERVICENOW_PLATFORM].retrieve_calls == 1
+    assert [result.model_dump() for result in first] == [
+        result.model_dump() for result in second
+    ]
+    stats = rags.cache_stats
+    assert stats is not None
+    assert stats.hits == 1
+    assert stats.misses == 1
+    assert stats.size == 1
+
+
+def test_cache_hit_preserves_citation_confidence_and_version() -> None:
+    rags, _ = _counting_rags(_base_documents())
+
+    rags.retrieve(RagDomain.COMPLIANCE, "portal")
+    cached = rags.retrieve(RagDomain.COMPLIANCE, "portal")
+
+    assert cached[0].citation.source == "policy/model-use"
+    assert cached[0].citation.content_hash
+    assert cached[0].citation.confidence == 1.0
+    assert cached[0].citation.version == "2026-05"
+
+
+def test_different_queries_do_not_share_cache_entries() -> None:
+    rags, indexes = _counting_rags(_base_documents())
+
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "update sets")
+
+    assert indexes[RagDomain.SERVICENOW_PLATFORM].retrieve_calls == 2
+
+
+def test_corpus_version_change_invalidates_cache_key() -> None:
+    shared: RetrievalCache[RetrievalResult] = RetrievalCache()
+    rags_v1, _ = _counting_rags(_base_documents(compliance_version="2026-05"), cache=shared)
+    rags_v2, indexes_v2 = _counting_rags(
+        _base_documents(compliance_version="2026-06"), cache=shared
+    )
+
+    rags_v1.retrieve(RagDomain.COMPLIANCE, "portal")
+    results_v2 = rags_v2.retrieve(RagDomain.COMPLIANCE, "portal")
+
+    assert indexes_v2[RagDomain.COMPLIANCE].retrieve_calls == 1
+    assert results_v2[0].citation.version == "2026-06"
+    assert shared.stats.hits == 0
+    assert shared.stats.misses == 2
+
+
+def test_mutating_returned_results_does_not_poison_cache() -> None:
+    rags, _ = _counting_rags(_base_documents())
+
+    first = rags.retrieve(RagDomain.COMPLIANCE, "portal")
+    first[0].content = "tampered"
+    first[0].citation.confidence = 0.1
+
+    second = rags.retrieve(RagDomain.COMPLIANCE, "portal")
+    assert second[0].content.startswith("Portal work")
+    assert second[0].citation.confidence == 1.0
+
+
+def test_cache_eviction_is_bounded_and_lru_ordered() -> None:
+    cache: RetrievalCache[RetrievalResult] = RetrievalCache(max_entries=2)
+    rags, indexes = _counting_rags(_base_documents(), cache=cache)
+    platform = indexes[RagDomain.SERVICENOW_PLATFORM]
+
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")  # miss
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "update")  # miss
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")  # hit, refresh recency
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "changes")  # miss, evicts "update"
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")  # hit, kept by LRU refresh
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "update")  # miss, was evicted
+
+    assert platform.retrieve_calls == 4
+    assert cache.stats.hits == 2
+    assert cache.stats.misses == 4
+    assert cache.stats.size == 2
+
+
+def test_disabled_cache_passes_every_retrieval_through_to_indexes() -> None:
+    rags, indexes = _counting_rags(_base_documents(), cache_enabled=False)
+
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")
+    rags.retrieve(RagDomain.SERVICENOW_PLATFORM, "portal")
+
+    assert indexes[RagDomain.SERVICENOW_PLATFORM].retrieve_calls == 2
+    assert rags.cache_stats is None
+
+
+def test_public_documentation_domain_is_never_cached() -> None:
+    rags, indexes = _counting_rags(_base_documents())
+
+    rags.retrieve(RagDomain.PUBLIC_DOCUMENTATION, "portal")
+    rags.retrieve(RagDomain.PUBLIC_DOCUMENTATION, "portal")
+
+    assert indexes[RagDomain.PUBLIC_DOCUMENTATION].retrieve_calls == 2
+    stats = rags.cache_stats
+    assert stats is not None
+    assert stats.hits == 0
+    assert stats.misses == 0
+    assert stats.size == 0
+
+
+def test_retrieve_required_context_reuses_cached_domain_results() -> None:
+    rags, indexes = _counting_rags(_base_documents())
+
+    first = rags.retrieve_required_context("portal")
+    second = rags.retrieve_required_context("portal")
+
+    assert first == second
+    for domain in RagDomain:
+        expected = 2 if domain is RagDomain.PUBLIC_DOCUMENTATION else 1
+        assert indexes[domain].retrieve_calls == expected
+
+
+def test_from_documents_cache_flag_propagates_through_with_documents() -> None:
+    enabled = SpecializedRags.from_documents(_base_documents())
+    disabled = SpecializedRags.from_documents(_base_documents(), cache_enabled=False)
+
+    assert enabled.cache_stats is not None
+    assert enabled.with_documents([]).cache_stats is not None
+    assert disabled.cache_stats is None
+    assert disabled.with_documents([]).cache_stats is None
+
+
+def test_retrieval_cache_rejects_non_positive_max_entries() -> None:
+    with pytest.raises(ValueError, match="max_entries"):
+        RetrievalCache(max_entries=0)
+
+
+def test_retrieval_cache_put_stores_defensive_copies_and_clear_resets() -> None:
+    cache: RetrievalCache[RetrievalResult] = RetrievalCache(max_entries=4)
+    result = RetrievalResult(
+        content="original",
+        citation=RetrievalCitation(
+            source="policy/model-use",
+            content_hash="hash-1",
+            confidence=0.9,
+            version="v1",
+        ),
+    )
+
+    cache.put("key", [result])
+    result.content = "tampered after put"
+
+    cached = cache.get("key")
+    assert cached is not None
+    assert cached[0].content == "original"
+
+    cache.clear()
+    assert cache.get("key") is None
+    assert cache.stats.size == 0
+
+
+def test_retrieval_cache_stats_hit_rate() -> None:
+    assert RetrievalCacheStats(hits=0, misses=0, size=0, max_size=8).hit_rate == 0.0
+    assert RetrievalCacheStats(hits=3, misses=1, size=2, max_size=8).hit_rate == 0.75

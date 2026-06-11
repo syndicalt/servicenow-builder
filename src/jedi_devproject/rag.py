@@ -1,3 +1,18 @@
+"""Specialized retrieval (RAG) domains with bounded retrieval-result caching.
+
+Caching policy: local, deterministic retrieval domains (ServiceNow platform,
+instance metadata, project context, compliance) are served from a bounded LRU
+cache keyed by domain, query, and a corpus fingerprint covering every indexed
+document's source, content, and version — any corpus or query change misses.
+Live public-web retrieval (``PublicWebRetriever``) and the
+``PUBLIC_DOCUMENTATION`` domain are never cached: public web access is
+fail-closed, allowlist-gated, and audit-sensitive, and a cached entry could
+otherwise be served after an allowlist or access-config change revoked the
+fetch that produced it. Excluding the domain entirely is the safer option
+versus config-keyed caching, so every public-docs retrieval re-runs the full
+allowlist and SSRF validation path.
+"""
+
 from __future__ import annotations
 
 import ipaddress
@@ -12,6 +27,7 @@ from urllib.request import Request, urlopen
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from jedi_devproject.models import RetrievalCitation, stable_artifact_hash
+from jedi_devproject.rag_cache import RetrievalCache, RetrievalCacheStats
 
 
 class RetrievalBlocked(RuntimeError):
@@ -157,6 +173,19 @@ class LocalRagIndex:
     def __init__(self, *, domain: RagDomain, documents: list[Document]) -> None:
         self._domain = domain
         self._documents = [document for document in documents if document.domain is domain]
+        self._fingerprint = stable_artifact_hash(
+            {
+                "domain": domain.value,
+                "documents": [
+                    {
+                        "source": document.source,
+                        "content": document.content,
+                        "version": document.version,
+                    }
+                    for document in self._documents
+                ],
+            }
+        )
 
     def retrieve(self, query: str) -> list[RetrievalResult]:
         query_terms = _terms(query)
@@ -191,28 +220,77 @@ class LocalRagIndex:
     def documents(self) -> list[Document]:
         return list(self._documents)
 
+    @property
+    def fingerprint(self) -> str:
+        return self._fingerprint
+
+
+_CACHE_EXCLUDED_DOMAINS = frozenset({RagDomain.PUBLIC_DOCUMENTATION})
+
 
 class SpecializedRags:
-    def __init__(self, indexes: dict[RagDomain, LocalRagIndex]) -> None:
+    def __init__(
+        self,
+        indexes: dict[RagDomain, LocalRagIndex],
+        *,
+        cache: RetrievalCache[RetrievalResult] | None = None,
+        cache_enabled: bool = True,
+    ) -> None:
         self._indexes = indexes
+        if not cache_enabled:
+            self._cache: RetrievalCache[RetrievalResult] | None = None
+        elif cache is not None:
+            self._cache = cache
+        else:
+            self._cache = RetrievalCache()
 
     @classmethod
-    def from_documents(cls, documents: list[Document]) -> SpecializedRags:
+    def from_documents(
+        cls,
+        documents: list[Document],
+        *,
+        cache: RetrievalCache[RetrievalResult] | None = None,
+        cache_enabled: bool = True,
+    ) -> SpecializedRags:
         return cls(
             indexes={
                 domain: LocalRagIndex(domain=domain, documents=documents)
                 for domain in RagDomain
-            }
+            },
+            cache=cache,
+            cache_enabled=cache_enabled,
         )
 
     def with_documents(self, documents: list[Document]) -> SpecializedRags:
         existing_documents: list[Document] = []
         for index in self._indexes.values():
             existing_documents.extend(index.documents)
-        return SpecializedRags.from_documents([*existing_documents, *documents])
+        return SpecializedRags.from_documents(
+            [*existing_documents, *documents],
+            cache_enabled=self._cache is not None,
+        )
+
+    @property
+    def cache_stats(self) -> RetrievalCacheStats | None:
+        return self._cache.stats if self._cache is not None else None
 
     def retrieve(self, domain: RagDomain, query: str) -> list[RetrievalResult]:
-        return self._indexes[domain].retrieve(query)
+        index = self._indexes[domain]
+        if self._cache is None or domain in _CACHE_EXCLUDED_DOMAINS:
+            return index.retrieve(query)
+        key = stable_artifact_hash(
+            {
+                "domain": domain.value,
+                "query": query,
+                "corpus_fingerprint": index.fingerprint,
+            }
+        )
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        results = index.retrieve(query)
+        self._cache.put(key, results)
+        return results
 
     def retrieve_required_context(self, query: str) -> dict[RagDomain, list[RetrievalResult]]:
         context = {domain: self.retrieve(domain, query) for domain in RagDomain}

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import hashlib
-import re
-from html import escape
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
+from jedi_devproject.validation_helpers import bool_text, bool_value, slug
+from jedi_devproject.xml_builder import (
+    SYS_SCOPE_GLOBAL,
+    bool_element,
+    container_element,
+    record_update,
+    text_element,
+)
 
 
 class UiPolicyActionIntent(BaseModel):
@@ -86,7 +92,10 @@ def ui_policy_customer_updates(
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
     intent = _ui_policy_intent(changes)
-    policy_update_name = f"sys_ui_policy_{intent.target_table}_{_slug(intent.policy_name)}"
+    policy_update_name = (
+        f"sys_ui_policy_{intent.target_table}_"
+        f"{slug(intent.policy_name, default='generated_ui_policy')}"
+    )
     policy_sys_id = _stable_sys_id(policy_update_name)
     updates: list[dict[str, Any]] = [
         {
@@ -105,7 +114,8 @@ def ui_policy_customer_updates(
     ]
     for action in intent.actions:
         action_update_name = (
-            f"sys_ui_policy_action_{intent.target_table}_{_slug(action.field)}_"
+            f"sys_ui_policy_action_{intent.target_table}_"
+            f"{slug(action.field, default='generated_ui_policy')}_"
             f"{_action_suffix(action)}"
         )
         updates.append(
@@ -169,10 +179,10 @@ def _ui_policy_intent(changes: list[CandidateChange]) -> UiPolicyIntent:
         target_table=target_table,
         policy_name=policy_name,
         conditions=str(policy_fields.get("conditions") or policy_fields.get("condition") or ""),
-        reverse_if_false=_bool_value(policy_fields.get("reverse_if_false")),
-        run_scripts=_bool_value(policy_fields.get("run_scripts")),
-        active=_bool_value(policy_fields.get("active"), default=True),
-        on_load=_bool_value(policy_fields.get("on_load")),
+        reverse_if_false=bool_value(policy_fields.get("reverse_if_false")),
+        run_scripts=bool_value(policy_fields.get("run_scripts")),
+        active=bool_value(policy_fields.get("active"), default=True),
+        on_load=bool_value(policy_fields.get("on_load")),
         order=_int_value(policy_fields.get("order"), default=100),
         description=str(policy_fields.get("description") or ""),
         view=str(policy_fields.get("view") or ""),
@@ -201,37 +211,36 @@ def _ui_policy_action_intent(
         mandatory=_tristate(fields.get("mandatory")),
         visible=_tristate(fields.get("visible")),
         disabled=_tristate(disabled_value),
-        cleared=_bool_value(fields.get("cleared", fields.get("clear_value"))),
+        cleared=bool_value(fields.get("cleared", fields.get("clear_value"))),
     )
 
 
 def _ui_policy_payload(*, intent: UiPolicyIntent, update_name: str, sys_id: str) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        '<sys_ui_policy action="INSERT_OR_UPDATE">'
-        f"<active>{_bool_text(intent.active)}</active>"
-        f"<conditions>{escape(intent.conditions)}</conditions>"
-        f"<description>{escape(intent.description)}</description>"
-        "<global>true</global>"
-        "<inherit>false</inherit>"
-        "<isolate_script>true</isolate_script>"
-        f"<on_load>{_bool_text(intent.on_load)}</on_load>"
-        f"<order>{intent.order}</order>"
-        f"<reverse_if_false>{_bool_text(intent.reverse_if_false)}</reverse_if_false>"
-        "<run_scripts>false</run_scripts>"
-        "<script_false/>"
-        "<script_true/>"
-        f"<short_description>{escape(intent.policy_name)}</short_description>"
-        "<sys_class_name>sys_ui_policy</sys_class_name>"
-        f"<sys_id>{escape(sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f"<table>{escape(intent.target_table)}</table>"
-        "<ui_type>10</ui_type>"
-        f"<view>{escape(intent.view)}</view>"
-        "</sys_ui_policy>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_ui_policy",
+            bool_element("active", intent.active),
+            text_element("conditions", intent.conditions),
+            text_element("description", intent.description),
+            "<global>true</global>",
+            "<inherit>false</inherit>",
+            "<isolate_script>true</isolate_script>",
+            bool_element("on_load", intent.on_load),
+            text_element("order", str(intent.order)),
+            bool_element("reverse_if_false", intent.reverse_if_false),
+            "<run_scripts>false</run_scripts>",
+            "<script_false/>",
+            "<script_true/>",
+            text_element("short_description", intent.policy_name),
+            "<sys_class_name>sys_ui_policy</sys_class_name>",
+            text_element("sys_id", sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("table", intent.target_table),
+            "<ui_type>10</ui_type>",
+            text_element("view", intent.view),
+            action="INSERT_OR_UPDATE",
+        )
     )
 
 
@@ -243,23 +252,22 @@ def _ui_policy_action_payload(
     update_name: str,
     sys_id: str,
 ) -> str:
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<record_update>"
-        '<sys_ui_policy_action action="INSERT_OR_UPDATE">'
-        f"<cleared>{_bool_text(action.cleared)}</cleared>"
-        f"<disabled>{escape(action.disabled)}</disabled>"
-        f"<field>{escape(action.field)}</field>"
-        f"<mandatory>{escape(action.mandatory)}</mandatory>"
-        "<sys_class_name>sys_ui_policy_action</sys_class_name>"
-        f"<sys_id>{escape(sys_id)}</sys_id>"
-        '<sys_scope display_value="Global">global</sys_scope>'
-        f"<sys_update_name>{escape(update_name)}</sys_update_name>"
-        f"<table>{escape(action.target_table)}</table>"
-        f'<ui_policy display_value="{escape(policy_name)}">{escape(policy_sys_id)}</ui_policy>'
-        f"<visible>{escape(action.visible)}</visible>"
-        "</sys_ui_policy_action>"
-        "</record_update>"
+    return record_update(
+        container_element(
+            "sys_ui_policy_action",
+            bool_element("cleared", action.cleared),
+            text_element("disabled", action.disabled),
+            text_element("field", action.field),
+            text_element("mandatory", action.mandatory),
+            "<sys_class_name>sys_ui_policy_action</sys_class_name>",
+            text_element("sys_id", sys_id),
+            SYS_SCOPE_GLOBAL,
+            text_element("sys_update_name", update_name),
+            text_element("table", action.target_table),
+            text_element("ui_policy", policy_sys_id, display_value=policy_name),
+            text_element("visible", action.visible),
+            action="INSERT_OR_UPDATE",
+        )
     )
 
 
@@ -299,23 +307,8 @@ def _action_suffix(action: UiPolicyActionIntent) -> str:
     return "_".join(labels) or "action"
 
 
-def _slug(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", value.strip().lower()).strip("_")
-    return cleaned or "generated_ui_policy"
-
-
 def _stable_sys_id(value: str) -> str:
     return hashlib.md5(value.encode("utf-8"), usedforsecurity=False).hexdigest()
-
-
-def _bool_value(value: Any, *, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return str(value).strip().lower() in {"1", "true", "yes"}
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"
 
 
 def _int_value(value: Any, *, default: int) -> int:
@@ -327,7 +320,7 @@ def _int_value(value: Any, *, default: int) -> int:
 
 def _tristate(value: Any) -> str:
     if isinstance(value, bool):
-        return _bool_text(value)
+        return bool_text(value)
     text = str(value if value is not None else "ignore").strip().lower()
     if text in {"", "none", "leave alone"}:
         return "ignore"

@@ -1,3 +1,6 @@
+import math
+
+from jedi_devproject.builder_maturity import MaturityEvidence
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
@@ -52,6 +55,19 @@ class RecordingImplementationProvider:
 class FailingImplementationProvider:
     def generate(self, payload: dict[str, object]) -> dict[str, object]:
         raise AssertionError("provider should not be called")
+
+
+class StubMaturityProvider:
+    def __init__(self, evidence_by_surface: dict[str, MaturityEvidence]) -> None:
+        self.evidence_by_surface = evidence_by_surface
+        self.requested: list[str] = []
+
+    def maturity_evidence_for_surface(self, surface: str) -> MaturityEvidence:
+        self.requested.append(surface)
+        return self.evidence_by_surface.get(
+            surface,
+            MaturityEvidence(surface=surface, samples=0, successes=0, failures=0),
+        )
 
 
 def _story() -> Story:
@@ -1429,3 +1445,382 @@ def test_generate_implementation_update_set_candidate_skips_provider_for_manual_
     assert candidate.eligibility_decision == "manual_review"
     assert candidate.changes == []
     assert "deterministic safety or context gate" in candidate.reviewer_notes[0]
+
+
+def _over_limit_context_bundle() -> ServiceNowSurfaceContextBundle:
+    table_context = InstanceDiscoveryContext(
+        target_table="incident",
+        table_label="Incident",
+        table_exists=True,
+        supports_custom_fields=True,
+        fields=[
+            DiscoveredField(
+                element=f"u_field_{index}",
+                column_label=f"Field {index}",
+                internal_type="string",
+            )
+            for index in range(30)
+        ],
+        form_sections=[
+            DiscoveredFormSection(
+                sys_id=f"incident-section-{index}",
+                name="incident",
+                caption=f"Section {index}",
+                elements=[
+                    DiscoveredFormElement(
+                        sys_id=f"element-{index}-{position}",
+                        element=f"field_{position}",
+                        position=position,
+                    )
+                    for position in range(30 if index == 0 else 1)
+                ],
+            )
+            for index in range(5)
+        ],
+        evidence=["sys_dictionary:incident", "sys_ui_section:incident"],
+    )
+    return ServiceNowSurfaceContextBundle(
+        target_table="incident",
+        required_surfaces=["table_schema", "form_layout"],
+        table_context=table_context,
+        surfaces=[
+            ServiceNowSurfaceContext(
+                surface="table_schema",
+                source_table="sys_dictionary",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_dictionary",
+                        name=f"field_{index}",
+                        active=True,
+                        summary=f"Field {index}",
+                    )
+                    for index in range(30)
+                ],
+                evidence=["sys_dictionary:incident"],
+            ),
+            ServiceNowSurfaceContext(
+                surface="form_layout",
+                source_table="sys_ui_section",
+                required=True,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_ui_section",
+                        name="incident",
+                        active=True,
+                    )
+                ],
+                evidence=["sys_ui_section:incident"],
+                citations=[
+                    {"source": f"sys_ui_section:incident:{index}"} for index in range(30)
+                ],
+            ),
+            ServiceNowSurfaceContext(
+                surface="ui_policies",
+                source_table="sys_ui_policy",
+                required=False,
+                records=[
+                    ServiceNowSurfaceRecord(
+                        source_table="sys_ui_policy",
+                        name="not required policy",
+                        active=True,
+                    )
+                ],
+                evidence=["sys_ui_policy:incident"],
+            ),
+        ],
+        evidence=["sys_dictionary:incident", "sys_ui_section:incident"],
+    )
+
+
+def _incident_field_story() -> Story:
+    return _story().model_copy(
+        update={
+            "short_description": "Add Incident Review Source field to Incident form",
+            "description": (
+                "Add a custom string field to the Incident table. Field Name: "
+                "u_review_source. Column label: Review Source. Field Type: String. "
+                "Length: 120. Place the field on the default Incident form below Description."
+            ),
+            "acceptance_criteria": "The field appears on the default Incident form.",
+            "affected_tables": [],
+        }
+    )
+
+
+def test_model_payload_reports_elisions_when_context_is_truncated() -> None:
+    bundle = _over_limit_context_bundle()
+
+    packet = build_implementation_packet(
+        story=_incident_field_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    payload = packet.to_model_payload()
+    model_bundle = payload["instance_context_bundle"]
+
+    assert model_bundle["elisions"] == [
+        {
+            "content": "surfaces",
+            "shown": 2,
+            "total": 3,
+            "elided": 1,
+            "elided_items": ["ui_policies"],
+        }
+    ]
+    assert model_bundle["surfaces"][0]["elisions"] == [
+        {"content": "records", "shown": 25, "total": 30, "elided": 5}
+    ]
+    assert model_bundle["surfaces"][1]["elisions"] == [
+        {"content": "citations", "shown": 25, "total": 30, "elided": 5}
+    ]
+    assert len(model_bundle["surfaces"][1]["citations"]) == 25
+    assert model_bundle["table_context"]["elisions"] == [
+        {"content": "fields", "shown": 25, "total": 30, "elided": 5},
+        {
+            "content": "form_sections",
+            "shown": 3,
+            "total": 5,
+            "elided": 2,
+            "elided_items": ["Section 3", "Section 4"],
+        },
+    ]
+    assert model_bundle["table_context"]["form_sections"][0]["elisions"] == [
+        {"content": "elements", "shown": 25, "total": 30, "elided": 5}
+    ]
+    summary = payload["controls"]["model_context_elisions"]
+    assert [entry["location"] for entry in summary] == [
+        "instance_context_bundle.surfaces",
+        "instance_context_bundle.table_context.fields",
+        "instance_context_bundle.table_context.form_sections",
+        "instance_context_bundle.table_context.form_sections[Section 0].elements",
+        "instance_context_bundle.surfaces[table_schema].records",
+        "instance_context_bundle.surfaces[form_layout].citations",
+    ]
+    assert {
+        "location": "instance_context_bundle.surfaces[table_schema].records",
+        "shown": 25,
+        "total": 30,
+        "elided": 5,
+    } in summary
+    assert payload["context_dossier"]["model_context_elisions"] == summary
+    assert packet.context_dossier["model_context_elisions"] == summary
+
+
+def test_model_payload_has_no_elision_metadata_when_context_fits_limits() -> None:
+    bundle = _ui_policy_context_bundle()
+
+    packet = build_implementation_packet(
+        story=_ui_policy_story(),
+        policy=_ui_policy_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    payload = packet.to_model_payload()
+
+    assert "model_context_elisions" not in payload["controls"]
+    assert "model_context_elisions" not in payload["context_dossier"]
+    assert "elisions" not in payload["instance_context_bundle"]
+    assert all(
+        "elisions" not in surface for surface in payload["instance_context_bundle"]["surfaces"]
+    )
+    assert "elisions" not in str(payload)
+    assert "elisions" not in packet.model_dump_json()
+
+
+def test_model_payload_reports_instance_context_elisions_without_bundle() -> None:
+    discovery = _discovery_context().model_copy(
+        update={
+            "fields": [
+                DiscoveredField(
+                    element=f"u_field_{index}",
+                    column_label=f"Field {index}",
+                    internal_type="string",
+                )
+                for index in range(30)
+            ]
+        }
+    )
+
+    packet = build_implementation_packet(
+        story=_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=discovery,
+    )
+
+    payload = packet.to_model_payload()
+
+    assert payload["instance_context"]["elisions"] == [
+        {"content": "fields", "shown": 25, "total": 30, "elided": 5}
+    ]
+    assert len(payload["instance_context"]["fields"]) == 25
+    assert payload["controls"]["model_context_elisions"] == [
+        {"location": "instance_context.fields", "shown": 25, "total": 30, "elided": 5}
+    ]
+    assert packet.context_dossier["model_context_elisions"] == [
+        {"location": "instance_context.fields", "shown": 25, "total": 30, "elided": 5}
+    ]
+
+
+def test_builder_maturity_context_without_provider_keeps_baseline_entries() -> None:
+    bundle = _form_section_context_bundle()
+
+    packet = build_implementation_packet(
+        story=_form_section_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+
+    notes = "Builder maturity adjusts confidence and routing; it does not suppress reasoning."
+    assert packet.context_dossier["builder_maturity"] == [
+        {"surface": "form_sections", "score": 0.30, "notes": notes},
+        {"surface": "form_layout", "score": 0.95, "notes": notes},
+    ]
+
+
+def test_builder_maturity_context_marks_evidence_adjusted_scores() -> None:
+    bundle = _form_section_context_bundle()
+    maturity_provider = StubMaturityProvider(
+        {
+            "form_sections": MaturityEvidence(
+                surface="form_sections",
+                samples=20,
+                successes=18,
+                failures=2,
+            )
+        }
+    )
+
+    packet = build_implementation_packet(
+        story=_form_section_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+        maturity_provider=maturity_provider,
+    )
+
+    entries = packet.context_dossier["builder_maturity"]
+    adjusted = entries[0]
+    baseline = entries[1]
+    assert adjusted["surface"] == "form_sections"
+    assert adjusted["score_source"] == "evidence_adjusted"
+    assert adjusted["evidence_samples"] == 20
+    assert math.isclose(adjusted["score"], 0.5 * 0.30 + 0.5 * 0.9)
+    assert baseline["surface"] == "form_layout"
+    assert baseline["score_source"] == "baseline"
+    assert baseline["score"] == 0.95
+    assert "evidence_samples" not in baseline
+
+
+def test_evidence_regression_demotes_routing_below_handoff_threshold() -> None:
+    packet = build_implementation_packet(
+        story=_story(),
+        policy=_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=_discovery_context(),
+    )
+    regression_evidence = {
+        surface: MaturityEvidence(surface=surface, samples=20, successes=4, failures=16)
+        for surface in ["table_schema", "form_layout"]
+    }
+
+    baseline_candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_policy(),
+        provider=RecordingImplementationProvider(),
+    )
+    demoted_candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_policy(),
+        provider=RecordingImplementationProvider(),
+        maturity_provider=StubMaturityProvider(regression_evidence),
+    )
+
+    assert baseline_candidate.status is CandidateStatus.READY_FOR_REVIEW
+    assert baseline_candidate.eligibility_decision == "eligible"
+    assert demoted_candidate.status is CandidateStatus.MANUAL_BUILD
+    assert demoted_candidate.eligibility_decision == "manual_review"
+    assert math.isclose(demoted_candidate.confidence, 0.5 * 0.95 + 0.5 * 0.2)
+    assert any(
+        reason.startswith("builder maturity below automated handoff threshold: sys_dictionary=")
+        for reason in demoted_candidate.eligibility_reasons
+    )
+    assert (
+        "Builder maturity is evidence-adjusted from baseline 0.95 using 20 recorded "
+        "fulfillment outcomes."
+    ) in demoted_candidate.reviewer_notes
+
+
+def test_evidence_promotes_catalog_routing_to_automated_handoff() -> None:
+    catalog_response: dict[str, object] = {
+        "changes": [
+            {
+                "table": "sc_cat_item",
+                "operation": "insert",
+                "fields": {"name": "Request Temporary Visitor Badge"},
+                "sys_id": None,
+                "rationale": "Create the catalog item.",
+            }
+        ],
+        "test_plan": ["Preview the retrieved Update Set."],
+        "rollback_notes": ["Back out the retrieved Update Set."],
+    }
+    bundle = _catalog_context_bundle()
+    packet = build_implementation_packet(
+        story=_catalog_story(),
+        policy=_catalog_policy(),
+        provider_policy=_provider_policy(),
+        rags=_rags(),
+        discovery_context=bundle.table_context,
+        surface_context_bundle=bundle,
+    )
+    earned_evidence = {
+        surface: MaturityEvidence(surface=surface, samples=60, successes=57, failures=3)
+        for surface in [
+            "catalog_definitions",
+            "catalog_categories",
+            "employee_center_topics",
+            "employee_center_connected_content",
+        ]
+    }
+
+    baseline_candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_catalog_policy(),
+        provider=RecordingImplementationProvider(catalog_response),
+    )
+    promoted_candidate = generate_implementation_update_set_candidate_from_packet(
+        packet=packet,
+        policy=_catalog_policy(),
+        provider=RecordingImplementationProvider(catalog_response),
+        maturity_provider=StubMaturityProvider(earned_evidence),
+    )
+
+    assert baseline_candidate.status is CandidateStatus.MANUAL_BUILD
+    assert baseline_candidate.eligibility_decision == "manual_review"
+    assert any(
+        reason.startswith("builder maturity below automated handoff threshold:")
+        for reason in baseline_candidate.eligibility_reasons
+    )
+    assert promoted_candidate.status is CandidateStatus.READY_FOR_REVIEW
+    assert promoted_candidate.eligibility_decision == "eligible"
+    assert promoted_candidate.confidence == 0.75
+    assert (
+        "Builder maturity is evidence-adjusted from baseline 0.60 using 60 recorded "
+        "fulfillment outcomes."
+    ) in promoted_candidate.reviewer_notes
