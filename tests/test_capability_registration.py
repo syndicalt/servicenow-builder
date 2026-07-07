@@ -17,9 +17,9 @@ from jedi_devproject.implementation_packet import (
     AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD,
     ImplementationPacket,
     PacketStory,
-    _expected_tables_for_packet,
 )
 from jedi_devproject.model_fulfillment import CODE_SURFACE_MAP
+from jedi_devproject.packet_validation import _expected_tables_for_packet
 
 # Adding a Capability enum member requires wiring it into several separately
 # maintained tables (registry, generation profile list, supported baseline set,

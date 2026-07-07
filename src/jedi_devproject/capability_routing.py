@@ -466,7 +466,12 @@ def _match_intent_combined_item_and_producer(context: _RoutingContext) -> _RuleR
         AutomationIntentType.RECORD_PRODUCER,
     }:
         return None
-    combined = _combined_item_and_producer_reasons(context.positive_text)
+    # Computed here rather than in the structured _RoutingContext: this is the
+    # only structured rule that reads the scrubbed story text, and only for
+    # catalog/producer intents that already passed the points gates.
+    combined = _combined_item_and_producer_reasons(
+        _positive_requirement_text(_story_text(context.story))
+    )
     if combined:
         return _RuleResult(
             outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD, reasons=tuple(combined)
@@ -525,7 +530,9 @@ def _assess_automation_intent(
     context = _RoutingContext(
         story=story,
         requested=requested,
-        positive_text=_positive_requirement_text(_story_text(story)),
+        # Free-text rules are the positive_text consumers; the one structured
+        # rule that needs story text computes it lazily after its intent gate.
+        positive_text="",
         intent=field_form_intent,
         target_table=(
             field_form_intent.target_table

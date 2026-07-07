@@ -2676,5 +2676,6 @@ def test_sprint_one_sixty_four_change_log_documents_architecture_hardening() -> 
     assert "`packet_intent_changes.py`" in change_log
     assert "`_FREE_TEXT_RULES`" in change_log
     assert "`IMPLEMENTATION_SYSTEM_PROMPT`" in change_log
-    assert "parsed_automation_intent" in change_log
+    assert "intent_required_instance_context" in change_log
+    assert "adversarial review" in change_log
     assert "coverage 93.77%" in change_log

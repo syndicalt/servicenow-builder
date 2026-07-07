@@ -5,8 +5,6 @@ import pytest
 from jedi_devproject.builder_maturity import MaturityEvidence
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
-    _catalog_item_changes_from_normalized_intent,
-    _record_producer_changes_from_normalized_intent,
     build_implementation_packet,
     generate_implementation_candidate,
     generate_implementation_update_set_candidate,
@@ -27,6 +25,10 @@ from jedi_devproject.models import (
     ProviderPolicy,
     ProviderStatus,
     Story,
+)
+from jedi_devproject.packet_intent_changes import (
+    _catalog_item_changes_from_normalized_intent,
+    _record_producer_changes_from_normalized_intent,
 )
 from jedi_devproject.providers import ModelResponseError
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags

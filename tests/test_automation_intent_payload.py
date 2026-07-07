@@ -4,7 +4,7 @@ from jedi_devproject.automation_intent import (
     AutomationIntent,
     AutomationIntentSource,
     AutomationIntentType,
-    parsed_automation_intent,
+    intent_required_instance_context,
 )
 from jedi_devproject.capabilities import Capability
 
@@ -18,31 +18,37 @@ def _intent(*, required_instance_context: list[str] | None = None) -> Automation
     )
 
 
-def test_parsed_automation_intent_round_trips_a_dumped_intent() -> None:
-    intent = _intent(required_instance_context=["table_schema", "business_rules"])
-    parsed = parsed_automation_intent(intent.model_dump())
-    assert parsed == intent
-    assert parsed is not None
-    assert parsed.required_instance_context == ["table_schema", "business_rules"]
+def test_intent_required_instance_context_reads_a_dumped_intent() -> None:
+    payload = _intent(
+        required_instance_context=["table_schema", "business_rules"]
+    ).model_dump()
+    assert intent_required_instance_context(payload) == ["table_schema", "business_rules"]
 
 
-def test_parsed_automation_intent_rejects_non_mapping_payloads() -> None:
-    assert parsed_automation_intent(None) is None
-    assert parsed_automation_intent("structured") is None
-    assert parsed_automation_intent(["structured"]) is None
+def test_intent_required_instance_context_survives_unrelated_schema_drift() -> None:
+    # The surface override is a context-gating input: a payload written by a
+    # different schema revision must not silently lose a valid override just
+    # because an unrelated field drifted.
+    drifted = _intent(required_instance_context=["business_rules"]).model_dump()
+    drifted["field_from_a_newer_schema_revision"] = "value"
+    del drifted["source"]
+    assert intent_required_instance_context(drifted) == ["business_rules"]
 
 
-def test_parsed_automation_intent_rejects_payloads_that_do_not_validate() -> None:
-    assert parsed_automation_intent({}) is None
-    assert (
-        parsed_automation_intent(
-            {"source": "structured", "intent_type": "business_rule"}
-        )
-        is None
-    )
-    malformed = _intent().model_dump()
-    malformed["required_instance_context"] = [1, 2]
-    assert parsed_automation_intent(malformed) is None
-    drifted = _intent().model_dump()
-    drifted["not_a_known_field"] = "value"
-    assert parsed_automation_intent(drifted) is None
+def test_intent_required_instance_context_coerces_non_string_items() -> None:
+    payload = _intent().model_dump()
+    payload["required_instance_context"] = ["table_schema", 7]
+    assert intent_required_instance_context(payload) == ["table_schema", "7"]
+
+
+def test_intent_required_instance_context_rejects_non_mapping_payloads() -> None:
+    assert intent_required_instance_context(None) is None
+    assert intent_required_instance_context("structured") is None
+    assert intent_required_instance_context(["structured"]) is None
+
+
+def test_intent_required_instance_context_rejects_non_list_field() -> None:
+    assert intent_required_instance_context({}) is None
+    payload = _intent().model_dump()
+    payload["required_instance_context"] = "table_schema"
+    assert intent_required_instance_context(payload) is None

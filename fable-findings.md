@@ -63,7 +63,10 @@ The *safety architecture and discipline* are 9-tier; the *economy* is where a sk
 
 All five highest-leverage fixes were implemented in sprint 164
 (`docs/sprints/sprint-164-change-log.md`), behavior-preserving, with byte-identity evidence
-and the full gate green (ruff clean, mypy --strict clean, 1,298 tests, coverage 93.77%).
+and the full gate green (ruff clean, mypy --strict clean, 1,301 tests, coverage 93.77%).
+The sprint closed with an adversarial multi-agent review pass over its own diff; the one
+confirmed correctness finding (see fix 4) and two confirmed cleanups (facade `__all__`
+privates, eager structured-path text scrubbing) were fixed before merge.
 
 **Fixed:**
 1. Registration self-test — `tests/test_capability_registration.py`: ten ledger tests over
@@ -76,12 +79,21 @@ and the full gate green (ruff clean, mypy --strict clean, 1,298 tests, coverage 
 3. Table-driven routing — `capability_routing.py` 762 → 662 lines; free-text and structured
    chains are ordered `(name, matcher)` rule tables; precedence pinned by
    `tests/test_capability_routing_rules.py`.
-4. Typed payloads — `parsed_automation_intent()` parse-once boundary reader replaces the
-   `isinstance`/`.get`/`cast` chain in `model_fulfillment._required_surfaces_for_assessment`.
+4. Typed payloads — `intent_required_instance_context()` named field-scoped reader replaces
+   the inline `isinstance`/`.get` chain in
+   `model_fulfillment._required_surfaces_for_assessment`. Deliberately field-scoped, not
+   whole-model: the review pass caught that strict `model_validate` of the full payload
+   would silently drop a valid surface override on any unrelated schema drift in persisted
+   assessment payloads — fail-open context loss on a context-gating path.
 5. Shared provider contract — `provider_contract.py` holds the byte-identical prompt and
    schema; both adapters import it; coupling asserted by `tests/test_provider_contract.py`.
 
 **Deliberate design, not fixed (with reasons):**
+- Rule-table entry names in `_FREE_TEXT_RULES`/`_STRUCTURED_INTENT_RULES` are documentation,
+  not wired to `capability_assessment._intake_reason_codes` (which still derives codes from
+  reason-string matching). Review flagged the mirroring as a maintenance trap; keying the
+  codes off rule names is a behavior-coupling change deferred to a sprint that owns the
+  intake-code contract.
 - Per-file test builders and fakes (no conftest): house convention that buys test isolation;
   codified in CLAUDE.md rather than "fixed".
 - Keyword/regex intent classification: the deterministic pre-model gate is a compliance

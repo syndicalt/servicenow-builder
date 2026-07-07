@@ -47,24 +47,36 @@ against the pre-refactor tree.
   adapters transmit the shared constants (Anthropic still wrapped by
   `_without_unsupported_constraints`). Prompt and schema verified byte-identical to the
   previous values.
-- Added `parsed_automation_intent()` in `automation_intent.py`: a parse-once boundary reader
-  that validates serialized `AutomationIntent.model_dump()` payloads and returns `None` for
-  anything that no longer matches the schema. `model_fulfillment._required_surfaces_for_assessment`
-  now uses it in place of the `isinstance`/`.get` defensive chain; malformed payloads degrade
-  to the same missing-intent discovery default as before (the only consumer coalesces
-  `None`/empty identically via `required_surfaces_override or ...` in `discovery/bundle.py`).
-  Added `tests/test_automation_intent_payload.py` covering round-trip, non-mapping rejection,
-  and schema-drift rejection.
+- Added `intent_required_instance_context()` in `automation_intent.py`: a named, field-scoped
+  reader for the `required_instance_context` surface override in serialized
+  `AutomationIntent.model_dump()` payloads, now used by
+  `model_fulfillment._required_surfaces_for_assessment` in place of its inline
+  `isinstance`/`.get` chain. Field-scoped deliberately: an earlier whole-model
+  `model_validate` version of this change was caught by the sprint's adversarial review
+  pass — strict validation would silently discard a valid surface override whenever an
+  unrelated field in a persisted payload drifted (fail-open context loss on a
+  context-gating path). `tests/test_automation_intent_payload.py` pins the drift-survival,
+  coercion, and rejection semantics.
+- Adversarial multi-agent review pass over the sprint diff (12 agents, verify-gated
+  findings) before close. Confirmed findings fixed: the whole-model validation regression
+  above; `implementation_packet.__all__` no longer advertises underscore-private helpers
+  (tests now import `_expected_tables_for_packet` from `packet_validation` and the
+  normalized-intent change builders from `packet_intent_changes`); the structured-intent
+  routing path no longer eagerly computes `_positive_requirement_text` per story — the one
+  structured rule that reads scrubbed story text computes it lazily after its intent gate,
+  matching the pre-refactor cost profile. Accepted with rationale: rule-table entry names
+  are documentation, not wired to `_intake_reason_codes` (noted in `fable-findings.md`).
 
 ## Verification
 
 - Targeted tests added: `tests/test_capability_registration.py` (10),
   `tests/test_provider_contract.py` (4), `tests/test_capability_routing_rules.py` (3),
-  `tests/test_automation_intent_payload.py` (3); no existing test modified.
+  `tests/test_automation_intent_payload.py` (5); existing tests modified only to import
+  private helpers from their defining modules instead of the facade.
 - Byte-identity evidence: system prompt and schema compared programmatically against
   `git show HEAD` extractions; moved packet functions compared via `inspect.getsource`
   against the pre-split module text; routing reason strings verified against the
   pre-refactor code.
 - `python3 -m ruff check src tests && python3 -m mypy src tests && python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90`
-  — ruff clean, mypy --strict clean (165 files), 1298 tests passing (baseline 1278),
+  — ruff clean, mypy --strict clean (165 files), 1301 tests passing (baseline 1278),
   coverage 93.77% (baseline 93.59%).

@@ -35,7 +35,6 @@ from jedi_devproject.packet_model import (
 )
 from jedi_devproject.packet_validation import (
     _candidate_decision,
-    _expected_tables_for_packet,
     _validate_implementation_contract,
     _validate_response_tables_match_capability,
 )
@@ -57,9 +56,6 @@ __all__ = [
     "IMPLEMENTATION_PACKET_TASK",
     "ImplementationPacket",
     "PacketStory",
-    "_catalog_item_changes_from_normalized_intent",
-    "_expected_tables_for_packet",
-    "_record_producer_changes_from_normalized_intent",
     "build_implementation_packet",
     "generate_implementation_candidate",
     "generate_implementation_update_set_candidate",
