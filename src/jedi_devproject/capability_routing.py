@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from jedi_devproject.automation_intent import (
@@ -126,6 +128,262 @@ def _standalone_catalog_behavior_reasons(requested: set[Capability]) -> list[str
     return [*sorted(codes), _STANDALONE_CATALOG_BEHAVIOR_REASON]
 
 
+@dataclass(frozen=True)
+class _RoutingContext:
+    """Inputs shared by every routing rule, computed once per story.
+
+    ``automation_intent`` is set only on the structured-intent path; free-text
+    routing leaves it ``None``.
+    """
+
+    story: Story
+    requested: set[Capability]
+    positive_text: str
+    intent: FieldFormIntent | None
+    target_table: str | None
+    missing_details: list[str]
+    unsupported: set[Capability]
+    supported_capabilities: set[Capability]
+    automation_intent: AutomationIntent | None = None
+
+
+@dataclass(frozen=True)
+class _RuleResult:
+    """A matched rule's routing decision.
+
+    ``missing_details`` and ``unsupported`` default to ``None``, meaning the
+    assessment keeps the context-computed values; rules that resolve the story
+    (automated build / context analysis) override them explicitly.
+    """
+
+    outcome: SuitabilityOutcome
+    reasons: tuple[str, ...]
+    missing_details: list[str] | None = None
+    unsupported: set[Capability] | None = None
+    required_instance_context: list[str] | None = None
+
+
+_RuleMatcher = Callable[[_RoutingContext], "_RuleResult | None"]
+
+
+def _points_gate_rule(max_points: int, label: str) -> _RuleMatcher:
+    def _match(context: _RoutingContext) -> _RuleResult | None:
+        if context.story.story_points > max_points:
+            return _RuleResult(
+                outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+                reasons=(
+                    f"story points exceed {label}: "
+                    f"{context.story.story_points:.1f} > {max_points}",
+                ),
+            )
+        return None
+
+    return _match
+
+
+def _match_standalone_catalog_behavior(context: _RoutingContext) -> _RuleResult | None:
+    # Free-text stories never create a catalog item (catalog items require
+    # structured intent), so any catalog policy/script request here targets
+    # an existing item and routes to manual review.
+    codes = _standalone_catalog_behavior_reasons(context.requested)
+    if codes:
+        return _RuleResult(outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD, reasons=tuple(codes))
+    return None
+
+
+def _match_combined_item_and_producer(context: _RoutingContext) -> _RuleResult | None:
+    combined = _combined_item_and_producer_reasons(context.positive_text)
+    if combined:
+        return _RuleResult(
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD, reasons=tuple(combined)
+        )
+    return None
+
+
+def _match_cmdb_ire_analysis(context: _RoutingContext) -> _RuleResult | None:
+    if Capability.CMDB_IRE_ANALYZE not in context.requested:
+        return None
+    profile = capability_profile(Capability.CMDB_IRE_GENERATE)
+    return _RuleResult(
+        outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+        reasons=(
+            "supported CMDB IRE identifier and reconciliation candidate request",
+            "CMDB IRE retrieved Update Set handoff requires XML shape evidence",
+        ),
+        missing_details=[],
+        unsupported=set(),
+        required_instance_context=profile.required_instance_context,
+    )
+
+
+def _forbidden_generation_rule(
+    capability: Capability,
+    label: str,
+    forbidden_details: Callable[[str], list[str]],
+) -> _RuleMatcher:
+    def _match(context: _RoutingContext) -> _RuleResult | None:
+        details = forbidden_details(context.positive_text)
+        if capability in context.requested and details:
+            return _RuleResult(
+                outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+                reasons=(
+                    f"{label} generation includes forbidden behavior: {', '.join(details)}",
+                ),
+            )
+        return None
+
+    return _match
+
+
+def _match_unsupported_capabilities(context: _RoutingContext) -> _RuleResult | None:
+    if not context.unsupported:
+        return None
+    return _RuleResult(
+        outcome=SuitabilityOutcome.UNSUPPORTED_CAPABILITY,
+        reasons=("request includes unsupported pipeline capabilities",),
+    )
+
+
+def _match_record_producer_structured_intent(context: _RoutingContext) -> _RuleResult | None:
+    if Capability.RECORD_PRODUCER_CREATE not in context.requested:
+        return None
+    reasons = [_RECORD_PRODUCER_STRUCTURED_INTENT_REASON]
+    if context.missing_details:
+        reasons.append("story is missing required automation details")
+    return _RuleResult(outcome=SuitabilityOutcome.NEEDS_CLARIFICATION, reasons=tuple(reasons))
+
+
+def _match_missing_details(context: _RoutingContext) -> _RuleResult | None:
+    if not context.missing_details:
+        return None
+    return _RuleResult(
+        outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
+        reasons=("story is missing required automation details",),
+    )
+
+
+def _match_code_surface_analysis(context: _RoutingContext) -> _RuleResult | None:
+    capability = _code_surface_capability(context.requested)
+    if capability is None or _is_dictionary_form_request(context.positive_text):
+        return None
+    profile = capability_profile(capability)
+    label = capability.value.removesuffix("_analyze").replace("_", " ")
+    return _RuleResult(
+        outcome=SuitabilityOutcome.CONTEXT_ANALYSIS,
+        reasons=("Code surface analysis first", f"{label} generation is not enabled yet"),
+        missing_details=[],
+        unsupported=set(),
+        required_instance_context=profile.required_instance_context,
+    )
+
+
+def _supported_generation_rule(capability: Capability) -> _RuleMatcher:
+    """Route a supported generation request to an automated build.
+
+    The reason string comes from ``AUTOMATED_INTENT_REASONS`` so free-text and
+    structured routing report identical wording per capability.
+    """
+
+    def _match(context: _RoutingContext) -> _RuleResult | None:
+        if capability not in context.requested:
+            return None
+        profile = capability_profile(capability)
+        return _RuleResult(
+            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
+            reasons=(AUTOMATED_INTENT_REASONS[capability],),
+            missing_details=[],
+            unsupported=set(),
+            required_instance_context=profile.required_instance_context,
+        )
+
+    return _match
+
+
+# Ordered free-text routing rules, evaluated top to bottom; the first match
+# wins. Order is load-bearing: points gates run before everything, manual-
+# review gates (standalone catalog behavior, combined item+producer, forbidden
+# details) run before the unsupported/clarification gates, and those run
+# before supported-generation routing. A story matching no rule falls through
+# to the terminal dictionary/form outcome in ``analyze_story_capabilities``.
+_FREE_TEXT_RULES: tuple[tuple[str, _RuleMatcher], ...] = (
+    (
+        "story_points_exceed_full_maturity_max",
+        _points_gate_rule(FULL_MATURITY_MAX_AUTOMATED_POINTS, "full-maturity max"),
+    ),
+    (
+        "story_points_exceed_current_automation_max",
+        _points_gate_rule(CURRENT_AUTOMATION_MAX_POINTS, "current automation max"),
+    ),
+    ("standalone_catalog_behavior", _match_standalone_catalog_behavior),
+    ("combined_item_and_producer", _match_combined_item_and_producer),
+    ("cmdb_ire_analysis", _match_cmdb_ire_analysis),
+    (
+        "business_rule_forbidden_behavior",
+        _forbidden_generation_rule(
+            Capability.BUSINESS_RULE_GENERATE, "business rule", _business_rule_forbidden_details
+        ),
+    ),
+    (
+        "client_script_forbidden_behavior",
+        _forbidden_generation_rule(
+            Capability.CLIENT_SCRIPT_GENERATE, "client script", _client_script_forbidden_details
+        ),
+    ),
+    (
+        "script_include_forbidden_behavior",
+        _forbidden_generation_rule(
+            Capability.SCRIPT_INCLUDE_GENERATE,
+            "script include",
+            _script_include_forbidden_details,
+        ),
+    ),
+    (
+        "ui_policy_forbidden_behavior",
+        _forbidden_generation_rule(
+            Capability.UI_POLICY_GENERATE, "ui policy", _ui_policy_forbidden_details
+        ),
+    ),
+    ("unsupported_capabilities", _match_unsupported_capabilities),
+    ("record_producer_structured_intent", _match_record_producer_structured_intent),
+    ("missing_details", _match_missing_details),
+    ("code_surface_analysis", _match_code_surface_analysis),
+    ("business_rule_generation", _supported_generation_rule(Capability.BUSINESS_RULE_GENERATE)),
+    ("client_script_generation", _supported_generation_rule(Capability.CLIENT_SCRIPT_GENERATE)),
+    ("script_include_generation", _supported_generation_rule(Capability.SCRIPT_INCLUDE_GENERATE)),
+    ("ui_policy_generation", _supported_generation_rule(Capability.UI_POLICY_GENERATE)),
+    ("form_section_removal", _supported_generation_rule(Capability.FORM_SECTION_REMOVE)),
+)
+
+
+def _first_matching_rule_assessment(
+    context: _RoutingContext,
+    rules: tuple[tuple[str, _RuleMatcher], ...],
+) -> StoryCapabilityAssessment | None:
+    """Evaluate ordered rules and build the assessment for the first match."""
+    for _name, matcher in rules:
+        result = matcher(context)
+        if result is None:
+            continue
+        return _assessment(
+            story=context.story,
+            outcome=result.outcome,
+            requested=context.requested,
+            supported=context.supported_capabilities,
+            intent=context.intent,
+            target_table=context.target_table,
+            reasons=list(result.reasons),
+            missing_details=(
+                context.missing_details
+                if result.missing_details is None
+                else result.missing_details
+            ),
+            unsupported=context.unsupported if result.unsupported is None else result.unsupported,
+            required_instance_context=result.required_instance_context,
+            automation_intent=context.automation_intent,
+        )
+    return None
+
+
 def analyze_story_capabilities(
     story: Story,
     *,
@@ -142,330 +400,33 @@ def analyze_story_capabilities(
     text = _story_text(story)
     positive_text = _positive_requirement_text(text)
     requested = _requested_capabilities(positive_text)
-    missing_details = _missing_details(positive_text)
-    unsupported = requested - supported_capabilities
     intent = _field_form_intent(story, text) if _is_dictionary_form_request(positive_text) else None
-    target_table = intent.target_table if intent is not None else _target_table(positive_text)
-    reasons: list[str] = []
+    context = _RoutingContext(
+        story=story,
+        requested=requested,
+        positive_text=positive_text,
+        intent=intent,
+        target_table=intent.target_table if intent is not None else _target_table(positive_text),
+        missing_details=_missing_details(positive_text),
+        unsupported=requested - supported_capabilities,
+        supported_capabilities=supported_capabilities,
+    )
 
-    if story.story_points > FULL_MATURITY_MAX_AUTOMATED_POINTS:
-        reasons.append(
-            "story points exceed full-maturity max: "
-            f"{story.story_points:.1f} > {FULL_MATURITY_MAX_AUTOMATED_POINTS}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
+    matched = _first_matching_rule_assessment(context, _FREE_TEXT_RULES)
+    if matched is not None:
+        return matched
 
-    if story.story_points > CURRENT_AUTOMATION_MAX_POINTS:
-        reasons.append(
-            "story points exceed current automation max: "
-            f"{story.story_points:.1f} > {CURRENT_AUTOMATION_MAX_POINTS}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    standalone_catalog_behavior_reasons = _standalone_catalog_behavior_reasons(requested)
-    if standalone_catalog_behavior_reasons:
-        # Free-text stories never create a catalog item (catalog items require
-        # structured intent), so any catalog policy/script request here targets
-        # an existing item and routes to manual review.
-        reasons.extend(standalone_catalog_behavior_reasons)
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    combined_item_and_producer_reasons = _combined_item_and_producer_reasons(positive_text)
-    if combined_item_and_producer_reasons:
-        reasons.extend(combined_item_and_producer_reasons)
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    if Capability.CMDB_IRE_ANALYZE in requested:
-        profile = capability_profile(Capability.CMDB_IRE_GENERATE)
-        reasons.extend(
-            [
-                "supported CMDB IRE identifier and reconciliation candidate request",
-                "CMDB IRE retrieved Update Set handoff requires XML shape evidence",
-            ]
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    forbidden_business_rule_details = _business_rule_forbidden_details(positive_text)
-    if Capability.BUSINESS_RULE_GENERATE in requested and forbidden_business_rule_details:
-        reasons.append(
-            "business rule generation includes forbidden behavior: "
-            f"{', '.join(forbidden_business_rule_details)}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    forbidden_client_script_details = _client_script_forbidden_details(positive_text)
-    if Capability.CLIENT_SCRIPT_GENERATE in requested and forbidden_client_script_details:
-        reasons.append(
-            "client script generation includes forbidden behavior: "
-            f"{', '.join(forbidden_client_script_details)}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    forbidden_script_include_details = _script_include_forbidden_details(positive_text)
-    if Capability.SCRIPT_INCLUDE_GENERATE in requested and forbidden_script_include_details:
-        reasons.append(
-            "script include generation includes forbidden behavior: "
-            f"{', '.join(forbidden_script_include_details)}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    forbidden_ui_policy_details = _ui_policy_forbidden_details(positive_text)
-    if Capability.UI_POLICY_GENERATE in requested and forbidden_ui_policy_details:
-        reasons.append(
-            "ui policy generation includes forbidden behavior: "
-            f"{', '.join(forbidden_ui_policy_details)}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    if unsupported:
-        reasons.append("request includes unsupported pipeline capabilities")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.UNSUPPORTED_CAPABILITY,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    if Capability.RECORD_PRODUCER_CREATE in requested:
-        reasons.append(_RECORD_PRODUCER_STRUCTURED_INTENT_REASON)
-        if missing_details:
-            reasons.append("story is missing required automation details")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    if missing_details:
-        reasons.append("story is missing required automation details")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=missing_details,
-            unsupported=unsupported,
-        )
-
-    code_surface_capability = _code_surface_capability(requested)
-    if code_surface_capability is not None and not _is_dictionary_form_request(positive_text):
-        profile = capability_profile(code_surface_capability)
-        code_surface_label = code_surface_capability.value.removesuffix("_analyze").replace(
-            "_", " "
-        )
-        reasons.extend(
-            [
-                "Code surface analysis first",
-                f"{code_surface_label} generation is not enabled yet",
-            ]
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.CONTEXT_ANALYSIS,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    if Capability.BUSINESS_RULE_GENERATE in requested:
-        profile = capability_profile(Capability.BUSINESS_RULE_GENERATE)
-        reasons.append("supported table-local business rule generation request")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    if Capability.CLIENT_SCRIPT_GENERATE in requested:
-        profile = capability_profile(Capability.CLIENT_SCRIPT_GENERATE)
-        reasons.append("supported table-local client script generation request")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    if Capability.SCRIPT_INCLUDE_GENERATE in requested:
-        profile = capability_profile(Capability.SCRIPT_INCLUDE_GENERATE)
-        reasons.append("supported utility script include generation request")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    if Capability.UI_POLICY_GENERATE in requested:
-        profile = capability_profile(Capability.UI_POLICY_GENERATE)
-        reasons.append("supported declarative ui policy generation request")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    if Capability.FORM_SECTION_REMOVE in requested:
-        profile = capability_profile(Capability.FORM_SECTION_REMOVE)
-        reasons.append("supported form section removal request")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-        )
-
-    reasons.append("supported low-complexity dictionary/form request")
+    # Terminal fallthrough, deliberately outside the rule table: a free-text
+    # story that clears every gate above is a supported low-complexity
+    # dictionary/form request.
     return _assessment(
         story=story,
         outcome=SuitabilityOutcome.AUTOMATED_BUILD,
         requested=requested,
         supported=supported_capabilities,
         intent=intent,
-        target_table=target_table,
-        reasons=reasons,
+        target_table=context.target_table,
+        reasons=["supported low-complexity dictionary/form request"],
         missing_details=[],
         unsupported=set(),
     )
@@ -483,6 +444,76 @@ AUTOMATED_INTENT_REASONS = {
 }
 
 
+def _match_intent_standalone_catalog_behavior(context: _RoutingContext) -> _RuleResult | None:
+    automation_intent = context.automation_intent
+    if automation_intent is None or automation_intent.intent_type not in {
+        AutomationIntentType.CATALOG_UI_POLICY,
+        AutomationIntentType.CATALOG_CLIENT_SCRIPT,
+    }:
+        return None
+    # Standalone catalog variable behavior targets an existing catalog
+    # item; supported behavior rides along the story that creates the item.
+    return _RuleResult(
+        outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+        reasons=tuple(_standalone_catalog_behavior_reasons({automation_intent.capability})),
+    )
+
+
+def _match_intent_combined_item_and_producer(context: _RoutingContext) -> _RuleResult | None:
+    automation_intent = context.automation_intent
+    if automation_intent is None or automation_intent.intent_type not in {
+        AutomationIntentType.CATALOG_ITEM,
+        AutomationIntentType.RECORD_PRODUCER,
+    }:
+        return None
+    combined = _combined_item_and_producer_reasons(context.positive_text)
+    if combined:
+        return _RuleResult(
+            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD, reasons=tuple(combined)
+        )
+    return None
+
+
+def _match_intent_forbidden_details(context: _RoutingContext) -> _RuleResult | None:
+    automation_intent = context.automation_intent
+    details = (
+        _automation_intent_forbidden_details(automation_intent)
+        if automation_intent is not None
+        else []
+    )
+    if automation_intent is None or not details:
+        return None
+    return _RuleResult(
+        outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
+        reasons=(
+            f"{automation_intent.intent_type.value.replace('_', ' ')} generation "
+            f"includes forbidden behavior: {', '.join(details)}",
+        ),
+    )
+
+
+# Ordered structured-intent routing rules; same first-match-wins evaluation and
+# ordering constraints as ``_FREE_TEXT_RULES``. A story matching no rule falls
+# through to the terminal supported-automation outcome in
+# ``_assess_automation_intent``.
+_STRUCTURED_INTENT_RULES: tuple[tuple[str, _RuleMatcher], ...] = (
+    (
+        "story_points_exceed_full_maturity_max",
+        _points_gate_rule(FULL_MATURITY_MAX_AUTOMATED_POINTS, "full-maturity max"),
+    ),
+    (
+        "story_points_exceed_current_automation_max",
+        _points_gate_rule(CURRENT_AUTOMATION_MAX_POINTS, "current automation max"),
+    ),
+    ("standalone_catalog_behavior", _match_intent_standalone_catalog_behavior),
+    ("combined_item_and_producer", _match_intent_combined_item_and_producer),
+    ("forbidden_intent_details", _match_intent_forbidden_details),
+    ("unsupported_capabilities", _match_unsupported_capabilities),
+    ("missing_details", _match_missing_details),
+    ("form_section_removal", _supported_generation_rule(Capability.FORM_SECTION_REMOVE)),
+)
+
+
 def _assess_automation_intent(
     *,
     story: Story,
@@ -490,173 +521,42 @@ def _assess_automation_intent(
     supported_capabilities: set[Capability],
 ) -> StoryCapabilityAssessment:
     requested = _capabilities_for_automation_intent(automation_intent)
-    unsupported = requested - supported_capabilities
     field_form_intent = _field_form_intent_from_automation_intent(story, automation_intent)
-    target_table = (
-        field_form_intent.target_table
-        if field_form_intent is not None
-        else automation_intent.target_table
+    context = _RoutingContext(
+        story=story,
+        requested=requested,
+        positive_text=_positive_requirement_text(_story_text(story)),
+        intent=field_form_intent,
+        target_table=(
+            field_form_intent.target_table
+            if field_form_intent is not None
+            else automation_intent.target_table
+        ),
+        missing_details=automation_intent.missing_details,
+        unsupported=requested - supported_capabilities,
+        supported_capabilities=supported_capabilities,
+        automation_intent=automation_intent,
     )
-    reasons: list[str] = []
 
-    if story.story_points > FULL_MATURITY_MAX_AUTOMATED_POINTS:
-        reasons.append(
-            "story points exceed full-maturity max: "
-            f"{story.story_points:.1f} > {FULL_MATURITY_MAX_AUTOMATED_POINTS}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=automation_intent.missing_details,
-            unsupported=unsupported,
-            automation_intent=automation_intent,
-        )
+    matched = _first_matching_rule_assessment(context, _STRUCTURED_INTENT_RULES)
+    if matched is not None:
+        return matched
 
-    if story.story_points > CURRENT_AUTOMATION_MAX_POINTS:
-        reasons.append(
-            "story points exceed current automation max: "
-            f"{story.story_points:.1f} > {CURRENT_AUTOMATION_MAX_POINTS}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=automation_intent.missing_details,
-            unsupported=unsupported,
-            automation_intent=automation_intent,
-        )
-
-    if automation_intent.intent_type in {
-        AutomationIntentType.CATALOG_UI_POLICY,
-        AutomationIntentType.CATALOG_CLIENT_SCRIPT,
-    }:
-        # Standalone catalog variable behavior targets an existing catalog
-        # item; supported behavior rides along the story that creates the item.
-        reasons.extend(_standalone_catalog_behavior_reasons({automation_intent.capability}))
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=automation_intent.missing_details,
-            unsupported=unsupported,
-            automation_intent=automation_intent,
-        )
-
-    if automation_intent.intent_type in {
-        AutomationIntentType.CATALOG_ITEM,
-        AutomationIntentType.RECORD_PRODUCER,
-    }:
-        combined_reasons = _combined_item_and_producer_reasons(
-            _positive_requirement_text(_story_text(story))
-        )
-        if combined_reasons:
-            reasons.extend(combined_reasons)
-            return _assessment(
-                story=story,
-                outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-                requested=requested,
-                supported=supported_capabilities,
-                intent=field_form_intent,
-                target_table=target_table,
-                reasons=reasons,
-                missing_details=automation_intent.missing_details,
-                unsupported=unsupported,
-                automation_intent=automation_intent,
-            )
-
-    forbidden_details = _automation_intent_forbidden_details(automation_intent)
-    if forbidden_details:
-        reasons.append(
-            f"{automation_intent.intent_type.value.replace('_', ' ')} generation "
-            f"includes forbidden behavior: {', '.join(forbidden_details)}"
-        )
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.MANUAL_DEVELOPER_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=automation_intent.missing_details,
-            unsupported=unsupported,
-            automation_intent=automation_intent,
-        )
-
-    if unsupported:
-        reasons.append("request includes unsupported pipeline capabilities")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.UNSUPPORTED_CAPABILITY,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=automation_intent.missing_details,
-            unsupported=unsupported,
-            automation_intent=automation_intent,
-        )
-
-    if automation_intent.missing_details:
-        reasons.append("story is missing required automation details")
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=automation_intent.missing_details,
-            unsupported=unsupported,
-            automation_intent=automation_intent,
-        )
-
-    if automation_intent.capability is Capability.FORM_SECTION_REMOVE:
-        profile = capability_profile(Capability.FORM_SECTION_REMOVE)
-        reasons.append(AUTOMATED_INTENT_REASONS[Capability.FORM_SECTION_REMOVE])
-        return _assessment(
-            story=story,
-            outcome=SuitabilityOutcome.AUTOMATED_BUILD,
-            requested=requested,
-            supported=supported_capabilities,
-            intent=field_form_intent,
-            target_table=target_table,
-            reasons=reasons,
-            missing_details=[],
-            unsupported=set(),
-            required_instance_context=profile.required_instance_context,
-            automation_intent=automation_intent,
-        )
-
-    reasons.append(
-        AUTOMATED_INTENT_REASONS.get(
-            automation_intent.capability,
-            "supported structured automation request",
-        )
-    )
+    # Terminal fallthrough, deliberately outside the rule table: a structured
+    # intent that clears every gate above is a supported automation request.
     return _assessment(
         story=story,
         outcome=SuitabilityOutcome.AUTOMATED_BUILD,
         requested=requested,
         supported=supported_capabilities,
         intent=field_form_intent,
-        target_table=target_table,
-        reasons=reasons,
+        target_table=context.target_table,
+        reasons=[
+            AUTOMATED_INTENT_REASONS.get(
+                automation_intent.capability,
+                "supported structured automation request",
+            )
+        ],
         missing_details=[],
         unsupported=set(),
         required_instance_context=automation_intent.required_instance_context,

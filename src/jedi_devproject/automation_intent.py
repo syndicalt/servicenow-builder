@@ -4,7 +4,7 @@ import re
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from jedi_devproject.capabilities import Capability, capability_profile
 from jedi_devproject.models import Story
@@ -168,6 +168,23 @@ class AutomationIntent(BaseModel):
     @property
     def is_structured(self) -> bool:
         return self.source is AutomationIntentSource.STRUCTURED
+
+
+def parsed_automation_intent(payload: object) -> AutomationIntent | None:
+    """Parse a serialized automation-intent payload once at a consumption boundary.
+
+    Assessments carry the intent across module and artifact boundaries as the
+    dict produced by ``AutomationIntent.model_dump()``. Returns ``None`` when
+    the payload is not such a mapping, so consumers degrade to the same
+    missing-intent path as the legacy defensive dict reads instead of acting on
+    a payload that no longer matches the schema.
+    """
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return AutomationIntent.model_validate(payload)
+    except ValidationError:
+        return None
 
 
 ARTIFACT_TYPE_ALIASES: dict[str, tuple[AutomationIntentType, Capability]] = {
