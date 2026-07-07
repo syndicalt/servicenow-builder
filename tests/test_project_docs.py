@@ -2664,3 +2664,18 @@ def test_sprint_one_forty_eight_change_log_documents_business_rule_hardening() -
     assert "`business_rule_generate`" in change_log
     assert "`sys_script`" in change_log
     assert "Sprint 148: Business Rule structured story hardening" in backlog
+
+
+def test_sprint_one_sixty_four_change_log_documents_architecture_hardening() -> None:
+    change_log = Path("docs/sprints/sprint-164-change-log.md").read_text(encoding="utf-8")
+
+    assert "fable-findings.md" in change_log
+    assert "test_capability_registration.py" in change_log
+    assert "`packet_model.py`" in change_log
+    assert "`packet_validation.py`" in change_log
+    assert "`packet_intent_changes.py`" in change_log
+    assert "`_FREE_TEXT_RULES`" in change_log
+    assert "`IMPLEMENTATION_SYSTEM_PROMPT`" in change_log
+    assert "intent_required_instance_context" in change_log
+    assert "adversarial review" in change_log
+    assert "coverage 93.77%" in change_log

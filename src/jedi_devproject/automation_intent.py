@@ -170,6 +170,25 @@ class AutomationIntent(BaseModel):
         return self.source is AutomationIntentSource.STRUCTURED
 
 
+def intent_required_instance_context(payload: object) -> list[str] | None:
+    """Read ``required_instance_context`` from a serialized intent payload.
+
+    Assessments carry the intent across module and artifact boundaries as the
+    dict produced by ``AutomationIntent.model_dump()``. Field-scoped on
+    purpose: the surface override must survive unrelated schema drift in
+    persisted assessment payloads, so this validates only the field it
+    consumes instead of the whole model. Returns ``None`` when the payload is
+    not a mapping or the field is not a list, so consumers degrade to the same
+    missing-intent path as before.
+    """
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("required_instance_context")
+    if not isinstance(value, list):
+        return None
+    return [str(surface) for surface in value]
+
+
 ARTIFACT_TYPE_ALIASES: dict[str, tuple[AutomationIntentType, Capability]] = {
     "catalog item": (
         AutomationIntentType.CATALOG_ITEM,

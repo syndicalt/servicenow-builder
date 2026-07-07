@@ -6,6 +6,7 @@ from typing import Any, Protocol, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.atf_test_generation import generate_atf_test_plan
+from jedi_devproject.automation_intent import intent_required_instance_context
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome, capability_profile
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.enrichment import enrich_story
@@ -324,13 +325,10 @@ def _required_surfaces_for_assessment(
         if public_docs_required and "public_docs" not in surfaces:
             surfaces.append("public_docs")
         return cast(list[SurfaceName], surfaces)
-    automation_intent = assessment.automation_intent
-    if not isinstance(automation_intent, dict):
+    required_context = intent_required_instance_context(assessment.automation_intent)
+    if required_context is None:
         return ["public_docs"] if public_docs_required else None
-    required_context = automation_intent.get("required_instance_context")
-    if not isinstance(required_context, list):
-        return ["public_docs"] if public_docs_required else None
-    surfaces = [str(surface) for surface in required_context]
+    surfaces = required_context
     if public_docs_required and "public_docs" not in surfaces:
         surfaces.append("public_docs")
     return cast(list[SurfaceName], surfaces)
