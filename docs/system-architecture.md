@@ -23,8 +23,8 @@ The system does not auto-commit Update Sets. The human review point is ServiceNo
 | Component | Code Boundary | Responsibility |
 |---|---|---|
 | ServiceNow lifecycle emitter | Bootstrap Business Rule and Scripted REST resources | Emits lifecycle events when stories move through the configured workflow. |
-| Runtime API | `create_runtime_api`, `create_lifecycle_api` | Receives lifecycle events, authenticates requests, rate-limits, persists events, and enqueues fulfillment jobs. |
-| Operational store | `operational_store.py`, `db/migrations/0001_operational_store.sql` | Stores lifecycle events, fulfillment jobs, job events, artifact blobs, and artifact refs. |
+| Runtime API | `admin_routes.py` (`create_runtime_api`), `lifecycle_api.py` (`create_lifecycle_api`) | Receives lifecycle events, authenticates requests, rate-limits, persists events, and enqueues fulfillment jobs. |
+| Operational store | `operational_store.py`, `db/migrations/0001_operational_store.sql`, `db/migrations/0002_retention.sql` | Stores lifecycle events, fulfillment jobs, job events, artifact blobs, and artifact refs. |
 | Fulfillment worker | `runtime_worker.py`, `fulfillment_worker.py` | Claims queued jobs with row locks and executes fulfillment outside the webhook request. |
 | Build claim handler | `fulfillment_handler.py` | Moves eligible stories from Ready to Work in Progress when configured. |
 | Model fulfillment handler | `model_fulfillment.py` | Retrieves story context, builds packets, calls provider, stores candidate artifacts, and creates handoff if allowed. |
@@ -33,7 +33,33 @@ The system does not auto-commit Update Sets. The human review point is ServiceNo
 | Implementation packet builder | `implementation_packet.py` | Produces model-ready packet, context dossier, sufficiency report, and validated candidate. |
 | Deterministic builders | `generic_dictionary_form.py`, generation modules, handoff modules | Convert approved structured candidates into ServiceNow-reviewed artifacts for mature surfaces. |
 | Update Set importer | ServiceNow-side importer endpoint | Imports retrieved Update Set XML into `sys_remote_update_set` for human preview and commit. |
-| Admin console | `runtime.py` | Read-only operator view over recent jobs, events, and artifacts. |
+| Admin console | `admin_routes.py` (re-exported through the `runtime.py` facade) | Read-only operator view over recent jobs, events, alerts, operations, and artifacts. |
+
+## Runtime API Surface
+
+The runtime API is a FastAPI application built by `create_runtime_api()` in `admin_routes.py`, which embeds the lifecycle API from `create_lifecycle_api()` in `lifecycle_api.py`. `runtime_api.py:build_app` is the uvicorn factory entry point. All routes are schema-validated, size-bounded, and rate-limited; validation errors never echo submitted input values.
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| `GET` | `/health` | None | `200` with `{"status": "ok"}`. Liveness only; does not check dependencies. |
+| `POST` | `/lifecycle/events` | HMAC headers `X-JEDI-Webhook-Secret`, `X-JEDI-Webhook-Timestamp`, `X-JEDI-Webhook-Signature` when `JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE` is enabled | `202` with `LifecycleWebhookResponse` (`accepted`, `event_id`, `story_number`, `should_evaluate`, `lifecycle_action`, `job_id`, `reasons`). `422` on invalid JSON or schema; `429` when rate-limited. |
+| `GET` | `/ready` | None | `200` with `{"status": "ready", "checks": [...]}` when the operational store schema is verified; `503` with per-check status otherwise. |
+| `GET` | `/artifacts/{artifact_id}` | Admin bearer token | `200` JSON artifact blob payload; `404` when the artifact does not exist. |
+| `GET` | `/jobs/{job_id}/artifacts` | Admin bearer token | `200` JSON job summary plus artifact refs with SHA-256 hashes; `404` for unknown jobs. |
+| `GET` | `/jobs/{job_id}/events` | Admin bearer token | `200` JSON job summary plus append-only job events; `404` for unknown jobs. |
+| `GET` | `/admin/lifecycle-events` | Admin bearer token | `200` JSON recent lifecycle events (`limit` query parameter, bounded). |
+| `GET` | `/admin/jobs` | Admin bearer token | `200` JSON recent fulfillment jobs (`limit` query parameter, bounded). |
+| `GET` | `/admin/alerts` | Admin bearer token | `200` JSON operational alerts derived from recent jobs, including stale running-job detection. |
+| `GET` | `/admin/operations` | Admin bearer token | `200` JSON fulfillment-job status summary and the stale-job threshold. |
+| `GET` | `/admin` | Admin console credentials | `200` HTML operator console. |
+| `GET` | `/admin/artifacts/{artifact_id}` | Admin console credentials | `200` HTML artifact detail page; `404` when the artifact does not exist. |
+
+Two admin auth mechanisms guard these routes:
+
+- **Admin bearer token** (`Authorization: Bearer <JEDI_ADMIN_API_TOKEN>`) protects the JSON diagnostic routes. The routes fail closed with `503` when no token is configured, `401` when the bearer header is missing, and `403` when the token is malformed or does not match. Token comparison is constant-time.
+- **Admin console credentials** protect the HTML console routes. `JEDI_ADMIN_AUTH_MODE` accepts `disabled`, `dev_basic`, `oidc`, and `servicenow_oauth`. `disabled` returns `503`; `dev_basic` is HTTP Basic auth against `JEDI_ADMIN_CONSOLE_USERNAME`/`JEDI_ADMIN_CONSOLE_PASSWORD` and is rejected outside `JEDI_ENVIRONMENT=development`; `oidc` and `servicenow_oauth` are reserved and return `501` until implemented. Production deployments must not rely on `dev_basic`.
+
+All admin and lifecycle routes return `429` with a `Retry-After` header when their configured rate limit is exceeded.
 
 ## Deployment Topology
 
@@ -273,6 +299,17 @@ sequenceDiagram
 
 ## State And Status Model
 
+| ServiceNow State Change | Runtime Action | Story AI Status |
+|---|---|---|
+| Draft to Ready | Queue fulfillment job. | Build In Progress after worker claim. |
+| Ready to Work in Progress | Worker claim writeback when enabled. | Build In Progress. |
+| Handoff created | Retrieved Update Set is available for preview/commit. | Ready for Testing. |
+| Candidate manual review | No retrieved Update Set. | Human Review Required or Needs Clarification. |
+| Fulfillment failure | Failure work note and Draft rollback when state choice exists. | Automation Failed. |
+| Ready for Testing to Ready | Record rework request; do not enqueue a new build. | Ready for Testing unless a later sprint changes it. |
+| Ready for Testing to Draft | Mark latest job rejected; preserve artifacts. | Human-driven story rejection path. |
+| Ready for Testing to Complete | Record completion event. | Complete. |
+
 ## Split ServiceNow Instances
 
 Runtime ServiceNow access is split by responsibility:
@@ -285,17 +322,6 @@ The PM client owns story retrieval and story writeback. It reads `rm_story`, sto
 The DEV client owns development context and generated platform artifacts. It retrieves target table/form/code/catalog/CMDB context, resolves platform metadata, and imports reviewed retrieved Update Set XML through the ServiceNow-side importer.
 
 The legacy `SERVICENOW_INSTANCE_URL`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET` settings remain only as a single-instance compatibility fallback.
-
-| ServiceNow State Change | Runtime Action | Story AI Status |
-|---|---|---|
-| Draft to Ready | Queue fulfillment job. | Build In Progress after worker claim. |
-| Ready to Work in Progress | Worker claim writeback when enabled. | Build In Progress. |
-| Handoff created | Retrieved Update Set is available for preview/commit. | Ready for Testing. |
-| Candidate manual review | No retrieved Update Set. | Human Review Required or Needs Clarification. |
-| Fulfillment failure | Failure work note and Draft rollback when state choice exists. | Automation Failed. |
-| Ready for Testing to Ready | Record rework request; do not enqueue a new build. | Ready for Testing unless a later sprint changes it. |
-| Ready for Testing to Draft | Mark latest job rejected; preserve artifacts. | Human-driven story rejection path. |
-| Ready for Testing to Complete | Record completion event. | Complete. |
 
 ## Failure Handling
 
@@ -317,9 +343,11 @@ flowchart TD
     Auth --> Console["GET /admin"]
     Console --> Jobs["Recent fulfillment jobs"]
     Console --> Events["Recent lifecycle events"]
+    Console --> Alerts["Operational alerts"]
     Console --> Artifacts["Artifact detail pages"]
     Jobs --> Store[("PostgreSQL")]
     Events --> Store
+    Alerts --> Store
     Artifacts --> Store
 ```
 

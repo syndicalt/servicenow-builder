@@ -1,5 +1,7 @@
 .eventloom/
 .env
+.env.*
+!.env.example
 .coverage
 artifacts/
 __pycache__/

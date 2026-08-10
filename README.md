@@ -7,6 +7,62 @@
 
 ---
 
+### Architecture at a Glance
+
+JEDI DevProject runs as an SPM-aware sidecar next to ServiceNow. ServiceNow remains the canonical work surface; the runtime never commits Update Sets autonomously.
+
+```mermaid
+flowchart LR
+    SN["ServiceNow rm_story lifecycle event"] --> API["FastAPI runtime API"]
+    API --> DB[("PostgreSQL operational store")]
+    DB --> Worker["Fulfillment worker"]
+    Worker --> Ctx["Read-only instance context retrieval"]
+    Ctx --> Packet["LLM implementation packet"]
+    Packet --> Provider["Approved model provider"]
+    Provider --> Candidate["Validated UpdateSetCandidate artifact"]
+    Candidate --> Handoff["Retrieved Update Set handoff (mature builders only)"]
+    Handoff --> Human["Human preview, scan, and commit in ServiceNow"]
+    Worker --> Writeback["Allowlisted story status writeback"]
+```
+
+- Webhook ingestion is asynchronous: the API persists lifecycle events and enqueues jobs; worker processes fulfill them under row locks.
+- Rules are gates, not the implementation engine. Deterministic policy decides eligibility, provider approval, and output safety before any model call.
+- Model output is structured candidate data, never raw XML. Retrieved Update Set XML comes only from deterministic builders for mature capability surfaces.
+- Every step is auditable: events, jobs, packets, candidates, and reviewer decisions persist with SHA-256 artifact hashes.
+
+The full component inventory, trust boundaries, workflow diagrams, and data flows are in `docs/system-architecture.md`.
+
+### Getting Started
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
+cp .env.example .env   # fill in approved instance URLs and credentials; never commit .env
+jedi-devproject run-local --sample-file examples/stories/content-only-help-text.json --artifact-root artifacts --run-id first-run
+```
+
+The local pipeline is dry-run and needs no ServiceNow connection. See `docs/quickstart.md` for the full setup, the local verification gate, and runtime (API + worker) startup.
+
+### Documentation
+
+| Document | Contents |
+|---|---|
+| `docs/quickstart.md` | Install, configure, verify, and run the pipeline and runtime locally. |
+| `docs/system-architecture.md` | Runtime components, API surface, trust boundaries, workflows, and data flows. |
+| `docs/operator-guide.md` | Configuration reference, operational runbooks, smoke testing, and production checklist. |
+| `docs/development.md` | Test-first engineering rules and the local verification gate. |
+| `docs/admin-auth-config.md` | Admin console and admin API authentication modes. |
+| `docs/risk-register.md` | Active risks, status, and mitigations. |
+| `docs/security/` | Threat model, data-flow analysis, and control mapping. |
+| `docs/policies/` | Local regulated-data handling policy. |
+| `docs/adr/` | Architecture decision records. |
+| `docs/releases/` | Release notes. |
+| `docs/sprints/` | Per-sprint change logs. |
+| `docs/production-hardening-backlog.md` | Remaining production-hardening work. |
+| `docs/codebase-analysis-and-roadmap-2026-06-11.md` | Codebase analysis and roadmap opportunities. |
+
+---
+
 ### 1. Objectives & Scope
 
 **Primary Goals**
@@ -138,7 +194,7 @@ Each retrieval result must include source, version/date when available, confiden
 
 #### 4.4 LLM Implementation Packet
 
-rules are gates, not the implementation engine. Deterministic controls decide whether a story is eligible, whether the provider is approved, what tables and operations are allowed, and whether generated output is safe. The implementation work is performed through an LLM implementation packet.
+Rules are gates, not the implementation engine. Deterministic controls decide whether a story is eligible, whether the provider is approved, what tables and operations are allowed, and whether generated output is safe. The implementation work is performed through an LLM implementation packet.
 
 The LLM implementation packet is a model-ready, citation-backed context bundle for Now Assist or another approved provider. It includes:
 

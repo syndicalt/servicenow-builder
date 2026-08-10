@@ -841,7 +841,7 @@ class PostgresOperationalStore:
             WHERE table_schema = 'public'
               AND table_name = ANY(%s)
             """,
-            (REQUIRED_OPERATIONAL_TABLES,),
+            (list(REQUIRED_OPERATIONAL_TABLES),),
         )
         present_tables: set[str] = set()
         for row in rows:

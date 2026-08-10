@@ -1318,14 +1318,14 @@ def test_verify_schema_ready_checks_required_operational_tables() -> None:
     assert "information_schema.tables" in sql
     assert "table_schema = 'public'" in sql
     assert params == (
-        (
+        [
             "artifact_blobs",
             "artifact_refs",
             "fulfillment_jobs",
             "job_events",
             "lifecycle_events",
             "retention_prune_audit",
-        ),
+        ],
     )
 
 
