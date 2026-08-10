@@ -1,4 +1,10 @@
+from http.client import HTTPMessage
+from io import BytesIO
+from urllib.error import HTTPError, URLError
+from urllib.request import Request
+
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from jedi_devproject.models import RetrievalCitation
 from jedi_devproject.rag import (
@@ -12,6 +18,7 @@ from jedi_devproject.rag import (
     RetrievalBlocked,
     RetrievalResult,
     SpecializedRags,
+    UrllibPublicWebTransport,
     cache_key,
 )
 from jedi_devproject.rag_cache import RetrievalCache, RetrievalCacheStats
@@ -46,6 +53,55 @@ def _rags() -> SpecializedRags:
             ),
         ]
     )
+
+
+def test_rag_validation_errors_do_not_echo_rejected_inputs() -> None:
+    cases: list[tuple[type[BaseModel], dict[str, object], tuple[str, ...]]] = [
+        (
+            Document,
+            {
+                "domain": "secret-domain",
+                "source": "source",
+                "content": "secret-document-content",
+                "version": "v1",
+            },
+            ("secret-domain", "secret-document-content"),
+        ),
+        (
+            RetrievalResult,
+            {
+                "content": "secret-retrieval-content",
+                "citation": "not-a-citation",
+            },
+            ("secret-retrieval-content", "not-a-citation"),
+        ),
+        (
+            PublicWebAccessConfig,
+            {
+                "allowed_domains": ["docs.servicenow.com"],
+                "timeout_seconds": "secret-timeout",
+            },
+            ("secret-timeout",),
+        ),
+        (
+            PublicWebResponse,
+            {
+                "url": "https://docs.servicenow.com/secret-path",
+                "status_code": "secret-status",
+                "body": b"secret-body",
+            },
+            ("secret-status", "secret-body"),
+        ),
+    ]
+
+    for model_class, values, secret_fragments in cases:
+        with pytest.raises(ValidationError) as exc_info:
+            model_class.model_validate(values)
+
+        error_text = str(exc_info.value)
+        assert "input_value" not in error_text
+        for fragment in secret_fragments:
+            assert fragment not in error_text
 
 
 def test_each_specialized_rag_returns_citations() -> None:
@@ -121,6 +177,125 @@ class RecordingPublicTransport:
         return self.response
 
 
+class _FakeHttpResponse:
+    status = 200
+
+    def __enter__(self) -> "_FakeHttpResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, _size: int) -> bytes:
+        return b"public docs"
+
+    def geturl(self) -> str:
+        return "https://docs.servicenow.com/docs"
+
+
+class _FakeOpener:
+    def __init__(self) -> None:
+        self.open_calls = 0
+
+    def open(self, _request: object, *, timeout: float) -> _FakeHttpResponse:
+        self.open_calls += 1
+        assert timeout == 2.0
+        return _FakeHttpResponse()
+
+
+def test_urllib_public_web_transport_installs_no_redirect_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_handlers: list[object] = []
+    fake_opener = _FakeOpener()
+
+    def fake_build_opener(*handlers: object) -> _FakeOpener:
+        captured_handlers.extend(handlers)
+        return fake_opener
+
+    monkeypatch.setattr("jedi_devproject.rag.build_opener", fake_build_opener)
+
+    response = UrllibPublicWebTransport().get(
+        "https://docs.servicenow.com/docs",
+        timeout_seconds=2.0,
+        max_bytes=1024,
+    )
+
+    assert response.body == b"public docs"
+    assert fake_opener.open_calls == 1
+    assert [handler.__class__.__name__ for handler in captured_handlers] == [
+        "_NoPublicWebRedirectHandler"
+    ]
+
+
+def test_urllib_public_web_transport_blocks_redirect_before_following() -> None:
+    handler = UrllibPublicWebTransport().redirect_handler
+
+    with pytest.raises(PublicWebRetrievalBlocked, match="redirects are not allowed"):
+        handler.redirect_request(
+            req=Request("https://docs.servicenow.com/docs"),
+            fp=BytesIO(),
+            code=302,
+            msg="Found",
+            headers=HTTPMessage(),
+            newurl="https://evil.example/docs",
+        )
+
+
+def test_urllib_public_web_transport_http_errors_do_not_retain_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingOpener:
+        def open(self, _request: object, *, timeout: float) -> object:
+            raise HTTPError(
+                url="https://docs.servicenow.com/docs?token=doc-secret",
+                code=403,
+                msg="Forbidden doc-secret",
+                hdrs=HTTPMessage(),
+                fp=BytesIO(),
+            )
+
+    monkeypatch.setattr("jedi_devproject.rag.build_opener", lambda *_handlers: FailingOpener())
+
+    with pytest.raises(
+        PublicWebRetrievalBlocked,
+        match="public documentation fetch failed with HTTP 403",
+    ) as exc_info:
+        UrllibPublicWebTransport().get(
+            "https://docs.servicenow.com/docs",
+            timeout_seconds=2.0,
+            max_bytes=1024,
+        )
+
+    message = str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "doc-secret" not in message
+
+
+def test_urllib_public_web_transport_url_errors_do_not_retain_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingOpener:
+        def open(self, _request: object, *, timeout: float) -> object:
+            raise URLError("doc-secret timeout detail")
+
+    monkeypatch.setattr("jedi_devproject.rag.build_opener", lambda *_handlers: FailingOpener())
+
+    with pytest.raises(
+        PublicWebRetrievalBlocked,
+        match="public documentation fetch failed",
+    ) as exc_info:
+        UrllibPublicWebTransport().get(
+            "https://docs.servicenow.com/docs",
+            timeout_seconds=2.0,
+            max_bytes=1024,
+        )
+
+    message = str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "doc-secret" not in message
+
+
 def test_public_web_retriever_fetches_allowlisted_https_docs_with_hash_citations() -> None:
     transport = RecordingPublicTransport(
         PublicWebResponse(
@@ -188,6 +363,65 @@ def test_public_web_retriever_blocks_private_hosts_and_non_https() -> None:
         retriever.retrieve("bad docs", urls=["http://docs.servicenow.com/docs"])
     with pytest.raises(PublicWebRetrievalBlocked, match="private or loopback"):
         retriever.retrieve("bad docs", urls=["https://127.0.0.1/docs"])
+
+
+def test_public_web_retriever_blocks_embedded_credentials_before_transport() -> None:
+    transport = RecordingPublicTransport(
+        PublicWebResponse(url="https://docs.servicenow.com/docs", status_code=200, body=b"ok")
+    )
+    retriever = PublicWebRetriever(
+        config=PublicWebAccessConfig(allowed_domains=["docs.servicenow.com"]),
+        transport=transport,
+    )
+
+    with pytest.raises(PublicWebRetrievalBlocked, match="must not include credentials"):
+        retriever.retrieve(
+            "bad docs",
+            urls=["https://doc-user:doc-secret@docs.servicenow.com/docs"],
+        )
+
+    assert transport.urls == []
+
+
+def test_public_web_retriever_blocks_legacy_numeric_private_hosts() -> None:
+    retriever = PublicWebRetriever(
+        config=PublicWebAccessConfig(allowed_domains=["2130706433", "2852039166"]),
+        transport=RecordingPublicTransport(
+            PublicWebResponse(url="https://docs.servicenow.com/docs", status_code=200, body=b"ok")
+        ),
+    )
+
+    with pytest.raises(PublicWebRetrievalBlocked, match="private or loopback"):
+        retriever.retrieve("bad docs", urls=["https://2130706433/docs"])
+    with pytest.raises(PublicWebRetrievalBlocked, match="private or loopback"):
+        retriever.retrieve("bad docs", urls=["https://2852039166/docs"])
+
+
+@pytest.mark.parametrize(
+    ("url", "message"),
+    [
+        ("https://docs.servicenow.com/docs?token=doc-secret", "sensitive query"),
+        ("https://docs.servicenow.com/docs#section", "must not include fragments"),
+        ("https://docs.servicenow.com/docs path", "whitespace or control"),
+        ("https://docs.servicenow.com/docs%0d%0aX-Injected", "encoded whitespace"),
+    ],
+)
+def test_public_web_retriever_blocks_unsafe_url_content_before_transport(
+    url: str,
+    message: str,
+) -> None:
+    transport = RecordingPublicTransport(
+        PublicWebResponse(url="https://docs.servicenow.com/docs", status_code=200, body=b"ok")
+    )
+    retriever = PublicWebRetriever(
+        config=PublicWebAccessConfig(allowed_domains=["docs.servicenow.com"]),
+        transport=transport,
+    )
+
+    with pytest.raises(PublicWebRetrievalBlocked, match=message):
+        retriever.retrieve("bad docs", urls=[url])
+
+    assert transport.urls == []
 
 
 def test_public_web_retriever_fails_closed_on_redirect_to_disallowed_domain() -> None:

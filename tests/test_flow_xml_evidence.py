@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from jedi_devproject import flow_xml_evidence
 from jedi_devproject.flow_designer_generation import (
     FlowRuntimeEvidenceSummary,
     flow_builder_readiness_contract,
@@ -127,9 +128,7 @@ class FakeFlowEvidenceClient:
         self.calls.append({"table": table, "lookup": lookup, "fields": fields, "limit": limit})
         if table == "sys_hub_flow":
             return [
-                record
-                for record in self.flow_records
-                if record.get("name") == lookup.get("name")
+                record for record in self.flow_records if record.get("name") == lookup.get("name")
             ]
         if table == "sys_hub_action_instance" and lookup == {"flow": FLOW_SYS_ID}:
             return list(self.action_instances)
@@ -197,6 +196,74 @@ def test_collection_is_deterministic_across_runs() -> None:
     assert first.model_dump(mode="json") == second.model_dump(mode="json")
 
 
+def test_collect_flow_xml_evidence_rejects_flow_record_collection_subclass_without_leak() -> None:
+    class HostileFlowRecords(list[dict[str, Any]]):
+        def __bool__(self) -> bool:
+            raise AssertionError("client_secret=flow-xml-flow-records")
+
+    class HostileFlowCollectionClient(FakeFlowEvidenceClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_hub_flow":
+                return HostileFlowRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        _collect(HostileFlowCollectionClient())
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "Flow XML evidence records contain non-JSON value"
+    assert "HostileFlowRecords" not in diagnostic
+    assert "flow-xml-flow-records" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_collect_flow_xml_evidence_rejects_flow_record_subclass_without_leak() -> None:
+    class HostileFlowRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise AssertionError("client_secret=flow-xml-flow-record")
+
+    class HostileFlowRecordClient(FakeFlowEvidenceClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_hub_flow":
+                return [HostileFlowRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        _collect(HostileFlowRecordClient())
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "Flow XML evidence records contain non-JSON value"
+    assert "HostileFlowRecord" not in diagnostic
+    assert "flow-xml-flow-record" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
 def test_readiness_from_complete_evidence_enables_runtime_generation_only() -> None:
     bundle = _collect(FakeFlowEvidenceClient())
 
@@ -248,9 +315,7 @@ def test_missing_instance_records_mark_shape_missing() -> None:
 
     logic_shape = bundle.shape("sys_hub_flow_logic_instance_v2")
     assert logic_shape.status == "missing"
-    assert logic_shape.reason == (
-        "no sys_hub_flow_logic_instance_v2 records retrieved for flow"
-    )
+    assert logic_shape.reason == ("no sys_hub_flow_logic_instance_v2 records retrieved for flow")
     assert "sys_update_xml:sys_hub_flow_logic_instance_v2:missing" in bundle.evidence
 
 
@@ -320,6 +385,34 @@ def test_empty_and_malformed_payloads_mark_shape_invalid() -> None:
     assert "not valid XML" in bundle.shape("sys_hub_flow").reason
 
 
+class UnstringifiableFlowXmlShapeError(ValueError):
+    def __str__(self) -> str:
+        raise ValueError("client-secret-value")
+
+
+def test_unstringifiable_shape_validation_error_marks_shape_invalid_safely(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_validate_flow_xml_shape_evidence(*, table: str, xml_payload: str) -> Any:
+        raise UnstringifiableFlowXmlShapeError
+
+    monkeypatch.setattr(
+        flow_xml_evidence,
+        "validate_flow_xml_shape_evidence",
+        fail_validate_flow_xml_shape_evidence,
+    )
+
+    bundle = _collect(FakeFlowEvidenceClient())
+
+    flow_shape = bundle.shape("sys_hub_flow")
+    assert flow_shape.status == "invalid"
+    assert flow_shape.reason == (
+        "flow xml evidence raised unstringifiable UnstringifiableFlowXmlShapeError"
+    )
+    assert "client-secret-value" not in flow_shape.reason
+    assert "sys_update_xml:sys_hub_flow:invalid" in bundle.evidence
+
+
 def test_snapshot_staleness_blocks_readiness_with_stable_reason() -> None:
     bundle = _collect(FakeFlowEvidenceClient())
     current_hash = "e6" * 32
@@ -359,6 +452,48 @@ def test_unretrieved_snapshot_record_marks_snapshot_missing() -> None:
 
     assert bundle.snapshot.status == "missing"
     assert bundle.snapshot.snapshot_sys_id == SNAPSHOT_SYS_ID
+
+
+def test_non_finite_snapshot_record_marks_snapshot_invalid_without_payload_leak() -> None:
+    client = FakeFlowEvidenceClient()
+    client.snapshot_records[0]["bad_score"] = float("nan")
+    client.snapshot_records[0]["client_secret"] = "snapshot-secret"
+
+    bundle = _collect(client)
+
+    assert bundle.snapshot.status == "invalid"
+    assert bundle.snapshot.snapshot_sys_id == SNAPSHOT_SYS_ID
+    assert bundle.snapshot.reason == "flow_snapshot_evidence_invalid: non-finite snapshot value"
+    assert bundle.snapshot.content_sha256 == ""
+    assert "sys_hub_flow_snapshot:invalid" in bundle.evidence
+    dumped = bundle.model_dump_json()
+    assert "bad_score" not in dumped
+    assert "NaN" not in dumped
+    assert "client_secret" not in dumped
+    assert "snapshot-secret" not in dumped
+
+
+def test_non_json_snapshot_record_marks_snapshot_invalid_without_payload_leak() -> None:
+    class StringifiesSecret:
+        def __str__(self) -> str:
+            return "snapshot-secret"
+
+    client = FakeFlowEvidenceClient()
+    client.snapshot_records[0]["unsafe_object"] = StringifiesSecret()
+    client.snapshot_records[0]["client_secret"] = "snapshot-secret"
+
+    bundle = _collect(client)
+
+    assert bundle.snapshot.status == "invalid"
+    assert bundle.snapshot.snapshot_sys_id == SNAPSHOT_SYS_ID
+    assert bundle.snapshot.reason == "flow_snapshot_evidence_invalid: non-JSON snapshot value"
+    assert bundle.snapshot.content_sha256 == ""
+    assert "sys_hub_flow_snapshot:invalid" in bundle.evidence
+    dumped = bundle.model_dump_json()
+    assert "unsafe_object" not in dumped
+    assert "StringifiesSecret" not in dumped
+    assert "client_secret" not in dumped
+    assert "snapshot-secret" not in dumped
 
 
 def test_unstable_snapshot_reference_marks_snapshot_invalid() -> None:
@@ -471,9 +606,10 @@ def test_readiness_contract_reports_partial_runtime_evidence() -> None:
         "flow_xml_shape_evidence_validated:sys_hub_flow_logic_instance_v2",
         "flow_builder_implemented",
     ]
-    assert readiness.requirement_status[
-        "flow_xml_shape_evidence_validated:sys_hub_flow"
-    ] == "satisfied"
+    assert (
+        readiness.requirement_status["flow_xml_shape_evidence_validated:sys_hub_flow"]
+        == "satisfied"
+    )
 
 
 def test_readiness_contract_treats_uncollected_snapshot_as_missing_without_notes() -> None:

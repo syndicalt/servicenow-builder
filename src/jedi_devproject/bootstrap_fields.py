@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.servicenow import StoryDictionaryField
 
@@ -12,6 +12,8 @@ BOOTSTRAP_TABLE = "rm_story"
 
 
 class BootstrapFieldSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     element: str
     column_label: str
     internal_type: str
@@ -20,6 +22,8 @@ class BootstrapFieldSpec(BaseModel):
 
 
 class BootstrapFieldPlan(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     table: str
     missing_fields: list[str]
     fields_to_create: list[BootstrapFieldSpec]
@@ -33,6 +37,8 @@ class BootstrapFieldPlan(BaseModel):
 
 
 class BootstrapApplyResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     applied: bool
     created_fields: list[str]
     updated_writable_fields: list[str] = []
@@ -94,12 +100,22 @@ REQUIRED_BOOTSTRAP_FIELDS = [
 ]
 
 BOOTSTRAP_READONLY_UI_POLICY_NAME = "Jedi DevProject read-only automation metadata"
+BOOTSTRAP_DICTIONARY_FIELDS_UNSAFE_DIAGNOSTIC = (
+    "bootstrap dictionary fields contain non-JSON value"
+)
+BOOTSTRAP_CREATE_FIELD_RESULT_UNSAFE_DIAGNOSTIC = (
+    "bootstrap create field result is unsafe"
+)
+BOOTSTRAP_TABLE_UPSERT_RESULT_UNSAFE_DIAGNOSTIC = (
+    "bootstrap table upsert result is unsafe"
+)
 
 
 def plan_bootstrap_fields(
     dictionary_fields: list[StoryDictionaryField],
 ) -> BootstrapFieldPlan:
-    existing_fields = {field.element: field for field in dictionary_fields if field.active}
+    safe_dictionary_fields = _bootstrap_dictionary_fields(dictionary_fields)
+    existing_fields = {field.element: field for field in safe_dictionary_fields if field.active}
     fields_to_create = [
         field for field in REQUIRED_BOOTSTRAP_FIELDS if field.element not in existing_fields
     ]
@@ -120,6 +136,27 @@ def plan_bootstrap_fields(
     )
 
 
+def _bootstrap_dictionary_fields(fields: object) -> list[StoryDictionaryField]:
+    if type(fields) is not list:
+        raise ValueError(BOOTSTRAP_DICTIONARY_FIELDS_UNSAFE_DIAGNOSTIC)
+    for field in fields:
+        if type(field) is not StoryDictionaryField:
+            raise ValueError(BOOTSTRAP_DICTIONARY_FIELDS_UNSAFE_DIAGNOSTIC)
+    return fields
+
+
+def _bootstrap_create_field_result(result: object) -> dict[str, object]:
+    if type(result) is not dict:
+        raise ValueError(BOOTSTRAP_CREATE_FIELD_RESULT_UNSAFE_DIAGNOSTIC)
+    return result
+
+
+def _bootstrap_table_upsert_result(result: object) -> dict[str, Any]:
+    if type(result) is not dict:
+        raise ValueError(BOOTSTRAP_TABLE_UPSERT_RESULT_UNSAFE_DIAGNOSTIC)
+    return result
+
+
 def apply_bootstrap_fields(
     client: BootstrapClient,
     *,
@@ -138,21 +175,25 @@ def apply_bootstrap_fields(
     plan = plan_bootstrap_fields(client.fetch_story_dictionary_fields())
     created_fields: list[str] = []
     for field in plan.fields_to_create:
-        client.create_story_dictionary_field(
-            element=field.element,
-            column_label=field.column_label,
-            internal_type=field.internal_type,
-            max_length=field.max_length,
-            read_only=field.read_only,
+        _bootstrap_create_field_result(
+            client.create_story_dictionary_field(
+                element=field.element,
+                column_label=field.column_label,
+                internal_type=field.internal_type,
+                max_length=field.max_length,
+                read_only=field.read_only,
+            )
         )
         created_fields.append(field.element)
 
     updated_writable_fields: list[str] = []
     for element in plan.fields_to_update_writable:
-        client.upsert_table_record(
-            table="sys_dictionary",
-            lookup={"name": BOOTSTRAP_TABLE, "element": element},
-            fields={"read_only": "false"},
+        _bootstrap_table_upsert_result(
+            client.upsert_table_record(
+                table="sys_dictionary",
+                lookup={"name": BOOTSTRAP_TABLE, "element": element},
+                fields={"read_only": "false"},
+            )
         )
         updated_writable_fields.append(element)
 
@@ -170,24 +211,26 @@ def apply_bootstrap_fields(
 
 def apply_platform_readonly_policy(client: BootstrapClient) -> list[str]:
     script_true = _bootstrap_readonly_ui_policy_script()
-    client.upsert_table_record(
-        table="sys_ui_policy",
-        lookup={
-            "table": BOOTSTRAP_TABLE,
-            "short_description": BOOTSTRAP_READONLY_UI_POLICY_NAME,
-        },
-        fields={
-            "table": BOOTSTRAP_TABLE,
-            "short_description": BOOTSTRAP_READONLY_UI_POLICY_NAME,
-            "active": "true",
-            "global": "true",
-            "on_load": "true",
-            "reverse_if_false": "false",
-            "conditions": "",
-            "run_scripts": "true",
-            "script_true": script_true,
-            "script_false": "function onCondition() {\n}",
-        },
+    _bootstrap_table_upsert_result(
+        client.upsert_table_record(
+            table="sys_ui_policy",
+            lookup={
+                "table": BOOTSTRAP_TABLE,
+                "short_description": BOOTSTRAP_READONLY_UI_POLICY_NAME,
+            },
+            fields={
+                "table": BOOTSTRAP_TABLE,
+                "short_description": BOOTSTRAP_READONLY_UI_POLICY_NAME,
+                "active": "true",
+                "global": "true",
+                "on_load": "true",
+                "reverse_if_false": "false",
+                "conditions": "",
+                "run_scripts": "true",
+                "script_true": script_true,
+                "script_false": "function onCondition() {\n}",
+            },
+        )
     )
     return [f"sys_ui_policy:{BOOTSTRAP_READONLY_UI_POLICY_NAME}"]
 

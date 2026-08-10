@@ -168,7 +168,7 @@ CHANGE_TABLE_SURFACE_GROUPS: tuple[tuple[frozenset[str], tuple[str, ...]], ...] 
 class MaturityEvidence(BaseModel):
     """Recorded fulfillment outcome counts for one builder surface."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     surface: str
     samples: int = Field(ge=0)
@@ -179,7 +179,7 @@ class MaturityEvidence(BaseModel):
 class BuilderMaturityScore(BaseModel):
     """A maturity score with the provenance reviewers need to audit routing."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     surface: str
     baseline: float

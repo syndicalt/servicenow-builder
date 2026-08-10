@@ -1,10 +1,27 @@
 import math
 
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from jedi_devproject.builder_maturity import MaturityEvidence
+from jedi_devproject.capabilities import (
+    Capability,
+    StoryCapabilityAssessment,
+    SuitabilityOutcome,
+)
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
+    ImplementationPacket,
+    PacketStory,
+    _automation_feedback_notes,
+    _ensure_packet_model_payload_json_safe,
+    _ensure_packet_raw_payload_json_safe,
+    _is_placeholder_sys_id,
+    _merge_deterministic_changes,
+    _packet_model_payload,
+    _packet_raw_payload,
+    _reconcile_response_with_packet,
+    _surface_operation_reasons,
     build_implementation_packet,
     generate_implementation_candidate,
     generate_implementation_update_set_candidate,
@@ -27,7 +44,9 @@ from jedi_devproject.models import (
     Story,
 )
 from jedi_devproject.packet_intent_changes import (
+    _catalog_client_script_changes,
     _catalog_item_changes_from_normalized_intent,
+    _catalog_ui_policy_changes,
     _record_producer_changes_from_normalized_intent,
 )
 from jedi_devproject.providers import ModelResponseError
@@ -61,6 +80,288 @@ class RecordingImplementationProvider:
 class FailingImplementationProvider:
     def generate(self, payload: dict[str, object]) -> dict[str, object]:
         raise AssertionError("provider should not be called")
+
+
+def test_packet_model_payload_rejects_non_finite_assessment_without_payload_leak() -> None:
+    assessment = StoryCapabilityAssessment.model_construct(
+        story_number="STRY0010013",
+        outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
+        capabilities={Capability.DICTIONARY_FIELD_CREATE},
+        supported_capabilities={Capability.DICTIONARY_FIELD_CREATE},
+        reasons=["story is missing required automation details"],
+        missing_details=[],
+        unsupported_capabilities=set(),
+        operator_feedback=["client_secret=do-not-echo-this"],
+        suggested_story="Target artifact type: Dictionary Field",
+        risk_score=float("nan"),
+        confidence=0.65,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_model_payload(
+            assessment,
+            diagnostic="implementation packet nested payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet nested payload contains non-finite numeric values"
+    assert exc_info.value.__cause__ is None
+    assert "risk_score" not in diagnostic
+    assert "NaN" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_model_payload_rejects_non_json_assessment_without_payload_leak() -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=packet-secret"
+
+    assessment = StoryCapabilityAssessment.model_construct(
+        story_number="STRY0010013",
+        outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
+        capabilities={Capability.DICTIONARY_FIELD_CREATE},
+        supported_capabilities={Capability.DICTIONARY_FIELD_CREATE},
+        reasons=["story is missing required automation details"],
+        missing_details=[],
+        unsupported_capabilities=set(),
+        operator_feedback=["client_secret=do-not-echo-this", SecretBearingObject()],
+        suggested_story="Target artifact type: Dictionary Field",
+        risk_score=0.65,
+        confidence=0.65,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_model_payload(
+            assessment,
+            diagnostic="implementation packet nested payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet nested payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "operator_feedback" not in diagnostic
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "packet-secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_model_payload_rejects_string_subclass_assessment_without_payload_leak() -> None:
+    class HostilePacketText(str):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=packet-str-secret")
+
+    assessment = StoryCapabilityAssessment.model_construct(
+        story_number="STRY0010013",
+        outcome=SuitabilityOutcome.NEEDS_CLARIFICATION,
+        capabilities={Capability.DICTIONARY_FIELD_CREATE},
+        supported_capabilities={Capability.DICTIONARY_FIELD_CREATE},
+        reasons=["story is missing required automation details"],
+        missing_details=[],
+        unsupported_capabilities=set(),
+        operator_feedback=[
+            "client_secret=do-not-echo-this",
+            HostilePacketText("packet-secret"),
+        ],
+        suggested_story="Target artifact type: Dictionary Field",
+        risk_score=0.65,
+        confidence=0.65,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_model_payload(
+            assessment,
+            diagnostic="implementation packet nested payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet nested payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "operator_feedback" not in diagnostic
+    assert "HostilePacketText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "packet-secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_raw_payload_rejects_non_finite_normalized_intent_without_payload_leak() -> None:
+    payload = {
+        "intent_type": "catalog_item",
+        "estimated_effort": math.inf,
+        "operator_feedback": "client_secret=do-not-echo-this",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_raw_payload(
+            payload,
+            diagnostic="implementation packet raw payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet raw payload contains non-finite numeric values"
+    assert exc_info.value.__cause__ is None
+    assert "estimated_effort" not in diagnostic
+    assert "Infinity" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_raw_payload_rejects_non_json_normalized_intent_without_payload_leak() -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=raw-packet-secret"
+
+    payload = {
+        "intent_type": "catalog_item",
+        "unsafe": SecretBearingObject(),
+        "operator_feedback": "client_secret=do-not-echo-this",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_raw_payload(
+            payload,
+            diagnostic="implementation packet raw payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet raw payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "unsafe" not in diagnostic
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "raw-packet-secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_raw_payload_rejects_string_subclass_without_payload_leak() -> None:
+    class HostileRawPacketText(str):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=raw-packet-str-secret")
+
+    payload = {
+        "intent_type": "catalog_item",
+        "unsafe": HostileRawPacketText("raw-packet-secret"),
+        "operator_feedback": "client_secret=do-not-echo-this",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_raw_payload(
+            payload,
+            diagnostic="implementation packet raw payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet raw payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "unsafe" not in diagnostic
+    assert "HostileRawPacketText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "raw-packet-secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_raw_payload_rejects_scalar_subclass_without_payload_leak() -> None:
+    class HostileRawPacketOrder(int):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=raw-packet-scalar-secret")
+
+    payload = {
+        "intent_type": "catalog_item",
+        "unsafe": HostileRawPacketOrder(3),
+        "operator_feedback": "client_secret=do-not-echo-this",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        _packet_raw_payload(
+            payload,
+            diagnostic="implementation packet raw payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "implementation packet raw payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "unsafe" not in diagnostic
+    assert "HostileRawPacketOrder" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "raw-packet-scalar-secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_packet_model_payload_rejects_container_subclasses_without_payload_leak() -> None:
+    class HostilePacketDict(dict[str, object]):
+        def items(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=packet-dict-secret")
+
+    class HostilePacketList(list[object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=packet-list-secret")
+
+    class HostilePacketTuple(tuple[object, ...]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=packet-tuple-secret")
+
+    class HostilePacketSet(set[object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=packet-set-secret")
+
+    class HostilePacketFrozenSet(frozenset[object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=packet-frozenset-secret")
+
+    for payload in (
+        HostilePacketDict({"value": "safe"}),
+        {"items": HostilePacketList(["safe"])},
+        {"items": HostilePacketTuple(("safe",))},
+        {"items": HostilePacketSet({"safe"})},
+        {"items": HostilePacketFrozenSet({"safe"})},
+    ):
+        try:
+            _ensure_packet_model_payload_json_safe(payload)
+        except TypeError as exc:
+            diagnostic = str(exc)
+        else:
+            raise AssertionError("packet model payload container subclass was accepted")
+
+        assert diagnostic == "implementation packet nested payload contains non-JSON values"
+        assert "client_secret" not in diagnostic
+        assert "packet-dict-secret" not in diagnostic
+        assert "packet-list-secret" not in diagnostic
+        assert "packet-tuple-secret" not in diagnostic
+        assert "packet-set-secret" not in diagnostic
+        assert "packet-frozenset-secret" not in diagnostic
+
+
+def test_packet_raw_payload_rejects_container_subclasses_without_payload_leak() -> None:
+    class HostileRawPacketDict(dict[str, object]):
+        def items(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=raw-packet-dict-secret")
+
+    class HostileRawPacketList(list[object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=raw-packet-list-secret")
+
+    class HostileRawPacketTuple(tuple[object, ...]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=raw-packet-tuple-secret")
+
+    for payload in (
+        HostileRawPacketDict({"value": "safe"}),
+        {"items": HostileRawPacketList(["safe"])},
+        {"items": HostileRawPacketTuple(("safe",))},
+    ):
+        try:
+            _ensure_packet_raw_payload_json_safe(payload)
+        except TypeError as exc:
+            diagnostic = str(exc)
+        else:
+            raise AssertionError("packet raw payload container subclass was accepted")
+
+        assert diagnostic == "implementation packet raw payload contains non-JSON values"
+        assert "client_secret" not in diagnostic
+        assert "raw-packet-dict-secret" not in diagnostic
+        assert "raw-packet-list-secret" not in diagnostic
+        assert "raw-packet-tuple-secret" not in diagnostic
 
 
 class StubMaturityProvider:
@@ -140,6 +441,34 @@ def _policy() -> AllowlistPolicy:
     )
 
 
+def _implementation_packet_with_assessment(
+    capability_assessment: dict[str, object],
+) -> ImplementationPacket:
+    return ImplementationPacket(
+        task=IMPLEMENTATION_PACKET_TASK,
+        provider_id="approved-model",
+        story=PacketStory(
+            number="STRY0010013",
+            short_description="Add AI Review Notes field to Story form",
+            description="Add u_ai_review_notes to rm_story.",
+            acceptance_criteria="The field is available for review notes.",
+            story_points=3,
+            priority=4,
+            state="Ready",
+            affected_tables=["rm_story"],
+        ),
+        safety_decision="manual_review",
+        safety_reasons=[],
+        risk_score=0.4,
+        allowed_tables=["sys_dictionary", "sys_ui_form"],
+        allowed_operations=["insert", "update"],
+        capability_assessment=capability_assessment,
+        context_sections={},
+        retrieval_citations=[],
+        output_contract={},
+    )
+
+
 def _catalog_policy() -> AllowlistPolicy:
     return AllowlistPolicy(
         story_types={StoryType.DICTIONARY_FORM},
@@ -161,6 +490,174 @@ def _ui_policy_policy() -> AllowlistPolicy:
         operations={"insert", "update"},
         max_points=3,
     )
+
+
+def test_automation_feedback_notes_sanitize_operator_feedback() -> None:
+    packet = _implementation_packet_with_assessment(
+        {
+            "operator_feedback": [
+                "Need target table.\nclient_secret=feedback-secret",
+                {"client_secret": "dict-secret"},
+            ],
+        }
+    )
+
+    notes = _automation_feedback_notes(packet)
+
+    assert notes == ["Need target table. client_secret=***REDACTED***"]
+    assert "feedback-secret" not in notes[0]
+    assert "\n" not in notes[0]
+
+
+def test_automation_feedback_notes_bound_suggested_story() -> None:
+    packet = _implementation_packet_with_assessment(
+        {
+            "operator_feedback": [],
+            "suggested_story": f"As a requester,\nclient_secret=suggest-secret {'A' * 2200}",
+        }
+    )
+
+    notes = _automation_feedback_notes(packet)
+
+    assert len(notes) == 1
+    assert notes[0].startswith("Suggested rewrite: As a requester,")
+    assert "suggest-secret" not in notes[0]
+    assert "client_secret=***REDACTED***" in notes[0]
+    assert "\n" not in notes[0]
+    assert len(notes[0]) <= 2000 + len("Suggested rewrite: ")
+
+
+def test_surface_operation_reasons_sanitize_kind_and_reason_codes() -> None:
+    packet = _implementation_packet_with_assessment({}).model_copy(
+        update={
+            "surface_operation_plan": {
+                "operations": [
+                    {
+                        "status": "unsupported",
+                        "kind": "form_layout.section.rename\nclient_secret=kind-secret",
+                        "reason_codes": [
+                            "builder_not_implemented\napi_key=reason-secret",
+                            {"client_secret": "dict-secret"},
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+
+    reasons = _surface_operation_reasons(packet)
+
+    assert reasons == [
+        "unsupported surface operation: form_layout.section.rename client_secret=***REDACTED***",
+        "surface operation reason: builder_not_implemented api_key=***REDACTED***",
+    ]
+    assert "kind-secret" not in " ".join(reasons)
+    assert "reason-secret" not in " ".join(reasons)
+    assert "dict-secret" not in " ".join(reasons)
+    assert "\n" not in " ".join(reasons)
+
+
+def test_surface_operation_reasons_bound_reason_text() -> None:
+    packet = _implementation_packet_with_assessment({}).model_copy(
+        update={
+            "surface_operation_plan": {
+                "operations": [
+                    {
+                        "status": "unsupported",
+                        "kind": f"form_layout.section.rename {'A' * 2200}",
+                        "reason_codes": [f"builder_not_implemented {'B' * 2200}"],
+                    }
+                ]
+            }
+        }
+    )
+
+    reasons = _surface_operation_reasons(packet)
+
+    assert len(reasons) == 2
+    assert reasons[0].startswith("unsupported surface operation: form_layout.section.rename")
+    assert reasons[1].startswith("surface operation reason: builder_not_implemented")
+    assert "...[truncated]" in reasons[0]
+    assert "...[truncated]" in reasons[1]
+    assert len(reasons[0]) <= 2000 + len("unsupported surface operation: ")
+    assert len(reasons[1]) <= 2000 + len("surface operation reason: ")
+
+
+def test_surface_operation_reasons_bound_unsupported_operations() -> None:
+    packet = _implementation_packet_with_assessment({}).model_copy(
+        update={
+            "surface_operation_plan": {
+                "operations": [
+                    {
+                        "status": "unsupported",
+                        "kind": f"form_layout.section.rename.{index}",
+                        "reason_codes": [],
+                    }
+                    for index in range(120)
+                ]
+            }
+        }
+    )
+
+    reasons = _surface_operation_reasons(packet)
+
+    operation_reasons = [
+        reason
+        for reason in reasons
+        if reason.startswith("unsupported surface operation:")
+    ]
+    assert len(operation_reasons) == 50
+    assert operation_reasons[-1] == (
+        "unsupported surface operation: form_layout.section.rename.49"
+    )
+    assert reasons[-1] == "surface operation reasons omitted: 70 unsupported operations"
+
+
+def test_surface_operation_reasons_bound_reason_codes_per_operation() -> None:
+    packet = _implementation_packet_with_assessment({}).model_copy(
+        update={
+            "surface_operation_plan": {
+                "operations": [
+                    {
+                        "status": "unsupported",
+                        "kind": "form_layout.section.rename",
+                        "reason_codes": [
+                            f"builder_not_implemented_{index}" for index in range(120)
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+
+    reasons = _surface_operation_reasons(packet)
+
+    code_reasons = [
+        reason for reason in reasons if reason.startswith("surface operation reason:")
+    ]
+    assert len(code_reasons) == 50
+    assert code_reasons[-1] == "surface operation reason: builder_not_implemented_49"
+    assert reasons[-1] == "surface operation reasons omitted: 70 reason codes"
+
+
+def test_surface_operation_reasons_ignore_non_list_reason_codes() -> None:
+    packet = _implementation_packet_with_assessment({}).model_copy(
+        update={
+            "surface_operation_plan": {
+                "operations": [
+                    {
+                        "status": "unsupported",
+                        "kind": "form_layout.section.rename",
+                        "reason_codes": "builder_not_implemented",
+                    }
+                ]
+            }
+        }
+    )
+
+    assert _surface_operation_reasons(packet) == [
+        "unsupported surface operation: form_layout.section.rename"
+    ]
 
 
 def _provider_policy() -> ProviderPolicy:
@@ -1078,6 +1575,61 @@ def test_implementation_packet_payload_is_model_ready_and_minimized() -> None:
     assert payload["output_contract"]["must_return_manual_review_when_uncertain"] is True
 
 
+@pytest.mark.parametrize(
+    ("model_class", "values", "sensitive_parts"),
+    [
+        (
+            PacketStory,
+            {
+                "number": "STRY0010013",
+                "short_description": "Configure sensitive workflow",
+                "description": "Story description includes protected context.",
+                "story_points": 3,
+                "priority": "secret-priority",
+                "state": "Ready",
+            },
+            ("secret-priority",),
+        ),
+        (
+            ImplementationPacket,
+            {
+                "task": IMPLEMENTATION_PACKET_TASK,
+                "provider_id": "openai",
+                "story": {
+                    "number": "STRY0010013",
+                    "short_description": "Configure sensitive workflow",
+                    "description": "Story description includes protected context.",
+                    "story_points": 3,
+                    "priority": 3,
+                    "state": "Ready",
+                },
+                "safety_decision": "manual_review",
+                "safety_reasons": ["review note includes protected context"],
+                "risk_score": "secret-risk",
+                "allowed_tables": [],
+                "allowed_operations": [],
+                "context_sections": {},
+                "retrieval_citations": [],
+                "output_contract": {},
+            },
+            ("secret-risk",),
+        ),
+    ],
+)
+def test_implementation_packet_validation_errors_do_not_echo_rejected_inputs(
+    model_class: type[BaseModel],
+    values: dict[str, object],
+    sensitive_parts: tuple[str, ...],
+) -> None:
+    with pytest.raises(ValidationError) as exc:
+        model_class.model_validate(values)
+
+    message = str(exc.value)
+    assert "input_value" not in message
+    for sensitive_part in sensitive_parts:
+        assert sensitive_part not in message
+
+
 def test_generate_implementation_candidate_sends_packet_to_approved_provider() -> None:
     provider = RecordingImplementationProvider()
 
@@ -1156,6 +1708,45 @@ def test_generate_implementation_candidate_rejects_missing_rollback_notes() -> N
         raise AssertionError("missing rollback_notes was accepted")
 
 
+def test_generate_implementation_candidate_rejects_review_item_subclass_without_leak() -> None:
+    class HostileReviewItem(str):
+        def strip(self, chars: str | None = None) -> str:
+            del chars
+            raise AssertionError("client_secret=review-item-secret")
+
+    provider = RecordingImplementationProvider(
+        {
+            "changes": [
+                {
+                    "table": "sys_dictionary",
+                    "operation": "insert",
+                    "fields": {
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                    },
+                }
+            ],
+            "test_plan": [HostileReviewItem("Confirm field appears on Story form.")],
+            "rollback_notes": ["Remove field from form and dictionary."],
+        }
+    )
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        generate_implementation_candidate(
+            story=_story(),
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+        )
+
+    message = str(exc_info.value)
+    assert message == "test_plan items must be non-empty exact strings"
+    assert "HostileReviewItem" not in message
+    assert "review-item-secret" not in message
+    assert "client_secret" not in message
+
+
 def test_generate_implementation_update_set_candidate_maps_validated_model_response() -> None:
     provider = RecordingImplementationProvider()
     packet = build_implementation_packet(
@@ -1216,6 +1807,26 @@ def test_generate_implementation_update_set_candidate_treats_placeholder_sys_id_
     )
 
     assert candidate.changes[0].sys_id is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("[FORM_SYS_ID_HERE]", True),
+        ("  [FORM_SYS_ID_HERE]  ", True),
+        ("[CATALOG_SYS_ID_HERE]", True),
+        ("[attachment sys_id unavailable]", False),
+        ("[sys_id]", False),
+        ("sys_id", False),
+        (None, False),
+        (123, False),
+    ],
+)
+def test_is_placeholder_sys_id_matches_documented_sentinel_format(
+    value: object,
+    expected: bool,
+) -> None:
+    assert _is_placeholder_sys_id(value) is expected
 
 
 def test_generate_implementation_update_set_candidate_rejects_empty_model_changes() -> None:
@@ -1356,6 +1967,98 @@ def test_catalog_changes_carry_variable_sets_and_groups_from_normalized_intent()
     ]
 
 
+def test_catalog_changes_reject_hostile_normalized_text_without_leak() -> None:
+    class SecretBearingCatalogText:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=normalized-catalog-text")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(artifact_name=SecretBearingCatalogText())
+        )
+
+    message = str(exc_info.value)
+    assert message == "normalized intent text values must be exact strings"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingCatalogText" not in message
+    assert "client_secret" not in message
+    assert "normalized-catalog-text" not in message
+
+
+def test_catalog_changes_reject_hostile_normalized_order_without_leak() -> None:
+    class SecretBearingOrder:
+        def __int__(self) -> int:
+            raise RuntimeError("client_secret=normalized-order")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_variables=[
+                    {
+                        "name": "visitor_name",
+                        "label": "Visitor name",
+                        "type": "single_line_text",
+                        "order": SecretBearingOrder(),
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "normalized intent order values must be positive integers"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingOrder" not in message
+    assert "client_secret" not in message
+    assert "normalized-order" not in message
+
+
+def test_catalog_changes_reject_hostile_catalog_variable_mandatory_without_leak() -> None:
+    class SecretBearingMandatory:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=catalog-variable-mandatory")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_variables=[
+                    {
+                        "name": "visitor_name",
+                        "label": "Visitor name",
+                        "type": "single_line_text",
+                        "mandatory": SecretBearingMandatory(),
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog variable visitor_name mandatory must be a boolean"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingMandatory" not in message
+    assert "client_secret" not in message
+    assert "catalog-variable-mandatory" not in message
+
+
+def test_catalog_changes_reject_string_subclass_variable_set_without_leak() -> None:
+    class SecretBearingVariableSetText(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-variable-set")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_variable_sets=[SecretBearingVariableSetText("Common Visitor Questions")]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog variable set names must be exact strings"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingVariableSetText" not in message
+    assert "client_secret" not in message
+    assert "catalog-variable-set" not in message
+
+
 def test_catalog_changes_reject_variable_set_creation() -> None:
     with pytest.raises(ModelResponseError, match="must not create variable sets"):
         _catalog_item_changes_from_normalized_intent(
@@ -1372,8 +2075,33 @@ def test_catalog_changes_reject_group_referencing_unknown_variable() -> None:
         )
 
 
+def test_catalog_changes_reject_string_subclass_variable_group_member_without_leak() -> None:
+    class SecretBearingGroupMemberText(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-variable-group")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_variable_groups=[
+                    {
+                        "title": "Schedule",
+                        "variables": [SecretBearingGroupMemberText("start_date")],
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog variable group Schedule members must be exact strings"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingGroupMemberText" not in message
+    assert "client_secret" not in message
+    assert "catalog-variable-group" not in message
+
+
 def test_catalog_changes_reject_non_declarative_reference_qualifier() -> None:
-    with pytest.raises(ModelResponseError, match="reference qualifier rejected"):
+    with pytest.raises(ModelResponseError, match="reference qualifier rejected") as exc:
         _catalog_item_changes_from_normalized_intent(
             _catalog_normalized_intent(
                 catalog_variables=[
@@ -1387,6 +2115,7 @@ def test_catalog_changes_reject_non_declarative_reference_qualifier() -> None:
                 ]
             )
         )
+    assert exc.value.__cause__ is None
 
 
 def test_catalog_changes_carry_fulfillment_flow_from_normalized_intent() -> None:
@@ -1433,6 +2162,28 @@ def test_catalog_changes_reject_flow_attachment_without_a_name() -> None:
                 fulfillment_flow_attachment_requested=True,
             )
         )
+
+
+def test_catalog_changes_reject_hostile_fulfillment_flow_attachment_flag_without_leak() -> None:
+    class SecretBearingAttachmentFlag:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=fulfillment-flow-flag")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                fulfillment_flow="Attach an existing flow as the fulfillment flow",
+                fulfillment_flow_attachment_requested=SecretBearingAttachmentFlag(),
+                fulfillment_flow_name="Badge Access Fulfillment",
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog item fulfillment_flow_attachment_requested must be a boolean"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingAttachmentFlag" not in message
+    assert "client_secret" not in message
+    assert "fulfillment-flow-flag" not in message
 
 
 def test_catalog_candidate_carries_variable_sets_and_groups_end_to_end() -> None:
@@ -2156,6 +2907,70 @@ def test_catalog_changes_render_variable_behavior_from_normalized_intent() -> No
     )
 
 
+def test_catalog_ui_policy_renderer_rejects_hostile_action_variable_without_leak() -> None:
+    class SecretBearingActionVariable:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=ui-policy-render-variable")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_ui_policy_changes(
+            rules=[
+                {
+                    "title": "Show schedule",
+                    "condition": "visitor_name=external",
+                    "reverse_if_false": True,
+                    "actions": [
+                        {
+                            "variable": SecretBearingActionVariable(),
+                            "visible": "true",
+                            "mandatory": "ignore",
+                            "disabled": "ignore",
+                            "cleared": False,
+                        }
+                    ],
+                }
+            ],
+            item_name="Request Temporary Badge",
+            declared_names={"visitor_name", "start_date"},
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog variable rule Show schedule action variable must be an exact string"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingActionVariable" not in message
+    assert "client_secret" not in message
+    assert "ui-policy-render-variable" not in message
+
+
+def test_catalog_client_script_renderer_rejects_hostile_name_without_leak() -> None:
+    class SecretBearingScriptName:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=client-script-render-name")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_client_script_changes(
+            scripts=[
+                {
+                    "name": SecretBearingScriptName(),
+                    "script_type": "onLoad",
+                    "variable": "",
+                    "actions": [
+                        {"kind": "set_value", "variable": "visitor_name", "value": "New visitor"}
+                    ],
+                }
+            ],
+            item_name="Request Temporary Badge",
+            declared_names={"visitor_name"},
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog client script name must be an exact string"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingScriptName" not in message
+    assert "client_secret" not in message
+    assert "client-script-render-name" not in message
+
+
 def test_catalog_changes_without_variable_behavior_stay_unchanged() -> None:
     changes = _catalog_item_changes_from_normalized_intent(_catalog_normalized_intent())
 
@@ -2183,7 +2998,7 @@ def test_catalog_changes_reject_rule_on_unknown_variable() -> None:
 
 
 def test_catalog_changes_reject_rule_with_non_declarative_condition() -> None:
-    with pytest.raises(ModelResponseError, match="condition rejected"):
+    with pytest.raises(ModelResponseError, match="condition rejected") as exc:
         _catalog_item_changes_from_normalized_intent(
             _catalog_normalized_intent(
                 catalog_ui_policies=[
@@ -2195,6 +3010,7 @@ def test_catalog_changes_reject_rule_with_non_declarative_condition() -> None:
                 ]
             )
         )
+    assert exc.value.__cause__ is None
 
 
 def test_catalog_changes_reject_rule_without_actions_or_invalid_tristate() -> None:
@@ -2220,6 +3036,130 @@ def test_catalog_changes_reject_rule_without_actions_or_invalid_tristate() -> No
         )
 
 
+def test_catalog_changes_reject_string_subclass_rule_action_without_leak() -> None:
+    class SecretBearingTristateText(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-rule-tristate")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {
+                        "title": "Show schedule",
+                        "condition": "visitor_name=external",
+                        "actions": [
+                            {
+                                "variable": "start_date",
+                                "visible": SecretBearingTristateText("true"),
+                            }
+                        ],
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == (
+        "catalog variable rule Show schedule action visible must be true, false, or ignore"
+    )
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingTristateText" not in message
+    assert "client_secret" not in message
+    assert "catalog-rule-tristate" not in message
+
+
+def test_catalog_changes_reject_hostile_rule_action_cleared_without_leak() -> None:
+    class SecretBearingCleared:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=catalog-rule-cleared")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {
+                        "title": "Show schedule",
+                        "condition": "visitor_name=external",
+                        "actions": [
+                            {
+                                "variable": "start_date",
+                                "visible": "true",
+                                "cleared": SecretBearingCleared(),
+                            }
+                        ],
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog variable rule Show schedule action cleared must be a boolean"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingCleared" not in message
+    assert "client_secret" not in message
+    assert "catalog-rule-cleared" not in message
+
+
+def test_catalog_changes_reject_hostile_rule_reverse_if_false_without_leak() -> None:
+    class SecretBearingReverseIfFalse:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=catalog-rule-reverse")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_ui_policies=[
+                    {
+                        "title": "Show schedule",
+                        "condition": "visitor_name=external",
+                        "reverse_if_false": SecretBearingReverseIfFalse(),
+                        "actions": [{"variable": "start_date", "visible": "true"}],
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog variable rule Show schedule reverse_if_false must be a boolean"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingReverseIfFalse" not in message
+    assert "client_secret" not in message
+    assert "catalog-rule-reverse" not in message
+
+
+def test_catalog_changes_reject_string_subclass_client_script_action_without_leak() -> None:
+    class SecretBearingActionText(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-client-action")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _catalog_item_changes_from_normalized_intent(
+            _catalog_normalized_intent(
+                catalog_client_scripts=[
+                    {
+                        "name": "populate_visitor",
+                        "script_type": "onLoad",
+                        "actions": [
+                            {
+                                "kind": SecretBearingActionText("set_value"),
+                                "variable": "visitor_name",
+                                "value": "New visitor",
+                            }
+                        ],
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "catalog client script populate_visitor action kind must be an exact string"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingActionText" not in message
+    assert "client_secret" not in message
+    assert "catalog-client-action" not in message
+
+
 def test_catalog_changes_reject_script_on_unknown_variable() -> None:
     with pytest.raises(ModelResponseError, match="references unknown variable: badge_color"):
         _catalog_item_changes_from_normalized_intent(
@@ -2238,7 +3178,7 @@ def test_catalog_changes_reject_script_on_unknown_variable() -> None:
 
 
 def test_catalog_changes_reject_script_with_invalid_action_or_type() -> None:
-    with pytest.raises(ModelResponseError, match="action rejected"):
+    with pytest.raises(ModelResponseError, match="action rejected") as action_exc:
         _catalog_item_changes_from_normalized_intent(
             _catalog_normalized_intent(
                 catalog_client_scripts=[
@@ -2252,7 +3192,8 @@ def test_catalog_changes_reject_script_with_invalid_action_or_type() -> None:
                 ]
             )
         )
-    with pytest.raises(ModelResponseError, match="rejected"):
+    assert action_exc.value.__cause__ is None
+    with pytest.raises(ModelResponseError, match="rejected") as script_exc:
         _catalog_item_changes_from_normalized_intent(
             _catalog_normalized_intent(
                 catalog_client_scripts=[
@@ -2266,6 +3207,7 @@ def test_catalog_changes_reject_script_with_invalid_action_or_type() -> None:
                 ]
             )
         )
+    assert script_exc.value.__cause__ is None
 
 
 def test_catalog_changes_reject_script_value_with_forbidden_token() -> None:
@@ -2696,8 +3638,36 @@ def test_record_producer_changes_reject_duplicate_field_mappings() -> None:
         )
 
 
+def test_record_producer_changes_reject_hostile_variable_mandatory_without_leak() -> None:
+    class SecretBearingMandatory:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=record-producer-mandatory")
+
+    with pytest.raises(ModelResponseError) as exc_info:
+        _record_producer_changes_from_normalized_intent(
+            _record_producer_normalized_intent(
+                variables=[
+                    {
+                        "name": "summary",
+                        "label": "Summary",
+                        "type": "single_line_text",
+                        "field": "short_description",
+                        "mandatory": SecretBearingMandatory(),
+                    }
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == "record producer variable summary mandatory must be a boolean"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingMandatory" not in message
+    assert "client_secret" not in message
+    assert "record-producer-mandatory" not in message
+
+
 def test_record_producer_changes_reject_non_declarative_reference_qualifier() -> None:
-    with pytest.raises(ModelResponseError, match="reference qualifier rejected"):
+    with pytest.raises(ModelResponseError, match="reference qualifier rejected") as exc:
         _record_producer_changes_from_normalized_intent(
             _record_producer_normalized_intent(
                 variables=[
@@ -2712,3 +3682,78 @@ def test_record_producer_changes_reject_non_declarative_reference_qualifier() ->
                 ]
             )
         )
+    assert exc.value.__cause__ is None
+
+
+def test_merge_deterministic_changes_replaces_covered_tables_and_keeps_others() -> None:
+    response_changes = [
+        {"table": "sc_cat_item", "fields": {"name": "model-item"}},
+        {"table": "item_option_new", "fields": {"name": "model-var"}},
+        {"table": "catalog_ui_policy", "fields": {"name": "model-policy"}},
+        {"table": "sys_script", "fields": {"name": "model-rule"}},
+    ]
+    deterministic_changes = [
+        {"table": "sc_cat_item", "fields": {"name": "intent-item"}},
+        {"table": "item_option_new", "fields": {"name": "intent-var"}},
+    ]
+
+    merged = _merge_deterministic_changes(response_changes, deterministic_changes)
+
+    tables = [change["table"] for change in merged]
+    assert tables == ["catalog_ui_policy", "sys_script", "sc_cat_item", "item_option_new"]
+    sc_cat_item = next(c for c in merged if c["table"] == "sc_cat_item")
+    assert sc_cat_item["fields"]["name"] == "intent-item"
+
+
+def test_reconcile_response_merges_catalog_item_with_model_changes_for_other_tables() -> None:
+    packet = _implementation_packet_with_assessment(
+        {
+            "capabilities": [Capability.CATALOG_ITEM_CREATE.value],
+        }
+    )
+    packet = packet.model_copy(
+        update={
+            "normalized_intent": _catalog_normalized_intent(),
+            "allowed_tables": {
+                "sc_cat_item",
+                "item_option_new",
+                "sc_cat_item_category",
+                "m2m_connected_content",
+                "sys_script",
+            },
+        }
+    )
+    response = {
+        "changes": [
+            {
+                "table": "sc_cat_item",
+                "operation": "insert",
+                "fields": {"name": "model-catalog"},
+                "sys_id": None,
+                "rationale": None,
+            },
+            {
+                "table": "sys_script",
+                "operation": "insert",
+                "fields": {"name": "model-rule"},
+                "sys_id": None,
+                "rationale": None,
+            },
+        ],
+        "test_plan": ["test"],
+        "rollback_notes": ["rollback"],
+    }
+
+    reconciled = _reconcile_response_with_packet(packet=packet, response=response)
+
+    tables = [change["table"] for change in reconciled["changes"]]
+    assert "sys_script" in tables
+    assert any(
+        change["table"] == "sc_cat_item"
+        and change["fields"]["name"] == "Request Temporary Badge"
+        for change in reconciled["changes"]
+    )
+    assert not any(
+        change["table"] == "sc_cat_item" and change["fields"].get("name") == "model-catalog"
+        for change in reconciled["changes"]
+    )

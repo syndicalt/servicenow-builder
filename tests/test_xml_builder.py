@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     XML_DECLARATION,
@@ -130,3 +132,40 @@ def test_reference_qualifier_elements_render_empty_qualifier() -> None:
         "<reference_qual_condition></reference_qual_condition>"
         "<use_reference_qualifier></use_reference_qualifier>"
     )
+
+
+def test_text_element_rejects_invalid_xml_control_character() -> None:
+    with pytest.raises(ValueError, match="Invalid XML character"):
+        text_element("name", "prefix\x00suffix")
+
+
+def test_text_element_rejects_xml_surrogate_character() -> None:
+    with pytest.raises(ValueError, match="Invalid XML character"):
+        text_element("name", "\ud83d")
+
+
+def test_text_element_rejects_c1_control_character() -> None:
+    with pytest.raises(ValueError, match="Invalid XML character"):
+        text_element("name", "\x85")
+
+
+def test_text_element_accepts_valid_whitespace_and_high_unicode() -> None:
+    # Tab, LF, and characters outside the BMP are valid XML text content.
+    assert text_element("name", "line1\nline2\t\U0001F600") == (
+        "<name>line1\nline2\t\U0001F600</name>"
+    )
+
+
+def test_text_element_rejects_invalid_attribute_value() -> None:
+    with pytest.raises(ValueError, match="Invalid XML character"):
+        text_element("tag", "value", display_value="\x1b")
+
+
+def test_record_update_rejects_invalid_table_attribute() -> None:
+    with pytest.raises(ValueError, match="Invalid XML character"):
+        record_update("<x></x>", table="bad\x00table")
+
+
+def test_cdata_rejects_invalid_xml_character() -> None:
+    with pytest.raises(ValueError, match="Invalid XML character"):
+        cdata("prefix\x00suffix")

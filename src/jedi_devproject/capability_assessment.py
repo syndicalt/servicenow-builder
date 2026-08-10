@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+from datetime import date
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
+from pydantic_core import PydanticSerializationError
 
 from jedi_devproject.automation_intent import AutomationIntent
 from jedi_devproject.capabilities import (
@@ -16,11 +20,25 @@ from jedi_devproject.capabilities import (
 )
 from jedi_devproject.models import Story
 from jedi_devproject.risk import RiskInput, calculate_risk_score
+from jedi_devproject.work_note_safety import safe_work_note_value
 
 FULL_MATURITY_MAX_AUTOMATED_POINTS = 5
 CURRENT_AUTOMATION_MAX_POINTS = 3
+MAX_INTAKE_WORK_NOTE_ITEMS = 50
 
 INTAKE_FEEDBACK_SCHEMA_VERSION = "intake-feedback-v1"
+AUTOMATION_INTENT_PAYLOAD_NON_FINITE_DIAGNOSTIC = (
+    "automation intent payload contains non-finite numeric values"
+)
+AUTOMATION_INTENT_PAYLOAD_NON_JSON_DIAGNOSTIC = (
+    "automation intent payload contains non-JSON values"
+)
+INTAKE_FEEDBACK_HASH_NON_FINITE_DIAGNOSTIC = (
+    "intake feedback hash payload contains non-finite numeric values"
+)
+INTAKE_FEEDBACK_HASH_NON_JSON_DIAGNOSTIC = (
+    "intake feedback hash payload contains non-JSON values"
+)
 
 INTAKE_GATE_FAILURE_OUTCOMES = frozenset(
     {
@@ -34,7 +52,7 @@ INTAKE_GATE_FAILURE_OUTCOMES = frozenset(
 class IntakeFeedback(BaseModel):
     """Intake-time rewrite guidance for a story that cannot be automated as written."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     schema_version: str = INTAKE_FEEDBACK_SCHEMA_VERSION
     story_number: str
@@ -75,15 +93,39 @@ def build_intake_feedback(assessment: StoryCapabilityAssessment) -> IntakeFeedba
 
 
 def intake_feedback_work_note(feedback: IntakeFeedback) -> str:
+    reason_codes = _safe_intake_work_note_values(
+        feedback.reason_codes,
+        omitted_label="reason codes",
+    )
+    guidance = _safe_intake_work_note_values(
+        feedback.guidance,
+        omitted_label="guidance items",
+    )
     note = (
-        f"Intake automation assessment for {feedback.story_number}: the story cannot "
+        f"Intake automation assessment for {safe_work_note_value(feedback.story_number)}: "
+        "the story cannot "
         "be automated as written. "
-        f"Reason codes: {'; '.join(feedback.reason_codes)}. "
-        f"{' '.join(feedback.guidance)}"
+        f"Reason codes: {'; '.join(reason_codes)}. "
+        f"{' '.join(guidance)}"
     ).strip()
     if feedback.suggested_story:
-        note = f"{note} Suggested rewrite:\n{feedback.suggested_story}"
+        suggested_story = safe_work_note_value(feedback.suggested_story)
+        if suggested_story:
+            note = f"{note} Suggested rewrite:\n{suggested_story}"
     return note
+
+
+def _safe_intake_work_note_values(values: list[str], *, omitted_label: str) -> list[str]:
+    safe_values = [
+        safe_value
+        for value in values[:MAX_INTAKE_WORK_NOTE_ITEMS]
+        for safe_value in [safe_work_note_value(value)]
+        if safe_value
+    ]
+    omitted = len(values) - MAX_INTAKE_WORK_NOTE_ITEMS
+    if omitted > 0:
+        safe_values.append(f"intake {omitted_label} omitted: {omitted} entries")
+    return safe_values
 
 
 def _intake_reason_codes(assessment: StoryCapabilityAssessment) -> list[str]:
@@ -133,19 +175,77 @@ def _intake_content_hash(
     guidance: list[str],
     suggested_story: str | None,
 ) -> str:
-    canonical = json.dumps(
-        {
-            "schema_version": INTAKE_FEEDBACK_SCHEMA_VERSION,
-            "story_number": story_number,
-            "outcome": outcome.value,
-            "reason_codes": reason_codes,
-            "guidance": guidance,
-            "suggested_story": suggested_story,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    payload = {
+        "schema_version": INTAKE_FEEDBACK_SCHEMA_VERSION,
+        "story_number": story_number,
+        "outcome": outcome.value,
+        "reason_codes": reason_codes,
+        "guidance": guidance,
+        "suggested_story": suggested_story,
+    }
+    try:
+        _ensure_capability_payload_json_safe(payload)
+        canonical = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except ValueError:
+        raise ValueError(INTAKE_FEEDBACK_HASH_NON_FINITE_DIAGNOSTIC) from None
+    except TypeError:
+        raise ValueError(INTAKE_FEEDBACK_HASH_NON_JSON_DIAGNOSTIC) from None
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _automation_intent_payload(automation_intent: AutomationIntent) -> dict[str, object]:
+    try:
+        _ensure_capability_payload_json_safe(
+            automation_intent.model_dump(mode="python", warnings=False)
+        )
+        json.dumps(
+            automation_intent.model_dump(mode="json", warnings=False),
+            sort_keys=True,
+            allow_nan=False,
+        )
+    except PydanticSerializationError:
+        raise ValueError(AUTOMATION_INTENT_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    except ValueError:
+        raise ValueError(AUTOMATION_INTENT_PAYLOAD_NON_FINITE_DIAGNOSTIC) from None
+    except TypeError:
+        raise ValueError(AUTOMATION_INTENT_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    return automation_intent.model_dump(mode="json", warnings=False)
+
+
+def _ensure_capability_payload_json_safe(value: object) -> None:
+    if (
+        value is None
+        or type(value) is str
+        or type(value) is bool
+        or type(value) is int
+        or type(value) is date
+        or isinstance(value, Enum)
+    ):
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise ValueError("non-finite capability payload value")
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError("non-JSON capability payload key")
+            _ensure_capability_payload_json_safe(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _ensure_capability_payload_json_safe(item)
+        return
+    if type(value) is tuple:
+        for item in value:
+            _ensure_capability_payload_json_safe(item)
+        return
+    raise TypeError("non-JSON capability payload value")
 
 
 def _assessment(
@@ -194,7 +294,9 @@ def _assessment(
         missing_details=missing_details,
         unsupported_capabilities=unsupported,
         automation_intent=(
-            automation_intent.model_dump(mode="json") if automation_intent is not None else None
+            _automation_intent_payload(automation_intent)
+            if automation_intent is not None
+            else None
         ),
         operator_feedback=operator_feedback,
         suggested_story=suggested_story,

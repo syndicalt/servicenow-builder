@@ -1,10 +1,28 @@
 from __future__ import annotations
 
-import pytest
+from typing import Any, cast
 
-from jedi_devproject.business_rule_generation import business_rule_customer_updates
-from jedi_devproject.client_script_generation import client_script_customer_updates
+import pytest
+from pydantic import BaseModel, ValidationError
+
+from jedi_devproject.business_rule_generation import (
+    BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC,
+    BusinessRuleIntent,
+    business_rule_customer_updates,
+)
+from jedi_devproject.catalog_item_generation import CatalogItemIntent, CatalogVariableIntent
+from jedi_devproject.catalog_ui_policy_generation import (
+    CATALOG_UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC,
+    catalog_ui_policy_customer_updates,
+)
+from jedi_devproject.client_script_generation import (
+    CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC,
+    ClientScriptIntent,
+    client_script_customer_updates,
+)
 from jedi_devproject.flow_designer_generation import (
+    FlowGraphDiffIntent,
+    _strict_validation_json,
     flow_builder_readiness_contract,
     flow_customer_update_strategy,
     flow_preview_commit_review_strategy,
@@ -15,8 +33,16 @@ from jedi_devproject.flow_designer_generation import (
     validate_flow_xml_shape_evidence,
 )
 from jedi_devproject.models import CandidateChange
-from jedi_devproject.script_include_generation import script_include_customer_updates
-from jedi_devproject.ui_policy_generation import ui_policy_customer_updates
+from jedi_devproject.script_include_generation import (
+    SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC,
+    ScriptIncludeIntent,
+    script_include_customer_updates,
+)
+from jedi_devproject.ui_policy_generation import (
+    UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC,
+    UiPolicyIntent,
+    ui_policy_customer_updates,
+)
 
 
 def _business_rule_change(**field_overrides: object) -> CandidateChange:
@@ -103,6 +129,85 @@ def _script_include_change(**field_overrides: object) -> CandidateChange:
     )
 
 
+def test_script_include_customer_updates_rejects_non_json_field_without_leak() -> None:
+    class SecretBearingScriptField:
+        def __str__(self) -> str:
+            return "leaked-script-include-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        script_include_customer_updates(
+            changes=[_script_include_change(name=SecretBearingScriptField())],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-script-include-secret" not in message
+    assert "SecretBearingScriptField" not in message
+
+
+def test_script_include_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingScriptText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=script-include-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        script_include_customer_updates(
+            changes=[_script_include_change(scope=SecretBearingScriptText("global"))],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC
+    assert "script-include-string-subclass" not in message
+    assert "SecretBearingScriptText" not in message
+
+
+def test_script_include_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingScriptIncludeOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=script-include-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        script_include_customer_updates(
+            changes=[
+                _script_include_change(
+                    name=SecretBearingScriptIncludeOrder(1),
+                    script_include_name="JediIncidentUtils",
+                )
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "script-include-scalar" not in message
+    assert "SecretBearingScriptIncludeOrder" not in message
+
+
+def test_script_include_customer_updates_rejects_list_subclass_field_without_leak() -> None:
+    class SecretBearingScriptIncludeList(list[str]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=script-include-list")
+
+    with pytest.raises(ValueError) as exc_info:
+        script_include_customer_updates(
+            changes=[
+                _script_include_change(
+                    tables_read=SecretBearingScriptIncludeList(["incident"]),
+                )
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "script-include-list" not in message
+    assert "SecretBearingScriptIncludeList" not in message
+
+
 def _ui_policy_change(**field_overrides: object) -> CandidateChange:
     fields: dict[str, object] = {
         "short_description": "JEDI Incident Assignment Group Required",
@@ -136,6 +241,40 @@ def _ui_policy_action_change(**field_overrides: object) -> CandidateChange:
         operation="insert",
         fields=fields,
         rationale="Make Assignment group mandatory and visible.",
+    )
+
+
+def _catalog_ui_policy_change(**field_overrides: object) -> CandidateChange:
+    fields: dict[str, object] = {
+        "short_description": "JEDI Laptop Justification Policy",
+        "catalog_conditions": "requested_forISNOTEMPTY",
+        "reverse_if_false": True,
+        "run_scripts": False,
+    }
+    fields.update(field_overrides)
+    return CandidateChange(
+        table="catalog_ui_policy",
+        operation="insert",
+        fields=fields,
+        rationale="Add the requested declarative Catalog UI Policy.",
+    )
+
+
+def _catalog_ui_policy_action_change(**field_overrides: object) -> CandidateChange:
+    fields: dict[str, object] = {
+        "policy_name": "JEDI Laptop Justification Policy",
+        "variable": "business_justification",
+        "mandatory": "true",
+        "visible": "true",
+        "disabled": "ignore",
+        "cleared": False,
+    }
+    fields.update(field_overrides)
+    return CandidateChange(
+        table="catalog_ui_policy_action",
+        operation="insert",
+        fields=fields,
+        rationale="Make Business justification mandatory and visible.",
     )
 
 
@@ -175,6 +314,97 @@ def _flow_graph_diff_change(**field_overrides: object) -> CandidateChange:
 
 def _retrieved_flow_nodes() -> set[str]:
     return {"flow-sys-id", "trigger-sys-id", "action-sys-id", "logic-sys-id"}
+
+
+def test_artifact_generation_validation_errors_do_not_echo_rejected_inputs() -> None:
+    cases: list[tuple[type[BaseModel], dict[str, object], tuple[str, ...]]] = [
+        (
+            BusinessRuleIntent,
+            {
+                "target_table": "incident",
+                "rule_name": "JEDI Rule",
+                "when": "secret-when",
+                "action_insert": True,
+                "filter_condition": "category=inquiry",
+                "script": "current.short_description = 'Needs triage';",
+                "fields_read": ["category"],
+                "fields_written": ["short_description"],
+            },
+            ("secret-when",),
+        ),
+        (
+            ClientScriptIntent,
+            {
+                "target_table": "incident",
+                "script_name": "JEDI Script",
+                "script_type": "secret-script-type",
+                "script": "function onLoad() {}",
+                "fields_read": [],
+                "fields_written": [],
+                "messages_shown": [],
+            },
+            ("secret-script-type",),
+        ),
+        (
+            ScriptIncludeIntent,
+            {
+                "name": "",
+                "api_name": "global.SecretUtil",
+                "scope": "global",
+                "client_callable": False,
+                "script": "secret-script-body",
+                "public_methods": [],
+                "tables_read": [],
+                "tables_written": [],
+                "fields_read": [],
+                "fields_written": [],
+            },
+            ("secret-script-body",),
+        ),
+        (
+            UiPolicyIntent,
+            {
+                "target_table": "incident",
+                "policy_name": "JEDI Policy",
+                "conditions": "secret-condition",
+                "reverse_if_false": True,
+                "run_scripts": True,
+                "actions": [],
+            },
+            ("secret-condition",),
+        ),
+        (
+            CatalogVariableIntent,
+            {
+                "name": "secret-variable",
+                "label": "",
+                "variable_type": "single_line_text",
+            },
+            ("secret-variable",),
+        ),
+        (
+            CatalogItemIntent,
+            {
+                "name": "JEDI Item",
+                "short_description": "secret-short-description",
+                "catalog": "Service Catalog",
+                "category": "Services",
+                "taxonomy": "Employee",
+                "employee_center_topic": "Access",
+                "variables": [],
+            },
+            ("secret-short-description",),
+        ),
+    ]
+
+    for model_class, values, secret_fragments in cases:
+        with pytest.raises(ValidationError) as exc_info:
+            model_class.model_validate(values)
+
+        error_text = str(exc_info.value)
+        assert "input_value" not in error_text
+        for fragment in secret_fragments:
+            assert fragment not in error_text
 
 
 def test_flow_graph_diff_validator_accepts_narrow_add_action_diff() -> None:
@@ -230,6 +460,54 @@ def test_flow_graph_diff_validator_rejects_unsupported_graph_rewrite() -> None:
         )
 
 
+class UnstringifiableFlowGraphDiffValidationError(ValidationError):
+    def __str__(self) -> str:
+        raise ValueError("client-secret-value")
+
+
+def test_flow_graph_diff_validator_detects_unsupported_operation_without_stringifying_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invalid_fields = dict(
+        _flow_graph_diff_change(
+            requested_graph_diff=[
+                {
+                    "operation": "rewrite_graph",
+                    "node_id": "trigger-sys-id",
+                    "summary": "Replace the full flow graph",
+                }
+            ]
+        ).fields
+    )
+    try:
+        FlowGraphDiffIntent.model_validate(invalid_fields)
+    except ValidationError as exc:
+        unstringifiable_error = UnstringifiableFlowGraphDiffValidationError.from_exception_data(
+            exc.title,
+            cast(Any, exc.errors()),
+        )
+    else:
+        raise AssertionError("unsupported Flow graph diff operation did not fail validation")
+
+    def fail_model_validate(_payload: object) -> object:
+        raise unstringifiable_error
+
+    monkeypatch.setattr(
+        FlowGraphDiffIntent,
+        "model_validate",
+        staticmethod(fail_model_validate),
+    )
+
+    with pytest.raises(ValueError, match="unsupported Flow graph diff operation") as exc_info:
+        validate_flow_graph_diff_candidate(
+            changes=[_flow_graph_diff_change()],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+    assert exc_info.value.__cause__ is None
+    assert "client-secret-value" not in str(exc_info.value)
+
+
 def test_flow_graph_diff_validator_rejects_forbidden_flow_tokens() -> None:
     with pytest.raises(ValueError, match="forbidden Flow graph diff token"):
         validate_flow_graph_diff_candidate(
@@ -248,6 +526,140 @@ def test_flow_graph_diff_validator_rejects_forbidden_flow_tokens() -> None:
             ],
             retrieved_node_ids=_retrieved_flow_nodes(),
         )
+
+
+def test_flow_graph_diff_rejects_non_finite_customer_updates_without_leak() -> None:
+    with pytest.raises(ValueError, match="non-finite customer update value") as exc_info:
+        validate_flow_graph_diff_candidate(
+            changes=[
+                _flow_graph_diff_change(
+                    customer_update_records=[
+                        {
+                            "private_value_marker": "do-not-echo-this",
+                            "weight": float("nan"),
+                        }
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+    message = str(exc_info.value)
+    assert "private_value_marker" not in message
+    assert "do-not-echo-this" not in message
+    assert "NaN" not in message
+
+
+def test_flow_graph_diff_validator_rejects_non_finite_graph_payload_without_leak() -> None:
+    with pytest.raises(ValueError, match="non-finite payload value") as exc_info:
+        validate_flow_graph_diff_candidate(
+            changes=[
+                _flow_graph_diff_change(
+                    requested_graph_diff=[
+                        {
+                            "operation": "add_action",
+                            "node_id": "new-action-node",
+                            "after_node_id": "trigger-sys-id",
+                            "action_type": "set_field_value",
+                            "summary": "Set assignment group",
+                            "inputs": {
+                                "field": "assignment_group",
+                                "private_value_marker": "do-not-echo-this",
+                                "weight": float("inf"),
+                            },
+                        }
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+    message = str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "private_value_marker" not in message
+    assert "do-not-echo-this" not in message
+    assert "Infinity" not in message
+
+
+def test_flow_graph_diff_validator_rejects_non_json_payload_values_without_leak() -> None:
+    class StringifiesSecret:
+        def __str__(self) -> str:
+            return "do-not-echo-this"
+
+    with pytest.raises(ValueError, match="non-JSON payload value") as exc_info:
+        validate_flow_graph_diff_candidate(
+            changes=[
+                _flow_graph_diff_change(
+                    requested_graph_diff=[
+                        {
+                            "operation": "add_action",
+                            "node_id": "new-action-node",
+                            "after_node_id": "trigger-sys-id",
+                            "action_type": "set_field_value",
+                            "summary": "Set assignment group",
+                            "inputs": {
+                                "field": "assignment_group",
+                                "private_value_marker": "do-not-echo-this",
+                                "unsafe": StringifiesSecret(),
+                            },
+                        }
+                    ]
+                )
+            ],
+            retrieved_node_ids=_retrieved_flow_nodes(),
+        )
+
+    message = str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "private_value_marker" not in message
+    assert "do-not-echo-this" not in message
+    assert "StringifiesSecret" not in message
+
+
+def test_flow_graph_diff_payload_json_rejects_non_finite_values_without_cause() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Flow graph diff contains a non-finite payload value",
+    ) as exc_info:
+        _strict_validation_json(
+            {
+                "private_value_marker": "do-not-echo-this",
+                "weight": float("inf"),
+            },
+            non_finite_message="Flow graph diff contains a non-finite payload value",
+            non_json_message="Flow graph diff contains a non-JSON payload value",
+        )
+
+    message = str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "private_value_marker" not in message
+    assert "do-not-echo-this" not in message
+    assert "Infinity" not in message
+
+
+def test_flow_graph_diff_payload_json_rejects_non_json_values_without_cause() -> None:
+    class StringifiesSecret:
+        def __str__(self) -> str:
+            return "do-not-echo-this"
+
+    with pytest.raises(
+        ValueError,
+        match="Flow graph diff contains a non-JSON payload value",
+    ) as exc_info:
+        _strict_validation_json(
+            {
+                "private_value_marker": "do-not-echo-this",
+                "unsafe": StringifiesSecret(),
+            },
+            non_finite_message="Flow graph diff contains a non-finite payload value",
+            non_json_message="Flow graph diff contains a non-JSON payload value",
+        )
+
+    message = str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "private_value_marker" not in message
+    assert "do-not-echo-this" not in message
+    assert "StringifiesSecret" not in message
 
 
 def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None:
@@ -278,9 +690,7 @@ def test_flow_graph_builder_plan_keeps_generation_and_handoff_disabled() -> None
     ]
     assert plan.customer_update_strategy_version == "flow-customer-update-strategy-v1"
     assert plan.snapshot_update_strategy_version == "flow-snapshot-update-strategy-v1"
-    assert plan.preview_commit_review_strategy_version == (
-        "flow-preview-commit-review-strategy-v1"
-    )
+    assert plan.preview_commit_review_strategy_version == ("flow-preview-commit-review-strategy-v1")
     assert plan.readiness_contract_version == "flow-builder-readiness-v1"
     assert plan.ready_for_runtime_generation is False
     assert plan.ready_for_retrieved_update_set_handoff is False
@@ -359,7 +769,7 @@ def test_flow_xml_shape_evidence_validator_accepts_review_sample() -> None:
         table="sys_hub_action_instance",
         xml_payload=(
             '<?xml version="1.0" encoding="UTF-8"?>'
-            '<record_update>'
+            "<record_update>"
             '<sys_hub_action_instance action="INSERT_OR_UPDATE">'
             "<sys_id>action-sys-id</sys_id>"
             "<sys_update_name>sys_hub_action_instance_action-sys-id</sys_update_name>"
@@ -404,6 +814,16 @@ def test_flow_xml_shape_evidence_validator_rejects_missing_required_field() -> N
                 "</record_update>"
             ),
         )
+
+
+def test_flow_xml_shape_evidence_validator_rejects_malformed_xml_without_cause() -> None:
+    with pytest.raises(ValueError, match="Flow XML shape evidence is not valid XML") as exc_info:
+        validate_flow_xml_shape_evidence(
+            table="sys_hub_action_instance",
+            xml_payload="<record_update><sys_hub_action_instance>",
+        )
+
+    assert exc_info.value.__cause__ is None
 
 
 def test_flow_xml_shape_evidence_validator_rejects_forbidden_field() -> None:
@@ -577,11 +997,7 @@ def test_flow_builder_readiness_contract_reports_missing_evidence() -> None:
 
 def test_business_rule_validator_rejects_undeclared_set_value_write() -> None:
     change = _business_rule_change(
-        script=(
-            "if (current.priority.changesTo('1')) {\n"
-            "    current.setValue('impact', '1');\n"
-            "}"
-        )
+        script=("if (current.priority.changesTo('1')) {\n    current.setValue('impact', '1');\n}")
     )
 
     with pytest.raises(ValueError, match="Business Rule writes undeclared field: impact"):
@@ -597,7 +1013,7 @@ def test_business_rule_validator_rejects_metadata_variable_inside_script() -> No
             "if (current.category == 'inquiry' && !current.short_description) {\n"
             "    current.short_description = 'Inquiry needs triage';\n"
             "}\n"
-            "var fields_written = [\"short_description\"];\n"
+            'var fields_written = ["short_description"];\n'
         ),
         fields_written=["short_description"],
     )
@@ -607,6 +1023,166 @@ def test_business_rule_validator_rejects_metadata_variable_inside_script() -> No
             changes=[change],
             remote_update_set_sys_id="remote-update-set-sys-id",
         )
+
+
+def test_business_rule_customer_updates_rejects_non_json_field_without_leak() -> None:
+    class SecretBearingBusinessRuleField:
+        def __str__(self) -> str:
+            return "leaked-business-rule-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        business_rule_customer_updates(
+            changes=[_business_rule_change(name=SecretBearingBusinessRuleField())],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-business-rule-secret" not in message
+    assert "SecretBearingBusinessRuleField" not in message
+
+
+def test_business_rule_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingBusinessRuleText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=business-rule-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        business_rule_customer_updates(
+            changes=[_business_rule_change(when=SecretBearingBusinessRuleText("before"))],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC
+    assert "business-rule-string-subclass" not in message
+    assert "SecretBearingBusinessRuleText" not in message
+
+
+def test_business_rule_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingBusinessRuleOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=business-rule-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        business_rule_customer_updates(
+            changes=[
+                _business_rule_change(
+                    name=SecretBearingBusinessRuleOrder(1),
+                    rule_name="JEDI Incident Priority Note",
+                )
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "business-rule-scalar" not in message
+    assert "SecretBearingBusinessRuleOrder" not in message
+
+
+def test_business_rule_customer_updates_rejects_list_subclass_field_without_leak() -> None:
+    class SecretBearingBusinessRuleList(list[str]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=business-rule-list")
+
+    with pytest.raises(ValueError) as exc_info:
+        business_rule_customer_updates(
+            changes=[
+                _business_rule_change(
+                    fields_written=SecretBearingBusinessRuleList(["work_notes"]),
+                )
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "business-rule-list" not in message
+    assert "SecretBearingBusinessRuleList" not in message
+
+
+def test_client_script_customer_updates_rejects_non_json_field_without_leak() -> None:
+    class SecretBearingClientScriptField:
+        def __str__(self) -> str:
+            return "leaked-client-script-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        client_script_customer_updates(
+            changes=[_client_script_change(name=SecretBearingClientScriptField())],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-client-script-secret" not in message
+    assert "SecretBearingClientScriptField" not in message
+
+
+def test_client_script_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingClientScriptText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=client-script-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        client_script_customer_updates(
+            changes=[_client_script_change(type=SecretBearingClientScriptText("onChange"))],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert "client-script-string-subclass" not in message
+    assert "SecretBearingClientScriptText" not in message
+
+
+def test_client_script_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingClientScriptOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=client-script-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        client_script_customer_updates(
+            changes=[
+                _client_script_change(
+                    name=SecretBearingClientScriptOrder(1),
+                    script_name="JEDI Incident Category CI Message",
+                )
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "client-script-scalar" not in message
+    assert "SecretBearingClientScriptOrder" not in message
+
+
+def test_client_script_customer_updates_rejects_list_subclass_field_without_leak() -> None:
+    class SecretBearingClientScriptList(list[str]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=client-script-list")
+
+    with pytest.raises(ValueError) as exc_info:
+        client_script_customer_updates(
+            changes=[
+                _client_script_change(
+                    messages_shown=SecretBearingClientScriptList(
+                        ["Confirm the CI before saving."],
+                    ),
+                )
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "client-script-list" not in message
+    assert "SecretBearingClientScriptList" not in message
 
 
 def test_business_rule_validator_normalizes_model_operation_and_field_aliases() -> None:
@@ -646,9 +1222,7 @@ def test_business_rule_validator_infers_operation_flags_from_rationale_when_miss
                     "}"
                 ),
                 fields_written=[],
-                rationale=(
-                    "Applied on before insert and update operations on the incident table."
-                ),
+                rationale=("Applied on before insert and update operations on the incident table."),
             )
         ],
         remote_update_set_sys_id="remote-update-set-sys-id",
@@ -705,8 +1279,7 @@ def test_business_rule_validator_normalizes_filter_alias() -> None:
     assert "<action_insert>true</action_insert>" in payload
     assert "<action_update>true</action_update>" in payload
     assert (
-        "current.category == &#x27;inquiry&#x27; &amp;&amp; !current.short_description"
-        in payload
+        "current.category == &#x27;inquiry&#x27; &amp;&amp; !current.short_description" in payload
     )
 
 
@@ -883,6 +1456,70 @@ def test_ui_policy_validator_rejects_action_policy_name_mismatch() -> None:
         )
 
 
+def test_ui_policy_customer_updates_rejects_non_json_field_without_leak() -> None:
+    class SecretBearingUiPolicyField:
+        def __str__(self) -> str:
+            return "leaked-ui-policy-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change(short_description=SecretBearingUiPolicyField()),
+                _ui_policy_action_change(),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-ui-policy-secret" not in message
+    assert "SecretBearingUiPolicyField" not in message
+
+
+def test_ui_policy_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingUiPolicyText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=ui-policy-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change(),
+                _ui_policy_action_change(mandatory=SecretBearingUiPolicyText("true")),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC
+    assert "ui-policy-string-subclass" not in message
+    assert "SecretBearingUiPolicyText" not in message
+
+
+def test_ui_policy_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingUiPolicyOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=ui-policy-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        ui_policy_customer_updates(
+            changes=[
+                _ui_policy_change(
+                    short_description=SecretBearingUiPolicyOrder(1),
+                    name="JEDI Incident Assignment Group Required",
+                ),
+                _ui_policy_action_change(),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "ui-policy-scalar" not in message
+    assert "SecretBearingUiPolicyOrder" not in message
+
+
 def test_ui_policy_validator_defaults_action_table_from_policy_table() -> None:
     updates = ui_policy_customer_updates(
         changes=[
@@ -929,11 +1566,93 @@ def test_ui_policy_validator_normalizes_false_read_only_and_clear_actions() -> N
     )
 
     action_update = updates[1]
-    assert action_update["name"].endswith(
-        "not_required_hidden_read_only_cleared"
-    )
+    assert action_update["name"].endswith("not_required_hidden_read_only_cleared")
     assert "<order>100</order>" in str(updates[0]["payload"])
     assert "<mandatory>false</mandatory>" in str(action_update["payload"])
     assert "<visible>false</visible>" in str(action_update["payload"])
     assert "<disabled>true</disabled>" in str(action_update["payload"])
     assert "<cleared>true</cleared>" in str(action_update["payload"])
+
+
+def test_catalog_ui_policy_customer_updates_rejects_non_json_field_without_leak() -> None:
+    class SecretBearingCatalogUiPolicyField:
+        def __str__(self) -> str:
+            return "leaked-catalog-ui-policy-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_ui_policy_customer_updates(
+            changes=[
+                _catalog_ui_policy_change(short_description=SecretBearingCatalogUiPolicyField()),
+                _catalog_ui_policy_action_change(),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+            catalog_item_name="JEDI Laptop Request",
+            catalog_item_sys_id="catalog-item-sys-id",
+            variable_sys_ids={
+                "requested_for": "requested-for-sys-id",
+                "business_justification": "business-justification-sys-id",
+            },
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-catalog-ui-policy-secret" not in message
+    assert "SecretBearingCatalogUiPolicyField" not in message
+
+
+def test_catalog_ui_policy_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingCatalogUiPolicyText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=catalog-ui-policy-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_ui_policy_customer_updates(
+            changes=[
+                _catalog_ui_policy_change(),
+                _catalog_ui_policy_action_change(
+                    mandatory=SecretBearingCatalogUiPolicyText("true")
+                ),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+            catalog_item_name="JEDI Laptop Request",
+            catalog_item_sys_id="catalog-item-sys-id",
+            variable_sys_ids={
+                "requested_for": "requested-for-sys-id",
+                "business_justification": "business-justification-sys-id",
+            },
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC
+    assert "catalog-ui-policy-string-subclass" not in message
+    assert "SecretBearingCatalogUiPolicyText" not in message
+
+
+def test_catalog_ui_policy_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingCatalogUiPolicyOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-ui-policy-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_ui_policy_customer_updates(
+            changes=[
+                _catalog_ui_policy_change(
+                    short_description=SecretBearingCatalogUiPolicyOrder(1),
+                    name="JEDI Laptop Justification Policy",
+                ),
+                _catalog_ui_policy_action_change(),
+            ],
+            remote_update_set_sys_id="remote-update-set-sys-id",
+            catalog_item_name="JEDI Laptop Request",
+            catalog_item_sys_id="catalog-item-sys-id",
+            variable_sys_ids={
+                "requested_for": "requested-for-sys-id",
+                "business_justification": "business-justification-sys-id",
+            },
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "catalog-ui-policy-scalar" not in message
+    assert "SecretBearingCatalogUiPolicyOrder" not in message

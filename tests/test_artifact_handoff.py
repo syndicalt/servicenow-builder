@@ -13,6 +13,31 @@ from jedi_devproject.artifact_handoff import (
 )
 
 
+class _HostileSummaryText(str):
+    def __str__(self) -> str:
+        raise AssertionError("client_secret=artifact-summary-text-secret")
+
+
+class _HostileSummaryValue:
+    def __str__(self) -> str:
+        raise AssertionError("client_secret=artifact-summary-object-secret")
+
+
+class _HostileAttachmentText(str):
+    def __str__(self) -> str:
+        raise AssertionError("client_secret=attachment-text-secret")
+
+
+class _HostileAttachmentValue:
+    def __str__(self) -> str:
+        raise AssertionError("client_secret=attachment-object-secret")
+
+
+class _HostileAttachFlag:
+    def __bool__(self) -> bool:
+        raise AssertionError("client_secret=attachment-flag-secret")
+
+
 def test_internal_evidence_artifacts_are_not_servicenow_attachments() -> None:
     plan = plan_artifact_handoff(
         story_number="STRY0010013",
@@ -125,6 +150,34 @@ def test_handoff_report_summarizes_multiple_artifact_decisions(tmp_path: Path) -
     )
 
 
+def test_handoff_report_hashes_artifacts_without_whole_file_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload><sys_update_xml /></unload>", encoding="utf-8")
+
+    def fail_read_bytes(self: Path) -> bytes:
+        raise AssertionError(f"unexpected whole-file read for {self}")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+
+    report = build_artifact_handoff_report(
+        run_id="handoff-001",
+        story_number="STRY0010013",
+        artifacts=[
+            {
+                "artifact_kind": "update_set_xml",
+                "artifact_path": str(export_path),
+                "approved_for_delivery": True,
+                "delivery_contract": "reviewed_export",
+            }
+        ],
+    )
+
+    assert len(report["decisions"][0]["artifact_sha256"]) == 64
+
+
 def test_handoff_report_rejects_missing_artifact_path(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         build_artifact_handoff_report(
@@ -138,6 +191,43 @@ def test_handoff_report_rejects_missing_artifact_path(tmp_path: Path) -> None:
                 }
             ],
         )
+
+
+def test_handoff_report_rejects_hostile_artifact_text_without_coercion() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        build_artifact_handoff_report(
+            run_id="handoff-001",
+            story_number="STRY0010013",
+            artifacts=[
+                {
+                    "artifact_kind": _HostileAttachmentText("client_secret=kind-payload"),
+                    "artifact_path": _HostileAttachmentValue(),
+                    "approved_for_delivery": False,
+                }
+            ],
+        )
+
+    assert str(exc_info.value) == "artifact_handoff_report_invalid"
+    assert "kind-payload" not in str(exc_info.value)
+    assert "attachment-object-secret" not in str(exc_info.value)
+
+
+def test_handoff_report_rejects_hostile_approval_flag_without_truthiness() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        build_artifact_handoff_report(
+            run_id="handoff-001",
+            story_number="STRY0010013",
+            artifacts=[
+                {
+                    "artifact_kind": "implementation_candidate",
+                    "artifact_path": "artifacts/candidate.json",
+                    "approved_for_delivery": _HostileAttachFlag(),
+                }
+            ],
+        )
+
+    assert str(exc_info.value) == "artifact_handoff_report_invalid"
+    assert "attachment-flag-secret" not in str(exc_info.value)
 
 
 def test_handoff_work_note_summarizes_report_without_hash_dump(tmp_path: Path) -> None:
@@ -168,6 +258,78 @@ def test_handoff_work_note_summarizes_report_without_hash_dump(tmp_path: Path) -
     assert "attach_to_servicenow=0" in note
     assert "internal_evidence=2" in note
     assert "aaaa" not in note
+
+
+def test_handoff_work_note_sanitizes_untrusted_report_values(tmp_path: Path) -> None:
+    report_path = tmp_path / "handoff-001\nclient_secret=path-secret.json"
+    report = {
+        "run_id": "handoff-001",
+        "story_number": "STRY0010013",
+        "summary": {
+            "total": "2\napi_key=total-secret",
+            "attach_to_servicenow": "0\nclient_secret=attach-secret",
+            "internal_evidence": "2\nclient_secret=internal-secret",
+            "delivery_evidence": "0\nclient_secret=delivery-secret",
+        },
+        "decisions": [],
+    }
+
+    note = build_artifact_handoff_work_note(report=report, report_path=report_path)
+
+    assert "path-secret" not in note
+    assert "total-secret" not in note
+    assert "attach-secret" not in note
+    assert "internal-secret" not in note
+    assert "delivery-secret" not in note
+    assert "client_secret=***REDACTED***" in note
+    assert "api_key=***REDACTED***" in note
+    assert "\n" not in note
+
+
+def test_handoff_work_note_bounds_untrusted_report_values(tmp_path: Path) -> None:
+    report_path = tmp_path / f"handoff-001-{'A' * 2200}.json"
+    report = {
+        "run_id": "handoff-001",
+        "story_number": "STRY0010013",
+        "summary": {
+            "total": f"2 {'B' * 2200}",
+            "attach_to_servicenow": f"0 {'C' * 2200}",
+            "internal_evidence": f"2 {'D' * 2200}",
+            "delivery_evidence": f"0 {'E' * 2200}",
+        },
+        "decisions": [],
+    }
+
+    note = build_artifact_handoff_work_note(report=report, report_path=report_path)
+
+    assert note.count("...[truncated]") == 5
+    assert len(note) < 2800
+
+
+def test_handoff_work_note_does_not_coerce_hostile_summary_values(tmp_path: Path) -> None:
+    report = {
+        "run_id": "handoff-001",
+        "story_number": "STRY0010013",
+        "summary": {
+            "total": _HostileSummaryText("client_secret=summary-text-payload"),
+            "attach_to_servicenow": _HostileSummaryValue(),
+            "internal_evidence": 2,
+            "delivery_evidence": None,
+        },
+        "decisions": [],
+    }
+
+    note = build_artifact_handoff_work_note(
+        report=report,
+        report_path=tmp_path / "handoff-001.json",
+    )
+
+    assert "summary-text-payload" not in note
+    assert "summary-object-secret" not in note
+    assert "total=[unsupported handoff summary value]" in note
+    assert "attach_to_servicenow=[unsupported handoff summary value]" in note
+    assert "internal_evidence=2" in note
+    assert "delivery_evidence=None" in note
 
 
 def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
@@ -212,6 +374,55 @@ def test_delivery_attachment_jobs_include_only_attachable_decisions() -> None:
     ]
 
 
+def test_delivery_attachment_jobs_reject_hostile_text_without_coercion() -> None:
+    report = {
+        "run_id": "handoff-001",
+        "story_number": _HostileAttachmentText("client_secret=story-payload"),
+        "summary": {},
+        "decisions": [
+            {
+                "artifact_kind": _HostileAttachmentValue(),
+                "artifact_path": "artifacts/export.xml",
+                "attach_to_servicenow": True,
+                "delivery_contract": "reviewed_export",
+                "artifact_sha256": "b" * 64,
+                "service_now_attachment_label": "Approved Update Set XML",
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        delivery_attachment_jobs_from_report(report)
+
+    assert str(exc_info.value) == "artifact_handoff_report_invalid"
+    assert "story-payload" not in str(exc_info.value)
+    assert "attachment-object-secret" not in str(exc_info.value)
+
+
+def test_delivery_attachment_jobs_reject_hostile_attach_flag_without_truthiness() -> None:
+    report = {
+        "run_id": "handoff-001",
+        "story_number": "STRY0010013",
+        "summary": {},
+        "decisions": [
+            {
+                "artifact_kind": "update_set_xml",
+                "artifact_path": "artifacts/export.xml",
+                "attach_to_servicenow": _HostileAttachFlag(),
+                "delivery_contract": "reviewed_export",
+                "artifact_sha256": "b" * 64,
+                "service_now_attachment_label": "Approved Update Set XML",
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        delivery_attachment_jobs_from_report(report)
+
+    assert str(exc_info.value) == "artifact_handoff_report_invalid"
+    assert "attachment-flag-secret" not in str(exc_info.value)
+
+
 def test_reviewed_delivery_artifact_job_records_contract_and_hash(
     tmp_path: Path,
 ) -> None:
@@ -231,6 +442,54 @@ def test_reviewed_delivery_artifact_job_records_contract_and_hash(
     assert job["approved_for_delivery"] is True
     assert job["delivery_contract"] == "reviewed_export"
     assert job["reviewer_id"] == "release-coordinator"
+    assert len(str(job["artifact_sha256"])) == 64
+
+
+def test_reviewed_delivery_artifact_job_validates_xml_without_whole_file_text_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload><sys_update_xml /></unload>", encoding="utf-8")
+
+    def fail_read_text(
+        self: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        raise AssertionError(f"unexpected whole-file text read for {self}")
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    job = build_reviewed_delivery_artifact_job(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.UPDATE_SET_XML,
+        artifact_path=export_path,
+        reviewer_id="release-coordinator",
+    )
+
+    assert len(str(job["artifact_sha256"])) == 64
+
+
+def test_reviewed_delivery_artifact_job_validates_xml_without_path_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload><sys_update_xml /></unload>", encoding="utf-8")
+
+    def fail_open(self: Path, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError(f"unexpected direct Path.open for {self}")
+
+    monkeypatch.setattr(Path, "open", fail_open)
+
+    job = build_reviewed_delivery_artifact_job(
+        story_number="STRY0010013",
+        artifact_kind=ArtifactKind.UPDATE_SET_XML,
+        artifact_path=export_path,
+        reviewer_id="release-manager",
+    )
+
     assert len(str(job["artifact_sha256"])) == 64
 
 

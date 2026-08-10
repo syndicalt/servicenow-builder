@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import json
 import logging
+import math
+from datetime import date
+from enum import Enum
 from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic_core import PydanticSerializationError
 
 from jedi_devproject.atf_test_generation import generate_atf_test_plan
 from jedi_devproject.automation_intent import intent_required_instance_context
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome, capability_profile
 from jedi_devproject.capability_analysis import analyze_story_capabilities
+from jedi_devproject.diagnostic_redaction import _redact_diagnostic_text
 from jedi_devproject.enrichment import enrich_story
 from jedi_devproject.flow_builder import flow_builder_available
 from jedi_devproject.flow_designer_generation import flow_builder_readiness_contract
@@ -26,7 +32,7 @@ from jedi_devproject.instance_discovery import (
     SurfaceName,
     discover_servicenow_surface_context,
 )
-from jedi_devproject.models import CandidateStatus, ProviderPolicy, UpdateSetCandidate
+from jedi_devproject.models import CandidateStatus, ProviderPolicy, Story, UpdateSetCandidate
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.rag import (
     Document,
@@ -44,6 +50,68 @@ from jedi_devproject.update_set_handoff import (
 from jedi_devproject.writeback_orchestration import WritebackClient
 
 _LOGGER = logging.getLogger(__name__)
+MAX_MANUAL_WORK_NOTE_ITEMS = 50
+MAX_MANUAL_WORK_NOTE_ITEM_CHARS = 500
+WORK_NOTE_TRUNCATION_MARKER = "...[truncated]"
+MODEL_ARTIFACT_PAYLOAD_NON_JSON_DIAGNOSTIC = (
+    "model fulfillment artifact payload contains non-JSON values"
+)
+PERSISTED_ARTIFACT_PATH_NON_JSON_DIAGNOSTIC = (
+    "persisted artifact path contains non-JSON value"
+)
+MODEL_FULFILLMENT_STORIES_NON_JSON_DIAGNOSTIC = (
+    "model fulfillment stories contain non-JSON value"
+)
+
+
+def _model_artifact_payload(model: BaseModel, *, diagnostic: str) -> dict[str, Any]:
+    try:
+        _ensure_model_artifact_payload_json_safe(
+            model.model_dump(mode="python", warnings=False)
+        )
+        json.dumps(
+            model.model_dump(mode="json", warnings=False),
+            sort_keys=True,
+            allow_nan=False,
+        )
+    except PydanticSerializationError:
+        raise ValueError(MODEL_ARTIFACT_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    except ValueError:
+        raise ValueError(diagnostic) from None
+    except TypeError:
+        raise ValueError(MODEL_ARTIFACT_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    return model.model_dump(mode="json", warnings=False)
+
+
+def _ensure_model_artifact_payload_json_safe(value: Any) -> None:
+    if (
+        value is None
+        or type(value) is str
+        or type(value) is bool
+        or type(value) is int
+        or type(value) is date
+        or isinstance(value, Enum)
+    ):
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise ValueError("non-finite model fulfillment artifact payload value")
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError("non-JSON model fulfillment artifact payload key")
+            _ensure_model_artifact_payload_json_safe(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _ensure_model_artifact_payload_json_safe(item)
+        return
+    if type(value) is tuple:
+        for item in value:
+            _ensure_model_artifact_payload_json_safe(item)
+        return
+    raise TypeError("non-JSON model fulfillment artifact payload value")
 
 
 class ModelFulfillmentClient(WritebackClient, Protocol):
@@ -80,7 +148,11 @@ class ModelFulfillmentClient(WritebackClient, Protocol):
 
 
 class ModelCandidateFulfillmentConfig(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        hide_input_in_errors=True,
+    )
 
     policy: AllowlistPolicy
     provider_policy: ProviderPolicy
@@ -100,7 +172,9 @@ def model_candidate_fulfillment_handler(
     config: ModelCandidateFulfillmentConfig,
 ) -> FulfillmentHandler:
     def handle(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
-        stories = client.fetch_stories(sysparm_query=_story_lookup_query(job), limit=1)
+        stories = _model_fulfillment_stories(
+            client.fetch_stories(sysparm_query=_story_lookup_query(job), limit=1)
+        )
         if not stories:
             raise RuntimeError(f"story not found: {job.story_number}")
 
@@ -149,7 +223,13 @@ def model_candidate_fulfillment_handler(
                         FulfillmentArtifactRef(
                             artifact_kind="instance_context_bundle",
                             schema_version="servicenow-surface-context-v1",
-                            payload_json=surface_context_bundle.model_dump(mode="json"),
+                            payload_json=_model_artifact_payload(
+                                surface_context_bundle,
+                                diagnostic=(
+                                    "model fulfillment artifact payload contains non-finite "
+                                    "numeric values"
+                                ),
+                            ),
                         )
                     ]
                     if surface_context_bundle is not None
@@ -202,12 +282,22 @@ def model_candidate_fulfillment_handler(
                 FulfillmentArtifactRef(
                     artifact_kind="implementation_packet",
                     schema_version="implementation-packet-v1",
-                    payload_json=packet.model_dump(mode="json"),
+                    payload_json=_model_artifact_payload(
+                        packet,
+                        diagnostic=(
+                            "model fulfillment artifact payload contains non-finite numeric values"
+                        ),
+                    ),
                 ),
                 FulfillmentArtifactRef(
                     artifact_kind="implementation_candidate",
                     schema_version="implementation-candidate-v1",
-                    payload_json=candidate.model_dump(mode="json"),
+                    payload_json=_model_artifact_payload(
+                        candidate,
+                        diagnostic=(
+                            "model fulfillment artifact payload contains non-finite numeric values"
+                        ),
+                    ),
                 ),
                 *(
                     [
@@ -240,6 +330,15 @@ def model_candidate_fulfillment_handler(
     return handle
 
 
+def _model_fulfillment_stories(stories: object) -> list[Story]:
+    if type(stories) is not list:
+        raise ValueError(MODEL_FULFILLMENT_STORIES_NON_JSON_DIAGNOSTIC)
+    for story in stories:
+        if type(story) is not Story:
+            raise ValueError(MODEL_FULFILLMENT_STORIES_NON_JSON_DIAGNOSTIC)
+    return stories
+
+
 def _story_lookup_query(job: FulfillmentJobRecord) -> str:
     if job.story_sys_id:
         return f"sys_id={job.story_sys_id}"
@@ -258,15 +357,7 @@ def _surface_context_and_rags_for_story(
     )
     if target_table is None:
         return None, config.rags
-    story_text = " ".join(
-        str(value)
-        for value in [
-            story.short_description,
-            story.description,
-            story.acceptance_criteria or "",
-        ]
-        if value
-    )
+    story_text = _story_text_for_surface_context(story)
     public_doc_queries = _public_doc_queries(story_text)
     public_doc_results = _retrieve_public_docs(
         queries=public_doc_queries,
@@ -279,7 +370,7 @@ def _surface_context_and_rags_for_story(
                 domain=RagDomain.PUBLIC_DOCUMENTATION,
                 source=result.citation.source,
                 content=result.content,
-                version=str(result.citation.version or ""),
+                version=_public_doc_citation_version(result),
             )
             for result in public_doc_results
         ]
@@ -295,6 +386,25 @@ def _surface_context_and_rags_for_story(
             public_doc_queries=public_doc_queries,
         ),
     ), rags
+
+
+def _story_text_for_surface_context(story: Any) -> str:
+    parts: list[str] = []
+    for value in (
+        getattr(story, "short_description", None),
+        getattr(story, "description", None),
+        getattr(story, "acceptance_criteria", None),
+    ):
+        if type(value) is str and value:
+            parts.append(value)
+    return " ".join(parts)
+
+
+def _public_doc_citation_version(result: RetrievalResult) -> str:
+    version = result.citation.version
+    if type(version) is str:
+        return version
+    return ""
 
 
 def _retrieve_public_docs(
@@ -321,7 +431,11 @@ def _required_surfaces_for_assessment(
 ) -> list[SurfaceName] | None:
     public_docs_required = bool(public_doc_queries)
     if assessment.required_instance_context:
-        surfaces = [str(surface) for surface in assessment.required_instance_context]
+        surfaces = [
+            surface
+            for surface in assessment.required_instance_context
+            if type(surface) is str
+        ]
         if public_docs_required and "public_docs" not in surfaces:
             surfaces.append("public_docs")
         return cast(list[SurfaceName], surfaces)
@@ -513,6 +627,12 @@ def _atf_test_plan_artifact(*, candidate: UpdateSetCandidate) -> dict[str, Any] 
     """
     try:
         plan = generate_atf_test_plan(candidate)
+        if plan is None:
+            return None
+        return _model_artifact_payload(
+            plan,
+            diagnostic="ATF test plan artifact payload contains non-finite numeric values",
+        )
     except Exception:
         _LOGGER.warning(
             "ATF test plan generation failed for %s; plan omitted",
@@ -520,9 +640,6 @@ def _atf_test_plan_artifact(*, candidate: UpdateSetCandidate) -> dict[str, Any] 
             exc_info=True,
         )
         return None
-    if plan is None:
-        return None
-    return plan.model_dump(mode="json")
 
 
 def _flow_preflight_guidance_artifact(*, packet: Any) -> dict[str, Any] | None:
@@ -623,15 +740,16 @@ def _manual_feedback_fields(
     flow_preflight_guidance_ref: str | None = None,
 ) -> dict[str, object]:
     reasons = _candidate_reasons(candidate)
-    if any(reason.startswith("missing detail:") for reason in candidate.eligibility_reasons):
+    eligibility_reasons = _eligibility_reason_values(candidate)
+    if any(reason.startswith("missing detail:") for reason in eligibility_reasons):
         status = "Needs Clarification"
     else:
         status = "Human Review Required"
     lead = (
         f"Code surface analysis completed for {story_number}; it did not create a "
-        if "code_surface_analysis:first" in candidate.eligibility_reasons
+        if "code_surface_analysis:first" in eligibility_reasons
         else f"Form layout analysis completed for {story_number}; it did not create a "
-        if "form_layout_analysis:first" in candidate.eligibility_reasons
+        if "form_layout_analysis:first" in eligibility_reasons
         else f"Automated implementation candidate for {story_number} did not create a "
     )
     return {
@@ -654,7 +772,7 @@ def _flow_preflight_guidance_note(
 ) -> str:
     if flow_preflight_guidance_ref is None:
         return ""
-    if "unsupported capability: flow_modify" not in candidate.eligibility_reasons:
+    if "unsupported capability: flow_modify" not in _eligibility_reason_values(candidate):
         return ""
     readiness = flow_builder_readiness_contract(builder_available=flow_builder_available())
     work_notes = " ".join(
@@ -669,16 +787,31 @@ def _flow_preflight_guidance_note(
 def _missing_context_note(candidate: UpdateSetCandidate) -> str:
     missing = [
         reason.removeprefix("context_insufficient:")
-        for reason in candidate.eligibility_reasons
+        for reason in _eligibility_reason_values(candidate)
         if reason.startswith("context_insufficient:")
     ]
     if not missing:
         return ""
-    return f"Missing ServiceNow context: {', '.join(missing)}. "
+    safe_missing = [
+        safe_value
+        for item in missing[:MAX_MANUAL_WORK_NOTE_ITEMS]
+        for safe_value in [_safe_manual_work_note_value(item)]
+        if safe_value
+    ]
+    omitted = len(missing) - MAX_MANUAL_WORK_NOTE_ITEMS
+    if omitted > 0:
+        safe_missing.append(f"manual context omitted: {omitted} context entries")
+    return f"Missing ServiceNow context: {', '.join(safe_missing)}. "
 
 
 def _reviewer_notes_note(candidate: UpdateSetCandidate) -> str:
-    notes = [note.strip() for note in getattr(candidate, "reviewer_notes", []) if note.strip()]
+    notes = [
+        safe_note
+        for note in getattr(candidate, "reviewer_notes", [])
+        if type(note) is str
+        for safe_note in [_safe_manual_work_note_value(note)]
+        if safe_note
+    ]
     actionable = [
         note
         for note in notes
@@ -690,24 +823,66 @@ def _reviewer_notes_note(candidate: UpdateSetCandidate) -> str:
     ]
     if not actionable:
         return ""
-    return " ".join(actionable) + " "
+    bounded = actionable[:MAX_MANUAL_WORK_NOTE_ITEMS]
+    omitted = len(actionable) - MAX_MANUAL_WORK_NOTE_ITEMS
+    if omitted > 0:
+        bounded.append(f"manual feedback omitted: {omitted} reviewer notes")
+    return " ".join(bounded) + " "
 
 
 def _candidate_reasons(candidate: UpdateSetCandidate) -> str:
-    if not candidate.eligibility_reasons:
+    reasons = _eligibility_reason_values(candidate)
+    if not reasons:
         return f"candidate status is {candidate.status.value}"
-    return "; ".join(candidate.eligibility_reasons)
+    safe_reasons = [
+        safe_reason
+        for reason in reasons[:MAX_MANUAL_WORK_NOTE_ITEMS]
+        for safe_reason in [_safe_manual_work_note_value(reason)]
+        if safe_reason
+    ]
+    omitted = len(reasons) - MAX_MANUAL_WORK_NOTE_ITEMS
+    if omitted > 0:
+        safe_reasons.append(f"candidate reasons omitted: {omitted} reasons")
+    return "; ".join(safe_reasons)
+
+
+def _eligibility_reason_values(candidate: UpdateSetCandidate) -> list[str]:
+    return [
+        reason.strip()
+        for reason in getattr(candidate, "eligibility_reasons", [])
+        if type(reason) is str and reason.strip()
+    ]
+
+
+def _safe_manual_work_note_value(value: str) -> str:
+    redacted = _redact_diagnostic_text(value) or ""
+    normalized = " ".join(redacted.split())
+    if len(normalized) <= MAX_MANUAL_WORK_NOTE_ITEM_CHARS:
+        return normalized
+    return (
+        normalized[
+            : MAX_MANUAL_WORK_NOTE_ITEM_CHARS - len(WORK_NOTE_TRUNCATION_MARKER)
+        ].rstrip()
+        + WORK_NOTE_TRUNCATION_MARKER
+    )
 
 
 def _candidate_artifact_ref(artifacts: list[Any]) -> str:
     for artifact in artifacts:
         if artifact.artifact_kind == "implementation_candidate":
-            return str(artifact.path)
+            return _persisted_artifact_path(artifact)
     raise RuntimeError("implementation candidate artifact was not persisted")
 
 
 def _artifact_ref(artifacts: list[Any], *, artifact_kind: str) -> str | None:
     for artifact in artifacts:
         if artifact.artifact_kind == artifact_kind:
-            return str(artifact.path)
+            return _persisted_artifact_path(artifact)
     return None
+
+
+def _persisted_artifact_path(artifact: Any) -> str:
+    path = artifact.path
+    if type(path) is not str:
+        raise ValueError(PERSISTED_ARTIFACT_PATH_NON_JSON_DIAGNOSTIC)
+    return path

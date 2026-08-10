@@ -107,8 +107,10 @@ from jedi_devproject.models import (
     Story,
     UpdateSetCandidate,
 )
+from jedi_devproject.operational_store import connect_operational_store
 from jedi_devproject.pipeline import PipelineInputs, run_pipeline
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
+from jedi_devproject.runtime_config import load_runtime_settings
 from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import UrllibTransport, servicenow_client_from_env
 from jedi_devproject.writeback import ActorType, ExternalBuildStatus
@@ -173,6 +175,7 @@ __all__ = [
     "build_writeback_batch_report",
     "check_cicd_update_set_capability_command",
     "check_writeback_capability_command",
+    "connect_operational_store",
     "delivery_attachment_jobs_from_report",
     "evaluate_cicd_update_set_capability",
     "evaluate_writeback_capability",
@@ -181,6 +184,7 @@ __all__ = [
     "lifecycle_webhook_servicenow_record_plan",
     "load_writeback_requests",
     "main",
+    "init_operational_store_command",
     "plan_artifact_handoff_command",
     "plan_bootstrap_fields",
     "plan_bootstrap_fields_command",
@@ -218,6 +222,16 @@ __all__ = [
     "write_reviewed_delivery_lifecycle_manifest",
     "writeback_job_from_build_result",
 ]
+
+
+def init_operational_store_command(args: argparse.Namespace) -> int:
+    settings = load_runtime_settings(args.env_file)
+    with connect_operational_store(settings.database_url) as store:
+        if not store.verify_schema_ready():
+            print("operational_store_schema_ready=false")
+            return 1
+    print("operational_store_schema_ready=true")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -314,6 +328,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Check whether the ServiceNow instance exposes the CI/CD Update Set API.",
     )
     check_cicd_update_set.add_argument("--env-file", type=Path, default=Path(".env"))
+    init_operational_store = subparsers.add_parser(
+        "init-operational-store",
+        help="Initialize and verify the PostgreSQL operational store schema.",
+    )
+    init_operational_store.add_argument("--env-file", type=Path, default=Path(".env"))
     verify_writeback_parser = subparsers.add_parser(
         "verify-writeback",
         help="Read ServiceNow and verify a completed structured writeback.",
@@ -530,6 +549,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check-cicd-update-set-capability":
         return check_cicd_update_set_capability_command(args)
+
+    if args.command == "init-operational-store":
+        return init_operational_store_command(args)
 
     if args.command == "verify-writeback":
         return verify_writeback_command(args)

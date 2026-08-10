@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 from jedi_devproject.artifacts import (
@@ -11,7 +10,13 @@ from jedi_devproject.artifacts import (
     write_json_artifact_once,
     write_lifecycle_manifest,
 )
-from jedi_devproject.cli_io import load_json_object, render_summary
+from jedi_devproject.cli_io import (
+    load_json_list,
+    load_json_object,
+    load_json_payload,
+    render_summary,
+)
+from jedi_devproject.exception_diagnostics import exception_diagnostic_message
 from jedi_devproject.implementation_packet import (
     IMPLEMENTATION_PACKET_TASK,
     build_implementation_packet,
@@ -39,6 +44,8 @@ from jedi_devproject.writeback_orchestration import (
     execute_writeback,
 )
 
+CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON = "story_lookup_result_unsafe"
+
 
 def _client_from_env(env_file: Path) -> ServiceNowClient:
     # Resolved through the CLI facade so patches against
@@ -65,15 +72,26 @@ def run_local_command(args: argparse.Namespace) -> int:
 
 def run_pdi_command(args: argparse.Namespace) -> int:
     client = _client_from_env(args.env_file)
-    if args.sysparm_query:
-        stories = client.fetch_stories(sysparm_query=args.sysparm_query, limit=args.limit)
-    elif args.project_sys_id:
-        stories = client.fetch_ready_stories(
-            project_sys_id=args.project_sys_id,
-            limit=args.limit,
+    try:
+        if args.sysparm_query:
+            stories = _pipeline_story_lookup_results(
+                client.fetch_stories(sysparm_query=args.sysparm_query, limit=args.limit)
+            )
+        elif args.project_sys_id:
+            stories = _pipeline_story_lookup_results(
+                client.fetch_ready_stories(
+                    project_sys_id=args.project_sys_id,
+                    limit=args.limit,
+                )
+            )
+        else:
+            stories = _pipeline_story_lookup_results(client.fetch_stories(limit=args.limit))
+    except ValueError:
+        print(
+            "stories_processed=0 generated_candidates=0 "
+            f"reason={CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON}"
         )
-    else:
-        stories = client.fetch_stories(limit=args.limit)
+        return 1
     result = run_pipeline(
         PipelineInputs(
             stories=stories,
@@ -91,7 +109,16 @@ def build_implementation_packet_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
 ) -> int:
-    stories = _load_stories_from_args(args, parser, "build-implementation-packet")
+    try:
+        stories = _load_stories_from_args(args, parser, "build-implementation-packet")
+    except ValueError as exc:
+        if str(exc) != CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON:
+            raise
+        print(
+            "implementation_packets=0 "
+            f"reason={CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON}"
+        )
+        return 1
     if not stories:
         print("implementation_packets=0 reason=no_stories_found")
         return 1
@@ -116,7 +143,16 @@ def build_implementation_candidate_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
 ) -> int:
-    stories = _load_stories_from_args(args, parser, "build-implementation-candidate")
+    try:
+        stories = _load_stories_from_args(args, parser, "build-implementation-candidate")
+    except ValueError as exc:
+        if str(exc) != CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON:
+            raise
+        print(
+            "implementation_candidates=0 "
+            f"reason={CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON}"
+        )
+        return 1
     if not stories:
         print("implementation_candidates=0 reason=no_stories_found")
         return 1
@@ -167,7 +203,10 @@ def run_implementation_candidates_command(args: argparse.Namespace) -> int:
                     {
                         "story_number": story.number,
                         "status": "blocked",
-                        "reason": str(exc),
+                        "reason": exception_diagnostic_message(
+                            exc,
+                            fallback_subject="CLI batch",
+                        ),
                     }
                 )
                 blocked += 1
@@ -187,10 +226,20 @@ def run_implementation_candidates_command(args: argparse.Namespace) -> int:
 
 def run_lifecycle_smoke_command(args: argparse.Namespace) -> int:
     client = _client_from_env(args.env_file)
-    stories = client.fetch_stories(
-        sysparm_query=f"number={args.story_number}",
-        limit=1,
-    )
+    try:
+        stories = _pipeline_story_lookup_results(
+            client.fetch_stories(
+                sysparm_query=f"number={args.story_number}",
+                limit=1,
+            )
+        )
+    except ValueError:
+        print(
+            "packet_built=0 candidate_built=0 "
+            "writeback_allowed=False writeback_applied=False "
+            f"reason={CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON}"
+        )
+        return 1
     if not stories:
         print(
             "packet_built=0 candidate_built=0 "
@@ -281,7 +330,7 @@ def run_lifecycle_smoke_command(args: argparse.Namespace) -> int:
 
 
 def _load_sample_stories(path: Path) -> list[Story]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = load_json_payload(path)
     if isinstance(payload, dict):
         return [Story.model_validate(payload)]
     return [Story.model_validate(item) for item in payload]
@@ -298,22 +347,29 @@ def _load_stories_from_args(
         return _load_sample_stories(sample_file)
     if story_number:
         client = _client_from_env(args.env_file)
-        return client.fetch_stories(
-            sysparm_query=f"number={story_number}",
-            limit=1,
+        return _pipeline_story_lookup_results(
+            client.fetch_stories(
+                sysparm_query=f"number={story_number}",
+                limit=1,
+            )
         )
     parser.error(f"{command_name} requires --sample-file or --story-number")
 
 
+def _pipeline_story_lookup_results(stories: object) -> list[Story]:
+    if type(stories) is not list:
+        raise ValueError(CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON)
+    for story in stories:
+        if type(story) is not Story:
+            raise ValueError(CLI_PIPELINE_STORY_LOOKUP_RESULT_UNSAFE_REASON)
+    return stories
+
+
 def _load_implementation_candidate_jobs(path: Path) -> list[dict[str, Path]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError("implementation candidate jobs file must contain a JSON list")
+    payload = load_json_list(path, "implementation candidate jobs file")
 
     jobs: list[dict[str, Path]] = []
     for item in payload:
-        if not isinstance(item, dict):
-            raise ValueError("implementation candidate job must be a JSON object")
         sample_file = item.get("sample_file")
         provider_response_file = item.get("provider_response_file")
         if not isinstance(sample_file, str) or not isinstance(provider_response_file, str):

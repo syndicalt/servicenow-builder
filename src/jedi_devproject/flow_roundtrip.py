@@ -37,6 +37,7 @@ from typing import Any, Literal, Protocol, cast
 from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.discovery.fetch import _display_or_value, _reference_value
+from jedi_devproject.exception_diagnostics import exception_diagnostic_message
 from jedi_devproject.flow_builder import (
     FlowBuilderNodeTable,
     FlowCustomerUpdateBuildResult,
@@ -97,18 +98,23 @@ class FlowRoundTripClient(Protocol):
 
 
 class FlowGraphNodeState(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: str
     sys_id: str
     fields: dict[str, str]
 
     def canonical(self) -> str:
-        return json.dumps({"table": self.table, **self.fields}, sort_keys=True)
+        try:
+            return json.dumps({"table": self.table, **self.fields}, sort_keys=True, allow_nan=False)
+        except ValueError:
+            raise ValueError(
+                "Flow graph node canonical state contains non-finite numeric values"
+            ) from None
 
 
 class FlowGraphState(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     flow_name: str
     flow_sys_id: str
@@ -118,7 +124,7 @@ class FlowGraphState(BaseModel):
 
 
 class FlowRoundTripAssertion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     passed: bool
@@ -126,7 +132,7 @@ class FlowRoundTripAssertion(BaseModel):
 
 
 class FlowRoundTripReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-roundtrip-report-v1"]
     flow_name: str
@@ -250,16 +256,17 @@ def run_flow_roundtrip(
             update_set_name=update_set_name,
             remote_sys_id=remote_sys_id,
             description=_update_set_description(build_result),
-            customer_updates=[
-                update.handoff_record() for update in build_result.customer_updates
-            ],
+            customer_updates=[update.handoff_record() for update in build_result.customer_updates],
         )
     except Exception as exc:
         assertions.append(
             FlowRoundTripAssertion(
                 name="retrieved_update_set_imported",
                 passed=False,
-                detail=str(exc),
+                detail=exception_diagnostic_message(
+                    exc,
+                    fallback_subject="flow roundtrip",
+                ),
             )
         )
         return _report(
@@ -271,9 +278,7 @@ def run_flow_roundtrip(
             customer_update_names=[update.name for update in build_result.customer_updates],
             assertions=assertions,
         )
-    assertions.append(
-        FlowRoundTripAssertion(name="retrieved_update_set_imported", passed=True)
-    )
+    assertions.append(FlowRoundTripAssertion(name="retrieved_update_set_imported", passed=True))
     post_state = retrieve_flow_graph_state(client=client, flow_name=intent.flow_name)
     assertions.extend(
         _post_import_assertions(
@@ -346,9 +351,7 @@ def _post_import_assertions(
             detail=", ".join(drifted),
         )
     )
-    expected_count = len(pre_state.nodes) + (
-        2 if build_result.operation == "add_action" else 0
-    )
+    expected_count = len(pre_state.nodes) + (2 if build_result.operation == "add_action" else 0)
     assertions.append(
         FlowRoundTripAssertion(
             name="node_count_matches_diff",
@@ -356,9 +359,10 @@ def _post_import_assertions(
             detail=f"expected {expected_count}, retrieved {len(post_state.nodes)}",
         )
     )
-    snapshot_regenerated = bool(
-        re.fullmatch(_SYS_ID_PATTERN, post_state.latest_snapshot)
-    ) and post_state.latest_snapshot != pre_state.latest_snapshot
+    snapshot_regenerated = (
+        bool(re.fullmatch(_SYS_ID_PATTERN, post_state.latest_snapshot))
+        and post_state.latest_snapshot != pre_state.latest_snapshot
+    )
     assertions.append(
         FlowRoundTripAssertion(
             name="flow_snapshot_regenerated",

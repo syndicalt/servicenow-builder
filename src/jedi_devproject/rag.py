@@ -15,19 +15,24 @@ allowlist and SSRF validation path.
 
 from __future__ import annotations
 
-import ipaddress
 import re
 from enum import StrEnum
 from html import unescape
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from jedi_devproject.models import RetrievalCitation, stable_artifact_hash
 from jedi_devproject.rag_cache import RetrievalCache, RetrievalCacheStats
+from jedi_devproject.url_host_safety import is_non_public_hostname, normalize_hostname
+from jedi_devproject.url_query_safety import (
+    has_encoded_whitespace_or_control_character,
+    has_whitespace_or_control_character,
+    sensitive_query_keys,
+)
 
 
 class RetrievalBlocked(RuntimeError):
@@ -47,6 +52,8 @@ class RagDomain(StrEnum):
 
 
 class Document(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     domain: RagDomain
     source: str
     content: str
@@ -54,12 +61,14 @@ class Document(BaseModel):
 
 
 class RetrievalResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     content: str
     citation: RetrievalCitation
 
 
 class PublicWebAccessConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     allowed_domains: list[str] = Field(default_factory=list)
     timeout_seconds: float = Field(default=3.0, gt=0, le=30)
@@ -70,11 +79,11 @@ class PublicWebAccessConfig(BaseModel):
     @field_validator("allowed_domains")
     @classmethod
     def normalize_allowed_domains(cls, value: list[str]) -> list[str]:
-        return sorted({domain.strip().lower() for domain in value if domain.strip()})
+        return sorted({normalize_hostname(domain) for domain in value if domain.strip()})
 
 
 class PublicWebResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     url: str
     status_code: int
@@ -85,11 +94,29 @@ class PublicWebTransport(Protocol):
     def get(self, url: str, *, timeout_seconds: float, max_bytes: int) -> PublicWebResponse: ...
 
 
+class _NoPublicWebRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        req: Any,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        raise PublicWebRetrievalBlocked("public documentation redirects are not allowed")
+
+
 class UrllibPublicWebTransport:
+    @property
+    def redirect_handler(self) -> HTTPRedirectHandler:
+        return _NoPublicWebRedirectHandler()
+
     def get(self, url: str, *, timeout_seconds: float, max_bytes: int) -> PublicWebResponse:
         request = Request(url, headers={"User-Agent": "jedi-devproject-public-docs/1.0"})
+        opener = build_opener(self.redirect_handler)
         try:
-            with urlopen(request, timeout=timeout_seconds) as response:
+            with opener.open(request, timeout=timeout_seconds) as response:
                 body = response.read(max_bytes + 1)
                 if len(body) > max_bytes:
                     raise PublicWebRetrievalBlocked(
@@ -103,9 +130,9 @@ class UrllibPublicWebTransport:
         except HTTPError as exc:
             raise PublicWebRetrievalBlocked(
                 f"public documentation fetch failed with HTTP {exc.code}"
-            ) from exc
-        except (TimeoutError, URLError) as exc:
-            raise PublicWebRetrievalBlocked("public documentation fetch failed") from exc
+            ) from None
+        except (TimeoutError, URLError):
+            raise PublicWebRetrievalBlocked("public documentation fetch failed") from None
 
 
 class PublicWebRetriever:
@@ -315,11 +342,29 @@ def _terms(text: str) -> set[str]:
 
 
 def _normalize_public_url(raw_url: str) -> str:
+    if has_whitespace_or_control_character(raw_url):
+        raise PublicWebRetrievalBlocked(
+            "public documentation URL must not include whitespace or control characters"
+        )
+    if has_encoded_whitespace_or_control_character(raw_url):
+        raise PublicWebRetrievalBlocked(
+            "public documentation URL must not include encoded whitespace or control characters"
+        )
     parsed = urlsplit(raw_url.strip())
     if parsed.scheme.lower() != "https":
         raise PublicWebRetrievalBlocked("public documentation URLs must use https")
     if not parsed.netloc:
         raise PublicWebRetrievalBlocked("public documentation URL must include a host")
+    if parsed.username or parsed.password:
+        raise PublicWebRetrievalBlocked("public documentation URL must not include credentials")
+    if parsed.fragment:
+        raise PublicWebRetrievalBlocked("public documentation URL must not include fragments")
+    query_keys = sensitive_query_keys(parsed.query)
+    if query_keys:
+        raise PublicWebRetrievalBlocked(
+            "public documentation URL must not include sensitive query parameters: "
+            + ", ".join(query_keys)
+        )
     return urlunsplit(
         (
             parsed.scheme.lower(),
@@ -340,7 +385,7 @@ def _validate_public_url(url: str, *, allowed_domains: list[str]) -> None:
 
 
 def _host(url: str) -> str:
-    return (urlsplit(url).hostname or "").strip().lower()
+    return normalize_hostname(urlsplit(url).hostname or "")
 
 
 def _is_allowlisted_host(host: str, allowed_domains: list[str]) -> bool:
@@ -348,19 +393,7 @@ def _is_allowlisted_host(host: str, allowed_domains: list[str]) -> bool:
 
 
 def _is_private_or_loopback_host(host: str) -> bool:
-    if host in {"localhost", "localhost.localdomain"}:
-        return True
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return (
-        address.is_private
-        or address.is_loopback
-        or address.is_link_local
-        or address.is_reserved
-        or address.is_multicast
-    )
+    return is_non_public_hostname(host)
 
 
 def _extract_bounded_text(body: bytes, *, max_excerpt_chars: int) -> str:

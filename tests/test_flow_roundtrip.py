@@ -7,6 +7,8 @@ import pytest
 from jedi_devproject.flow_builder import stable_flow_sys_id
 from jedi_devproject.flow_designer_generation import FlowGraphDiffIntent
 from jedi_devproject.flow_roundtrip import (
+    FlowGraphNodeState,
+    flow_graph_state_hash,
     retrieve_flow_graph_state,
     run_flow_roundtrip,
 )
@@ -127,9 +129,7 @@ class FakeRoundTripClient:
                 "name": self.flow_name,
                 "active": "true",
                 "status": "published",
-                "latest_snapshot": (
-                    self.post_latest_snapshot if applied else self.latest_snapshot
-                ),
+                "latest_snapshot": (self.post_latest_snapshot if applied else self.latest_snapshot),
             }
             return [dict(row), dict(row)] if self.duplicate_flow_rows else [row]
         if table == "sys_hub_action_instance":
@@ -176,6 +176,25 @@ class _BadFlowSysIdClient(FakeRoundTripClient):
 def _pre_graph_hash() -> str:
     state = retrieve_flow_graph_state(client=FakeRoundTripClient(), flow_name="Incident Triage")
     return state.graph_hash
+
+
+def test_flow_graph_state_hash_rejects_non_finite_node_state_without_payload_leak() -> None:
+    node = FlowGraphNodeState.model_construct(
+        table="sys_hub_action_instance",
+        sys_id=ACTION_SYS_ID,
+        fields={"private_value_marker": "do-not-echo-this", "order": float("nan")},
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        flow_graph_state_hash({ACTION_SYS_ID: node})
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "Flow graph node canonical state contains non-finite numeric values"
+    assert exc_info.value.__cause__ is None
+    assert "private_value_marker" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+    assert "order" not in diagnostic
+    assert "NaN" not in diagnostic
 
 
 def _evidence_bundle(graph_hash: str) -> FlowXmlEvidenceBundle:
@@ -386,6 +405,33 @@ def test_roundtrip_records_import_transport_failure() -> None:
         f"sys_hub_action_instance_{NEW_ACTION_SYS_ID}",
         f"sys_hub_flow_logic_instance_v2_{NEW_EDGE_SYS_ID}",
     ]
+
+
+class UnstringifiableFlowRoundTripImportError(RuntimeError):
+    def __str__(self) -> str:
+        raise ValueError("client-secret-value")
+
+
+def test_roundtrip_records_unstringifiable_import_failure_safely() -> None:
+    graph_hash = _pre_graph_hash()
+    client = FakeRoundTripClient()
+    client.fail_import = UnstringifiableFlowRoundTripImportError()
+
+    report = run_flow_roundtrip(
+        client=client,
+        intent=_add_action_intent(graph_hash),
+        evidence_bundle=_evidence_bundle(graph_hash),
+    )
+
+    assert report.passed is False
+    imported = _assertion(report, "retrieved_update_set_imported")
+    assert imported.passed is False
+    assert imported.detail == (
+        "flow roundtrip raised unstringifiable UnstringifiableFlowRoundTripImportError"
+    )
+    assert "client-secret-value" not in imported.detail
+    assert report.update_set_sys_id == ""
+    assert report.graph_hash_after == ""
 
 
 def test_roundtrip_records_missing_imported_update_set_lookup() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 
 from jedi_devproject.discovery.catalog import (
@@ -30,6 +31,19 @@ from jedi_devproject.discovery.models import (
 from jedi_devproject.discovery.schema_form import discover_dictionary_form_context
 from jedi_devproject.rag import RetrievalResult
 from jedi_devproject.requirement_text import positive_requirement_text
+
+PUBLIC_DOC_CITATION_NON_JSON_DIAGNOSTIC = (
+    "public documentation citation contains non-JSON value"
+)
+PUBLIC_DOC_CONTENT_NON_JSON_DIAGNOSTIC = (
+    "public documentation content contains non-JSON value"
+)
+PUBLIC_DOC_QUERY_NON_JSON_DIAGNOSTIC = (
+    "public documentation query contains non-JSON value"
+)
+PUBLIC_DOC_CONFIDENCE_UNSAFE_DIAGNOSTIC = (
+    "public documentation citation confidence is unsafe"
+)
 
 
 def discover_servicenow_surface_context(
@@ -237,7 +251,9 @@ def discover_servicenow_surface_context(
         required_surfaces=required_surfaces,
         surfaces=surfaces,
         table_context=table_context,
-        public_doc_queries=public_doc_queries,
+        public_doc_queries=[
+            _public_doc_query_text(query) for query in public_doc_queries
+        ],
         public_doc_results=public_doc_results or [],
         missing_required_surfaces=missing_required_surfaces,
         evidence=evidence,
@@ -257,31 +273,76 @@ def _public_docs_surface(
         records=[
             ServiceNowSurfaceRecord(
                 source_table="public_web",
-                name=result.citation.source,
+                name=_public_doc_citation_text(result, "source"),
                 active=True,
-                summary=result.content,
+                summary=_public_doc_content(result),
                 metadata={
-                    "content_hash": result.citation.content_hash,
-                    "version": str(result.citation.version or ""),
-                    "confidence": f"{result.citation.confidence:.2f}",
-                    "excerpt_chars": str(len(result.content)),
+                    "content_hash": _public_doc_citation_text(result, "content_hash"),
+                    "version": _public_doc_citation_version(result),
+                    "confidence": _public_doc_citation_confidence(result),
+                    "excerpt_chars": str(len(_public_doc_content(result))),
                 },
             )
             for result in public_doc_results
         ],
-        evidence=[f"public_docs:{query}" for query in public_doc_queries]
-        + [f"public_web:{result.citation.content_hash}" for result in public_doc_results],
+        evidence=[
+            f"public_docs:{_public_doc_query_text(query)}"
+            for query in public_doc_queries
+        ]
+        + [
+            f"public_web:{_public_doc_citation_text(result, 'content_hash')}"
+            for result in public_doc_results
+        ],
         confidence=0.8 if public_doc_results else 0.0,
         citations=[
             {
-                "source": result.citation.source,
-                "content_hash": result.citation.content_hash,
-                "version": str(result.citation.version or ""),
-                "confidence": f"{result.citation.confidence:.2f}",
+                "source": _public_doc_citation_text(result, "source"),
+                "content_hash": _public_doc_citation_text(result, "content_hash"),
+                "version": _public_doc_citation_version(result),
+                "confidence": _public_doc_citation_confidence(result),
             }
             for result in public_doc_results
         ],
     )
+
+
+def _public_doc_citation_text(
+    result: RetrievalResult,
+    field_name: str,
+) -> str:
+    value = getattr(result.citation, field_name)
+    if type(value) is not str:
+        raise ValueError(PUBLIC_DOC_CITATION_NON_JSON_DIAGNOSTIC)
+    return value
+
+
+def _public_doc_content(result: RetrievalResult) -> str:
+    content = result.content
+    if type(content) is not str:
+        raise ValueError(PUBLIC_DOC_CONTENT_NON_JSON_DIAGNOSTIC)
+    return content
+
+
+def _public_doc_query_text(query: str) -> str:
+    if type(query) is not str:
+        raise ValueError(PUBLIC_DOC_QUERY_NON_JSON_DIAGNOSTIC)
+    return query
+
+
+def _public_doc_citation_confidence(result: RetrievalResult) -> str:
+    confidence = result.citation.confidence
+    if type(confidence) not in {int, float}:
+        raise ValueError(PUBLIC_DOC_CONFIDENCE_UNSAFE_DIAGNOSTIC)
+    if not math.isfinite(confidence) or confidence < 0 or confidence > 1:
+        raise ValueError(PUBLIC_DOC_CONFIDENCE_UNSAFE_DIAGNOSTIC)
+    return f"{confidence:.2f}"
+
+
+def _public_doc_citation_version(result: RetrievalResult) -> str:
+    version = result.citation.version
+    if type(version) is str:
+        return version
+    return ""
 
 
 def _required_surfaces(story_text: str) -> list[SurfaceName]:

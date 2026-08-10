@@ -11,6 +11,16 @@ from jedi_devproject.writeback import (
 )
 
 
+class _HostileChoiceText(str):
+    def __str__(self) -> str:
+        raise AssertionError("client_secret=choice-text-secret")
+
+
+class _HostileChoiceValue:
+    def __str__(self) -> str:
+        raise AssertionError("client_secret=choice-object-secret")
+
+
 def _story(state: str = "Work in Progress") -> Story:
     return Story(
         sys_id="story-sys-id",
@@ -58,6 +68,27 @@ def test_state_mapping_uses_instance_choice_value_for_ready_for_testing() -> Non
 
 def test_state_mapping_fails_closed_when_ready_for_testing_is_missing() -> None:
     state_mapping = build_state_mapping_from_choices([{"label": "Testing", "value": "2"}])
+
+    assert state_mapping is None
+
+
+def test_state_mapping_skips_string_subclass_choice_values_without_coercion() -> None:
+    state_mapping = build_state_mapping_from_choices(
+        [
+            {
+                "label": _HostileChoiceText("Ready for Testing"),
+                "value": _HostileChoiceText("-7"),
+            }
+        ]
+    )
+
+    assert state_mapping is None
+
+
+def test_state_mapping_skips_non_string_choice_values_without_coercion() -> None:
+    state_mapping = build_state_mapping_from_choices(
+        [{"label": "Ready for Testing", "value": _HostileChoiceValue()}]
+    )
 
     assert state_mapping is None
 
@@ -122,6 +153,78 @@ def test_failed_external_build_routes_to_human_review_without_state_change() -> 
     assert "Build validation failed." in plan.work_notes
 
 
+def test_external_build_work_notes_redact_and_normalize_untrusted_values() -> None:
+    plan = plan_external_build_writeback(
+        story=_story(),
+        build_result=ExternalBuildResult(
+            status=ExternalBuildStatus.FAILED,
+            build_reference="build-20260513-001\nclient_secret=reference-secret",
+            message="Build failed.\napi_key=message-secret",
+        ),
+        state_mapping=StoryStateMapping(ready_for_testing="Ready for Testing"),
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Work in Progress": {"Ready for Testing"}},
+        ),
+    )
+
+    assert "reference-secret" not in plan.work_notes
+    assert "message-secret" not in plan.work_notes
+    assert "client_secret=***REDACTED***" in plan.work_notes
+    assert "api_key=***REDACTED***" in plan.work_notes
+    assert "\n" not in plan.work_notes
+    assert plan.fields["u_ai_build_reference"] == (
+        "build-20260513-001 client_secret=***REDACTED***"
+    )
+
+
+def test_external_build_structured_fields_redact_and_normalize_untrusted_values() -> None:
+    plan = plan_external_build_writeback(
+        story=_story(),
+        build_result=ExternalBuildResult(
+            status=ExternalBuildStatus.SUCCEEDED,
+            build_reference="build-20260513-001\nclient_secret=reference-secret",
+            artifact_url=(
+                "https://artifacts.example.gov/STRY0010013.json"
+                "?api_key=artifact-secret"
+            ),
+        ),
+        state_mapping=StoryStateMapping(ready_for_testing="Ready for Testing"),
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Work in Progress": {"Ready for Testing"}},
+        ),
+    )
+
+    build_reference = plan.fields["u_ai_build_reference"]
+    artifact_reference = plan.fields["u_ai_candidate_artifact"]
+    assert "reference-secret" not in build_reference
+    assert "artifact-secret" not in artifact_reference
+    assert "client_secret=***REDACTED***" in build_reference
+    assert "api_key=***REDACTED***" in artifact_reference
+    assert "\n" not in build_reference
+    assert "\n" not in artifact_reference
+
+
+def test_external_build_work_notes_bound_untrusted_values() -> None:
+    plan = plan_external_build_writeback(
+        story=_story(),
+        build_result=ExternalBuildResult(
+            status=ExternalBuildStatus.FAILED,
+            build_reference=f"build-20260513-001 {'A' * 2200}",
+            message=f"Build failed. {'B' * 2200}",
+        ),
+        state_mapping=StoryStateMapping(ready_for_testing="Ready for Testing"),
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Work in Progress": {"Ready for Testing"}},
+        ),
+    )
+
+    assert "...[truncated]" in plan.work_notes
+    assert len(plan.work_notes) < 1200
+
+
 def test_story_build_claim_plans_work_in_progress_transition() -> None:
     plan = plan_story_build_claim_writeback(
         story=_story(state="Ready"),
@@ -143,6 +246,63 @@ def test_story_build_claim_plans_work_in_progress_transition() -> None:
     )
     assert "evt-20260513-001" in plan.work_notes
     assert "Automated build started" in plan.work_notes
+
+
+def test_story_build_claim_work_notes_redact_and_normalize_lifecycle_event_id() -> None:
+    plan = plan_story_build_claim_writeback(
+        story=_story(state="Ready"),
+        lifecycle_event_id="evt-20260513-001\nclient_secret=event-secret",
+        candidate_artifact_url="artifacts/implementation-candidates/STRY0010013.json",
+        claim_state="Work in Progress",
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Ready": {"Work in Progress"}},
+        ),
+    )
+
+    assert "event-secret" not in plan.work_notes
+    assert "client_secret=***REDACTED***" in plan.work_notes
+    assert "\n" not in plan.work_notes
+    assert "evt-20260513-001" in plan.work_notes
+
+
+def test_story_build_claim_structured_artifact_field_redacts_untrusted_value() -> None:
+    plan = plan_story_build_claim_writeback(
+        story=_story(state="Ready"),
+        lifecycle_event_id="evt-20260513-001",
+        candidate_artifact_url=(
+            "https://artifacts.example.gov/STRY0010013.json"
+            "?client_secret=artifact-secret\napi_key=second-secret"
+        ),
+        claim_state="Work in Progress",
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Ready": {"Work in Progress"}},
+        ),
+    )
+
+    artifact_reference = plan.fields["u_ai_candidate_artifact"]
+    assert "artifact-secret" not in artifact_reference
+    assert "second-secret" not in artifact_reference
+    assert "client_secret=***REDACTED***" in artifact_reference
+    assert "api_key=***REDACTED***" in artifact_reference
+    assert "\n" not in artifact_reference
+
+
+def test_story_build_claim_work_notes_bound_lifecycle_event_id() -> None:
+    plan = plan_story_build_claim_writeback(
+        story=_story(state="Ready"),
+        lifecycle_event_id=f"evt-20260513-001 {'A' * 2200}",
+        candidate_artifact_url="artifacts/implementation-candidates/STRY0010013.json",
+        claim_state="Work in Progress",
+        policy=StoryWritebackPolicy(
+            state_transitions_enabled=True,
+            allowed_state_transitions={"Ready": {"Work in Progress"}},
+        ),
+    )
+
+    assert "...[truncated]" in plan.work_notes
+    assert len(plan.work_notes) < 700
 
 
 def test_story_build_claim_fails_closed_when_transition_is_not_allowlisted() -> None:

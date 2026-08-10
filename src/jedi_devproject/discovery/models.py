@@ -21,7 +21,7 @@ class InstanceDiscoveryClient(Protocol):
 
 
 class DiscoveredField(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     element: str
     column_label: str
@@ -31,7 +31,7 @@ class DiscoveredField(BaseModel):
 
 
 class DiscoveredFormElement(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     sys_id: str
     element: str
@@ -39,7 +39,7 @@ class DiscoveredFormElement(BaseModel):
 
 
 class DiscoveredFormSection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     sys_id: str
     name: str
@@ -49,7 +49,7 @@ class DiscoveredFormSection(BaseModel):
 
 
 class InstanceDiscoveryContext(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     table_label: str
@@ -109,7 +109,7 @@ EMPTY_REQUIRED_SURFACE_IS_SUFFICIENT: set[SurfaceName] = {
 
 
 class ServiceNowSurfaceRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     source_table: str
     name: str
@@ -119,7 +119,7 @@ class ServiceNowSurfaceRecord(BaseModel):
 
 
 class ServiceNowSurfaceContext(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     surface: SurfaceName
     source_table: str
@@ -131,7 +131,7 @@ class ServiceNowSurfaceContext(BaseModel):
 
 
 class ServiceNowSurfaceContextBundle(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     required_surfaces: list[SurfaceName]

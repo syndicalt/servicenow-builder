@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.models import CandidateStatus, UpdateSetCandidate
 
@@ -16,10 +16,14 @@ class ExportBlocked(RuntimeError):
 
 
 class ReviewSettings(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     xml_export_enabled: bool = False
 
 
 class ReviewEvent(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     reviewer_id: str
     reason: str
@@ -29,6 +33,8 @@ class ReviewEvent(BaseModel):
 
 
 class ReviewResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     candidate: UpdateSetCandidate
     event: ReviewEvent
 

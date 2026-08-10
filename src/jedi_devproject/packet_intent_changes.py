@@ -81,7 +81,12 @@ def _catalog_item_changes_from_normalized_intent(
                 f"catalog variable label for {variable_name}",
             ),
             "type": variable_type,
-            "mandatory": bool(raw_variable.get("mandatory", False)),
+            "mandatory": _catalog_variable_bool(
+                raw_variable.get("mandatory"),
+                name=variable_name,
+                attribute="mandatory",
+                default=False,
+            ),
             "order": _optional_intent_order(raw_variable.get("order"), default=index * 100),
         }
         reference_table = _optional_intent_text(raw_variable.get("reference_table"))
@@ -100,7 +105,7 @@ def _catalog_item_changes_from_normalized_intent(
             except ValueError as error:
                 raise ModelResponseError(
                     f"catalog variable {variable_name} reference qualifier rejected: {error}"
-                ) from error
+                ) from None
         default_value = _optional_intent_text(raw_variable.get("default_value"))
         if default_value is not None:
             fields["default_value"] = default_value
@@ -252,7 +257,12 @@ def _record_producer_changes_from_normalized_intent(
                 f"record producer variable label for {variable_name}",
             ),
             "type": variable_type,
-            "mandatory": bool(raw_variable.get("mandatory", False)),
+            "mandatory": _record_producer_variable_bool(
+                raw_variable.get("mandatory"),
+                name=variable_name,
+                attribute="mandatory",
+                default=False,
+            ),
             "order": _optional_intent_order(raw_variable.get("order"), default=index * 100),
             "field": mapped_field,
             "map_to_field": True,
@@ -275,7 +285,7 @@ def _record_producer_changes_from_normalized_intent(
                 raise ModelResponseError(
                     f"record producer variable {variable_name} reference qualifier "
                     f"rejected: {error}"
-                ) from error
+                ) from None
         default_value = _optional_intent_text(raw_variable.get("default_value"))
         if default_value is not None:
             fields["default_value"] = default_value
@@ -313,6 +323,16 @@ def _required_producer_intent_text(intent: dict[str, Any], key: str, label: str)
     return value
 
 
+def _record_producer_variable_bool(
+    value: Any, *, name: str, attribute: str, default: bool
+) -> bool:
+    if value is None:
+        return default
+    if type(value) is bool:
+        return value
+    raise ModelResponseError(f"record producer variable {name} {attribute} must be a boolean")
+
+
 def _catalog_ui_policy_changes(
     *,
     rules: list[dict[str, Any]],
@@ -321,17 +341,27 @@ def _catalog_ui_policy_changes(
 ) -> list[dict[str, Any]]:
     changes: list[dict[str, Any]] = []
     for index, rule in enumerate(rules, start=1):
-        title = str(rule["title"])
+        title = _catalog_ui_policy_render_text(
+            rule.get("title"),
+            diagnostic="catalog variable rule title must be an exact string",
+        )
+        condition = _catalog_ui_policy_render_text(
+            rule.get("condition"),
+            diagnostic=f"catalog variable rule {title} condition must be an exact string",
+        )
         try:
-            condition_variables = catalog_ui_policy_condition_variables(str(rule["condition"]))
+            condition_variables = catalog_ui_policy_condition_variables(condition)
         except ValueError as error:
             raise ModelResponseError(
                 f"catalog variable rule {title} condition rejected: {error}"
-            ) from error
+            ) from None
         actions = list(rule["actions"])
+        rendered_actions = [
+            _catalog_ui_policy_render_action(action, title=title) for action in actions
+        ]
         referenced = [
             *condition_variables,
-            *[str(action["variable"]) for action in actions],
+            *[action["variable"] for action in rendered_actions],
         ]
         for member in referenced:
             if member not in declared_names:
@@ -345,8 +375,13 @@ def _catalog_ui_policy_changes(
                 "fields": {
                     "short_description": title,
                     "catalog_item": item_name,
-                    "catalog_conditions": str(rule["condition"]),
-                    "reverse_if_false": bool(rule["reverse_if_false"]),
+                    "catalog_conditions": condition,
+                    "reverse_if_false": _catalog_ui_policy_render_bool(
+                        rule.get("reverse_if_false"),
+                        diagnostic=(
+                            f"catalog variable rule {title} reverse_if_false must be a boolean"
+                        ),
+                    ),
                     "on_load": True,
                     "order": index * 100,
                 },
@@ -356,7 +391,7 @@ def _catalog_ui_policy_changes(
                 ),
             }
         )
-        for action in actions:
+        for action in rendered_actions:
             changes.append(
                 {
                     "table": "catalog_ui_policy_action",
@@ -364,19 +399,58 @@ def _catalog_ui_policy_changes(
                     "fields": {
                         "ui_policy": title,
                         "catalog_item": item_name,
-                        "variable": str(action["variable"]),
-                        "visible": str(action["visible"]),
-                        "mandatory": str(action["mandatory"]),
-                        "disabled": str(action["disabled"]),
-                        "cleared": bool(action["cleared"]),
+                        "variable": action["variable"],
+                        "visible": action["visible"],
+                        "mandatory": action["mandatory"],
+                        "disabled": action["disabled"],
+                        "cleared": action["cleared"],
                     },
                     "sys_id": None,
                     "rationale": (
                         f"Apply the {title} behavior to the {action['variable']} variable."
                     ),
                 }
-            )
+        )
     return changes
+
+
+def _catalog_ui_policy_render_action(action: Any, *, title: str) -> dict[str, Any]:
+    if not isinstance(action, dict):
+        raise ModelResponseError(f"catalog variable rule {title} action must be an object")
+    return {
+        "variable": _catalog_ui_policy_render_text(
+            action.get("variable"),
+            diagnostic=f"catalog variable rule {title} action variable must be an exact string",
+        ),
+        "visible": _catalog_ui_policy_render_text(
+            action.get("visible"),
+            diagnostic=f"catalog variable rule {title} action visible must be an exact string",
+        ),
+        "mandatory": _catalog_ui_policy_render_text(
+            action.get("mandatory"),
+            diagnostic=f"catalog variable rule {title} action mandatory must be an exact string",
+        ),
+        "disabled": _catalog_ui_policy_render_text(
+            action.get("disabled"),
+            diagnostic=f"catalog variable rule {title} action disabled must be an exact string",
+        ),
+        "cleared": _catalog_ui_policy_render_bool(
+            action.get("cleared"),
+            diagnostic=f"catalog variable rule {title} action cleared must be a boolean",
+        ),
+    }
+
+
+def _catalog_ui_policy_render_text(value: Any, *, diagnostic: str) -> str:
+    if type(value) is str:
+        return value
+    raise ModelResponseError(diagnostic)
+
+
+def _catalog_ui_policy_render_bool(value: Any, *, diagnostic: str) -> bool:
+    if type(value) is bool:
+        return value
+    raise ModelResponseError(diagnostic)
 
 
 def _catalog_client_script_changes(
@@ -387,8 +461,17 @@ def _catalog_client_script_changes(
 ) -> list[dict[str, Any]]:
     changes: list[dict[str, Any]] = []
     for script in scripts:
-        name = str(script["name"])
-        watched_variable = str(script["variable"])
+        name = _catalog_client_script_render_text(
+            script.get("name"), diagnostic="catalog client script name must be an exact string"
+        )
+        script_type = _catalog_client_script_render_text(
+            script.get("script_type"),
+            diagnostic=f"catalog client script {name} script_type must be an exact string",
+        )
+        watched_variable = _catalog_client_script_render_text(
+            script.get("variable"),
+            diagnostic=f"catalog client script {name} variable must be an exact string",
+        )
         actions: list[CatalogClientScriptAction] = []
         for action in script["actions"]:
             try:
@@ -396,7 +479,7 @@ def _catalog_client_script_changes(
             except ValueError as error:
                 raise ModelResponseError(
                     f"catalog client script {name} action rejected: {error}"
-                ) from error
+                ) from None
         referenced = [
             *([watched_variable] if watched_variable else []),
             *[action.variable for action in actions],
@@ -408,14 +491,14 @@ def _catalog_client_script_changes(
                 )
         try:
             script_body = render_catalog_client_script(
-                script_type=str(script["script_type"]),
+                script_type=script_type,
                 actions=actions,
                 variable_name=watched_variable,
             )
         except ValueError as error:
             raise ModelResponseError(
                 f"catalog client script {name} rejected: {error}"
-            ) from error
+            ) from None
         fields_written = list(dict.fromkeys(action.variable for action in actions))
         changes.append(
             {
@@ -424,7 +507,7 @@ def _catalog_client_script_changes(
                 "fields": {
                     "cat_item": item_name,
                     "name": name,
-                    "type": str(script["script_type"]),
+                    "type": script_type,
                     "field": watched_variable,
                     "script": script_body,
                     "fields_written": fields_written,
@@ -438,15 +521,35 @@ def _catalog_client_script_changes(
     return changes
 
 
+def _catalog_client_script_render_text(value: Any, *, diagnostic: str) -> str:
+    if type(value) is str:
+        return value
+    raise ModelResponseError(diagnostic)
+
+
 def _intent_variable_set_names(value: Any) -> list[str]:
     if value is None:
         return []
     if not isinstance(value, list):
         raise ModelResponseError("catalog variable sets must be a list of set names")
-    names = [str(item).strip() for item in value]
+    names = [_catalog_variable_set_name(item) for item in value]
     if any(name == "" for name in names):
         raise ModelResponseError("catalog variable set names must not be empty")
     return names
+
+
+def _catalog_variable_set_name(value: Any) -> str:
+    if type(value) is str:
+        return value.strip()
+    raise ModelResponseError("catalog variable set names must be exact strings")
+
+
+def _catalog_variable_bool(value: Any, *, name: str, attribute: str, default: bool) -> bool:
+    if value is None:
+        return default
+    if type(value) is bool:
+        return value
+    raise ModelResponseError(f"catalog variable {name} {attribute} must be a boolean")
 
 
 def _intent_variable_groups(value: Any) -> list[dict[str, Any]]:
@@ -466,13 +569,19 @@ def _intent_variable_groups(value: Any) -> list[dict[str, Any]]:
             raise ModelResponseError(
                 f"catalog variable group {title} requires member variables"
             )
-        members = [str(member).strip() for member in raw_members]
+        members = [_catalog_variable_group_member(member, title=title) for member in raw_members]
         if any(member == "" for member in members):
             raise ModelResponseError(
                 f"catalog variable group {title} requires member variables"
             )
         groups.append({"title": title, "variables": members})
     return groups
+
+
+def _catalog_variable_group_member(value: Any, *, title: str) -> str:
+    if type(value) is str:
+        return value.strip()
+    raise ModelResponseError(f"catalog variable group {title} members must be exact strings")
 
 
 _CATALOG_UI_POLICY_TRISTATES = frozenset({"true", "false", "ignore"})
@@ -509,23 +618,36 @@ def _intent_catalog_ui_policy_rules(value: Any) -> list[dict[str, Any]]:
                 )
             action = {
                 "variable": variable,
-                "visible": str(raw_action.get("visible") or "ignore").strip().lower(),
-                "mandatory": str(raw_action.get("mandatory") or "ignore").strip().lower(),
-                "disabled": str(raw_action.get("disabled") or "ignore").strip().lower(),
-                "cleared": bool(raw_action.get("cleared", False)),
+                "visible": _catalog_ui_policy_action_tristate(
+                    raw_action.get("visible"),
+                    title=title,
+                    attribute="visible",
+                ),
+                "mandatory": _catalog_ui_policy_action_tristate(
+                    raw_action.get("mandatory"),
+                    title=title,
+                    attribute="mandatory",
+                ),
+                "disabled": _catalog_ui_policy_action_tristate(
+                    raw_action.get("disabled"),
+                    title=title,
+                    attribute="disabled",
+                ),
+                "cleared": _catalog_ui_policy_action_bool(
+                    raw_action.get("cleared"), title=title, attribute="cleared", default=False
+                ),
             }
-            for attribute in ("visible", "mandatory", "disabled"):
-                if action[attribute] not in _CATALOG_UI_POLICY_TRISTATES:
-                    raise ModelResponseError(
-                        f"catalog variable rule {title} action {attribute} must be "
-                        "true, false, or ignore"
-                    )
             actions.append(action)
         rules.append(
             {
                 "title": title,
                 "condition": condition,
-                "reverse_if_false": bool(item.get("reverse_if_false", True)),
+                "reverse_if_false": _catalog_ui_policy_rule_bool(
+                    item.get("reverse_if_false"),
+                    title=title,
+                    attribute="reverse_if_false",
+                    default=True,
+                ),
                 "actions": actions,
             }
         )
@@ -558,9 +680,15 @@ def _intent_catalog_client_scripts(value: Any) -> list[dict[str, Any]]:
                 )
             actions.append(
                 {
-                    "kind": str(raw_action.get("kind") or ""),
-                    "variable": str(raw_action.get("variable") or ""),
-                    "value": str(raw_action.get("value") or ""),
+                    "kind": _catalog_client_script_action_text(
+                        raw_action.get("kind"), name=name, attribute="kind"
+                    ),
+                    "variable": _catalog_client_script_action_text(
+                        raw_action.get("variable"), name=name, attribute="variable"
+                    ),
+                    "value": _catalog_client_script_action_text(
+                        raw_action.get("value"), name=name, attribute="value"
+                    ),
                 }
             )
         scripts.append(
@@ -574,6 +702,50 @@ def _intent_catalog_client_scripts(value: Any) -> list[dict[str, Any]]:
     return scripts
 
 
+def _catalog_ui_policy_action_tristate(value: Any, *, title: str, attribute: str) -> str:
+    if value is None:
+        return "ignore"
+    if type(value) is bool:
+        return "true" if value else "false"
+    if type(value) is str:
+        text = value.strip().lower()
+        if text in _CATALOG_UI_POLICY_TRISTATES:
+            return text
+    raise ModelResponseError(
+        f"catalog variable rule {title} action {attribute} must be true, false, or ignore"
+    )
+
+
+def _catalog_ui_policy_action_bool(
+    value: Any, *, title: str, attribute: str, default: bool
+) -> bool:
+    if value is None:
+        return default
+    if type(value) is bool:
+        return value
+    raise ModelResponseError(f"catalog variable rule {title} action {attribute} must be a boolean")
+
+
+def _catalog_ui_policy_rule_bool(
+    value: Any, *, title: str, attribute: str, default: bool
+) -> bool:
+    if value is None:
+        return default
+    if type(value) is bool:
+        return value
+    raise ModelResponseError(f"catalog variable rule {title} {attribute} must be a boolean")
+
+
+def _catalog_client_script_action_text(value: Any, *, name: str, attribute: str) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    raise ModelResponseError(
+        f"catalog client script {name} action {attribute} must be an exact string"
+    )
+
+
 def _intent_fulfillment_flow_name(intent: dict[str, Any]) -> str | None:
     """Carry the attach-existing fulfillment flow name; fail closed otherwise.
 
@@ -581,7 +753,11 @@ def _intent_fulfillment_flow_name(intent: dict[str, Any]) -> str | None:
     nameless attachment request as a missing detail; this re-checks both so the
     candidate path stays fail-closed even if a packet bypasses routing.
     """
-    attachment_requested = bool(intent.get("fulfillment_flow_attachment_requested"))
+    attachment_requested = _catalog_item_bool(
+        intent.get("fulfillment_flow_attachment_requested"),
+        attribute="fulfillment_flow_attachment_requested",
+        default=False,
+    )
     if (
         _optional_intent_text(intent.get("fulfillment_flow")) is not None
         and not attachment_requested
@@ -598,6 +774,14 @@ def _intent_fulfillment_flow_name(intent: dict[str, Any]) -> str | None:
     return name
 
 
+def _catalog_item_bool(value: Any, *, attribute: str, default: bool) -> bool:
+    if value is None:
+        return default
+    if type(value) is bool:
+        return value
+    raise ModelResponseError(f"catalog item {attribute} must be a boolean")
+
+
 def _required_intent_text(intent: dict[str, Any], key: str, label: str) -> str:
     value = _optional_intent_text(intent.get(key))
     if value is None:
@@ -608,15 +792,15 @@ def _required_intent_text(intent: dict[str, Any], key: str, label: str) -> str:
 def _optional_intent_text(value: Any) -> str | None:
     if value is None:
         return None
-    text = str(value).strip()
+    if type(value) is not str:
+        raise ModelResponseError("normalized intent text values must be exact strings")
+    text = value.strip()
     return text or None
 
 
 def _optional_intent_order(value: Any, *, default: int) -> int:
     if value is None:
         return default
-    try:
-        order = int(value)
-    except (TypeError, ValueError):
-        return default
-    return order if order > 0 else default
+    if type(value) is not int or value <= 0:
+        raise ModelResponseError("normalized intent order values must be positive integers")
+    return value

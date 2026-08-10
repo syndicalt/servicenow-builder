@@ -3,9 +3,10 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.models import Story
+from jedi_devproject.work_note_safety import safe_work_note_value
 
 
 class ExternalBuildStatus(StrEnum):
@@ -20,6 +21,8 @@ class ActorType(StrEnum):
 
 
 class ExternalBuildResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     status: ExternalBuildStatus
     build_reference: str
     artifact_url: str | None = None
@@ -27,10 +30,14 @@ class ExternalBuildResult(BaseModel):
 
 
 class StoryStateMapping(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     ready_for_testing: str
 
 
 class StoryWritebackPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
     state_transitions_enabled: bool = False
     allowed_state_transitions: dict[str, set[str]] = Field(default_factory=dict)
     allowed_fields: set[str] = Field(
@@ -51,6 +58,8 @@ class StoryWritebackPolicy(BaseModel):
 
 
 class StoryWritebackPlan(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_sys_id: str
     story_number: str
     fields: dict[str, str] = Field(default_factory=dict)
@@ -60,6 +69,8 @@ class StoryWritebackPlan(BaseModel):
 
 
 class WritebackAuditEvent(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     build_reference: str
     actor_type: ActorType
@@ -73,6 +84,8 @@ class WritebackAuditEvent(BaseModel):
 
 
 class BuildClaimAuditEvent(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     lifecycle_event_id: str
     actor_type: ActorType
@@ -91,17 +104,25 @@ REQUIRED_STRUCTURED_WRITEBACK_FIELDS = {
     "u_ai_build_reference",
     "u_ai_candidate_artifact",
 }
+MAX_EXTERNAL_BUILD_WORK_NOTE_VALUE_CHARS = 500
 
 
 def build_state_mapping_from_choices(
     choices: list[dict[str, Any]],
 ) -> StoryStateMapping | None:
     for choice in choices:
-        if str(choice.get("label", "")).strip().lower() == "ready for testing":
-            value = str(choice.get("value", "")).strip()
+        label = _state_choice_text(choice.get("label"))
+        if label.strip().lower() == "ready for testing":
+            value = _state_choice_text(choice.get("value")).strip()
             if value:
                 return StoryStateMapping(ready_for_testing=value)
     return None
+
+
+def _state_choice_text(value: Any) -> str:
+    if type(value) is not str:
+        return ""
+    return value
 
 
 def validate_writeback_fields(
@@ -184,7 +205,9 @@ def plan_story_build_claim_writeback(
 ) -> StoryWritebackPlan:
     fields = {"u_ai_status": "Build In Progress"}
     if candidate_artifact_url:
-        fields["u_ai_candidate_artifact"] = candidate_artifact_url
+        fields["u_ai_candidate_artifact"] = structured_writeback_field_value(
+            candidate_artifact_url
+        )
 
     if not policy.state_transitions_enabled:
         return _plan(
@@ -221,24 +244,38 @@ def plan_story_build_claim_writeback(
 def _base_fields(build_result: ExternalBuildResult, *, status: str) -> dict[str, str]:
     fields = {
         "u_ai_status": status,
-        "u_ai_build_reference": build_result.build_reference,
+        "u_ai_build_reference": structured_writeback_field_value(
+            build_result.build_reference
+        ),
     }
     if build_result.artifact_url:
-        fields["u_ai_candidate_artifact"] = build_result.artifact_url
+        fields["u_ai_candidate_artifact"] = structured_writeback_field_value(
+            build_result.artifact_url
+        )
     return fields
 
 
 def _work_notes(build_result: ExternalBuildResult, prefix: str) -> str:
-    notes = f"{prefix}. Build reference: {build_result.build_reference}."
+    reference = _safe_work_note_value(build_result.build_reference)
+    notes = f"{prefix}. Build reference: {reference}."
     if build_result.message:
-        notes = f"{notes} {build_result.message}"
+        notes = f"{notes} {_safe_work_note_value(build_result.message)}"
     return notes
 
 
+def _safe_work_note_value(value: str) -> str:
+    return safe_work_note_value(value, max_chars=MAX_EXTERNAL_BUILD_WORK_NOTE_VALUE_CHARS)
+
+
+def structured_writeback_field_value(value: str) -> str:
+    return safe_work_note_value(value, max_chars=MAX_EXTERNAL_BUILD_WORK_NOTE_VALUE_CHARS)
+
+
 def _build_claim_work_notes(lifecycle_event_id: str) -> str:
+    safe_lifecycle_event_id = _safe_work_note_value(lifecycle_event_id)
     return (
         "Automated build started. "
-        f"Lifecycle event: {lifecycle_event_id}. "
+        f"Lifecycle event: {safe_lifecycle_event_id}. "
         "The story was claimed for external build orchestration."
     )
 

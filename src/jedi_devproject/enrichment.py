@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.models import Story
 
 
 class StoryEnrichmentResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     original_story: Story
     enriched_story: Story
     inferred_tables: list[str]

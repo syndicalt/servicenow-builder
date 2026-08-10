@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 
 from jedi_devproject import runtime_api, runtime_worker
@@ -13,9 +16,12 @@ from jedi_devproject.operational_store import (
     ArtifactBlobRecord,
     ArtifactRefRecord,
     FulfillmentJobRecord,
+    FulfillmentJobStatusSummaryRecord,
+    JobEventRecord,
     LifecycleEventRecord,
 )
-from jedi_devproject.runtime import RuntimeSettings
+from jedi_devproject.runtime import RuntimeConfigError, RuntimeSettings
+from jedi_devproject.runtime_store import RuntimeStore
 
 
 def _settings(tmp_path: Path) -> RuntimeSettings:
@@ -57,6 +63,34 @@ def test_runtime_api_build_app_uses_env_file_and_returns_fastapi_app(
     assert database_urls == ["postgresql://jedi:jedi@postgres:5432/jedi"]
 
 
+def test_runtime_api_build_app_rejects_worker_role_before_store_open(
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:jedi@postgres:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                "JEDI_AUDIT_ROOT=/app/artifacts/audit",
+                "JEDI_RUNTIME_ROLE=worker",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    database_urls: list[str] = []
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_RUNTIME_ROLE=worker"):
+        runtime_api.build_app(
+            store_factory=_store_factory(database_urls),
+            env_path=env_path,
+        )
+
+    assert database_urls == []
+
+
 def test_runtime_worker_run_once_delegates_to_runtime_fulfillment(
     tmp_path: Path,
 ) -> None:
@@ -80,6 +114,84 @@ def test_runtime_worker_run_once_delegates_to_runtime_fulfillment(
 
     assert result.status == "idle"
     assert seen_settings == [settings]
+
+
+def test_runtime_worker_run_once_rejects_api_role_before_processor_call(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path).model_copy(update={"runtime_role": "api"})
+    seen_settings: list[RuntimeSettings] = []
+
+    def processor(runtime_settings: RuntimeSettings) -> FulfillmentWorkerResult:
+        seen_settings.append(runtime_settings)
+        return FulfillmentWorkerResult(
+            status="idle",
+            job_id=None,
+            story_number=None,
+            message="No queued fulfillment job available",
+            error_message=None,
+        )
+
+    with pytest.raises(RuntimeConfigError, match="JEDI_RUNTIME_ROLE=api"):
+        runtime_worker.run_once(
+            settings=settings,
+            processor=processor,
+        )
+
+    assert seen_settings == []
+
+
+def test_runtime_report_json_rejects_non_finite_summary_without_payload_leak() -> None:
+    summary = runtime_worker.RuntimeWorkerLoopSummary.model_construct(
+        iterations=1,
+        completed=0,
+        idle=math.nan,
+        failed=0,
+        alerts_emitted=0,
+        alert_failures=0,
+        prune_failures=0,
+        stale_job_recovery_failures=0,
+        stopped_reason="client_secret=do-not-echo-this",
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        runtime_worker._runtime_report_json(summary)
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "runtime worker report contains non-finite numeric values"
+    assert exc_info.value.__cause__ is None
+    assert "idle" not in diagnostic
+    assert "NaN" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+
+
+def test_runtime_report_json_rejects_non_json_summary_without_payload_leak() -> None:
+    class StringifiesSecret:
+        def __str__(self) -> str:
+            return "do-not-echo-this"
+
+    summary = runtime_worker.RuntimeWorkerLoopSummary.model_construct(
+        iterations=1,
+        completed=0,
+        idle=0,
+        failed=0,
+        alerts_emitted=0,
+        alert_failures=0,
+        prune_failures=0,
+        stale_job_recovery_failures=0,
+        stopped_reason=StringifiesSecret(),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        runtime_worker._runtime_report_json(summary)
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "runtime worker report contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "stopped_reason" not in diagnostic
+    assert "StringifiesSecret" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
 
 
 def test_runtime_worker_run_loop_processes_until_iteration_limit(
@@ -142,6 +254,72 @@ def test_runtime_worker_run_loop_stops_on_failed_job_by_default(
     assert summary.iterations == 1
     assert summary.failed == 1
     assert summary.stopped_reason == "failed_job"
+
+
+def test_runtime_worker_run_loop_emits_alert_for_failed_job(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    emitted: list[FulfillmentWorkerResult] = []
+
+    def processor(_runtime_settings: RuntimeSettings) -> FulfillmentWorkerResult:
+        return FulfillmentWorkerResult(
+            status="failed",
+            job_id="job-001",
+            story_number="STRY0010013",
+            message=None,
+            error_message="provider unavailable",
+        )
+
+    summary = runtime_worker.run_loop(
+        settings=settings,
+        processor=processor,
+        max_iterations=1,
+        idle_sleep_seconds=0,
+        sleep=lambda _seconds: None,
+        alert_emitter=emitted.append,
+    )
+
+    assert [result.job_id for result in emitted] == ["job-001"]
+    assert summary.alerts_emitted == 1
+    assert summary.alert_failures == 0
+
+
+def test_runtime_worker_run_loop_alert_failure_does_not_crash_worker_with_redacted_log(
+    tmp_path: Path,
+    caplog: Any,
+) -> None:
+    settings = _settings(tmp_path)
+    caplog.set_level("WARNING", logger="jedi_devproject.runtime_worker")
+
+    def processor(_runtime_settings: RuntimeSettings) -> FulfillmentWorkerResult:
+        return FulfillmentWorkerResult(
+            status="failed",
+            job_id="job-001",
+            story_number="STRY0010013",
+            message=None,
+            error_message="provider unavailable",
+        )
+
+    def failing_alert_emitter(_result: FulfillmentWorkerResult) -> None:
+        raise RuntimeError("alert delivery failed client_secret=secret-value")
+
+    summary = runtime_worker.run_loop(
+        settings=settings,
+        processor=processor,
+        max_iterations=1,
+        idle_sleep_seconds=0,
+        sleep=lambda _seconds: None,
+        alert_emitter=failing_alert_emitter,
+    )
+
+    assert summary.failed == 1
+    assert summary.alerts_emitted == 0
+    assert summary.alert_failures == 1
+    assert summary.stopped_reason == "failed_job"
+    assert "worker alert delivery failed for job job-001" in caplog.text
+    assert "secret-value" not in caplog.text
+    assert "***REDACTED***" in caplog.text
 
 
 def test_runtime_worker_load_worker_settings_reads_loop_environment(
@@ -225,7 +403,7 @@ def _store_factory(database_urls: list[str]) -> Callable[[str], _NoopStore]:
 
 
 class _NoopStore:
-    def __enter__(self) -> _NoopStore:
+    def __enter__(self) -> RuntimeStore:
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -283,6 +461,7 @@ class _NoopStore:
         self,
         *,
         job_id: str,
+        worker_id: str,
         message: str,
     ) -> FulfillmentJobRecord:
         raise AssertionError("not called")
@@ -291,8 +470,17 @@ class _NoopStore:
         self,
         *,
         job_id: str,
+        worker_id: str,
         error_message: str,
     ) -> FulfillmentJobRecord:
+        raise AssertionError("not called")
+
+    def touch_fulfillment_job_heartbeat(
+        self,
+        *,
+        job_id: str,
+        worker_id: str,
+    ) -> FulfillmentJobRecord | None:
         raise AssertionError("not called")
 
     def record_artifact_ref(
@@ -319,11 +507,27 @@ class _NoopStore:
     def get_artifact_blob(self, artifact_id: int) -> ArtifactBlobRecord:
         raise AssertionError("not called")
 
+    def get_job(self, job_id: str) -> FulfillmentJobRecord:
+        raise AssertionError("not called")
+
     def artifact_refs_for_job(self, job_id: str) -> list[ArtifactRefRecord]:
+        raise AssertionError("not called")
+
+    def job_events_for_job(self, job_id: str) -> list[JobEventRecord]:
         raise AssertionError("not called")
 
     def recent_lifecycle_events(self, *, limit: int = 50) -> list[LifecycleEventRecord]:
         raise AssertionError("not called")
 
+    def verify_schema_ready(self) -> bool:
+        return True
+
     def recent_fulfillment_jobs(self, *, limit: int = 50) -> list[FulfillmentJobRecord]:
+        raise AssertionError("not called")
+
+    def fulfillment_job_status_summary(
+        self,
+        *,
+        stale_before: datetime,
+    ) -> FulfillmentJobStatusSummaryRecord:
         raise AssertionError("not called")

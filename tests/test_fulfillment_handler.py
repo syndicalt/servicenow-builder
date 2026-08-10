@@ -5,6 +5,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -284,6 +285,24 @@ def test_intake_feedback_delivered_for_gate_failing_story(tmp_path: Path) -> Non
     assert payload["delivered_fields"] == ["work_notes"]
 
 
+def test_intake_feedback_artifact_hash_uses_streaming_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeWritebackClient(story_state="Ready")
+    handler = build_claim_fulfillment_handler(client=client, config=_config(tmp_path))
+
+    def fail_read_bytes(self: Path) -> bytes:
+        raise AssertionError(f"unexpected whole-file read for {self}")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+
+    result = handler(_job())
+
+    assert len(result.artifacts) == 1
+    assert len(str(result.artifacts[0].sha256)) == 64
+
+
 def test_intake_feedback_is_idempotent_for_re_received_events(tmp_path: Path) -> None:
     client = FakeWritebackClient(story_state="Ready")
     handler = build_claim_fulfillment_handler(client=client, config=_config(tmp_path))
@@ -343,6 +362,96 @@ def test_intake_assessment_error_does_not_block_fulfillment(
     assert "intake feedback assessment failed for story STRY0010013" in caplog.text
     assert _work_note_only_updates(client) == []
     assert len(client.updated_fields) == 1
+
+
+def test_intake_feedback_rejects_story_collection_subclass_without_log_leak(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class SecretBearingStories(list[Story]):
+        def __len__(self) -> int:
+            raise RuntimeError("client_secret=intake-story-len-secret")
+
+    class MalformedIntakeStoryClient(FakeWritebackClient):
+        def __init__(self, *, story_state: str = "Ready") -> None:
+            super().__init__(
+                story_state=story_state,
+                story_text="Add a field labeled AI Review Notes to the rm_story form",
+            )
+            self.fetch_calls = 0
+
+        def fetch_stories(
+            self,
+            sysparm_query: str | None = None,
+            *,
+            limit: int = 100,
+        ) -> list[Story]:
+            self.fetch_calls += 1
+            stories = super().fetch_stories(sysparm_query, limit=limit)
+            if self.fetch_calls == 2:
+                return SecretBearingStories(stories)
+            return stories
+
+    client = MalformedIntakeStoryClient(story_state="Ready")
+    handler = build_claim_fulfillment_handler(client=client, config=_config(tmp_path))
+
+    with caplog.at_level("ERROR", logger="jedi_devproject.fulfillment_handler"):
+        result = handler(_job())
+
+    assert result.message == "Build claim applied for STRY0010013"
+    assert result.artifacts == []
+    assert _work_note_only_updates(client) == []
+    assert len(client.updated_fields) == 1
+    assert "intake feedback assessment failed for story STRY0010013" in caplog.text
+    assert "intake story fetch contains non-JSON value" in caplog.text
+    assert "SecretBearingStories" not in caplog.text
+    assert "intake-story-len-secret" not in caplog.text
+    assert "client_secret" not in caplog.text
+
+
+def test_intake_feedback_rejects_story_item_subclass_without_log_leak(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class SecretBearingStory(Story):
+        def model_copy(self, *args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("client_secret=intake-story-model-copy-secret")
+
+    class MalformedIntakeStoryClient(FakeWritebackClient):
+        def __init__(self, *, story_state: str = "Ready") -> None:
+            super().__init__(
+                story_state=story_state,
+                story_text="Add a field labeled AI Review Notes to the rm_story form",
+            )
+            self.fetch_calls = 0
+
+        def fetch_stories(
+            self,
+            sysparm_query: str | None = None,
+            *,
+            limit: int = 100,
+        ) -> list[Story]:
+            self.fetch_calls += 1
+            story = super().fetch_stories(sysparm_query, limit=limit)[0]
+            if self.fetch_calls == 2:
+                return [SecretBearingStory.model_validate(story.model_dump())]
+            return [story]
+
+    client = MalformedIntakeStoryClient(story_state="Ready")
+    handler = build_claim_fulfillment_handler(client=client, config=_config(tmp_path))
+
+    with caplog.at_level("ERROR", logger="jedi_devproject.fulfillment_handler"):
+        result = handler(_job())
+
+    assert result.message == "Build claim applied for STRY0010013"
+    assert result.artifacts == []
+    assert _work_note_only_updates(client) == []
+    assert len(client.updated_fields) == 1
+    assert "intake feedback assessment failed for story STRY0010013" in caplog.text
+    assert "intake story fetch contains non-JSON value" in caplog.text
+    assert "SecretBearingStory" not in caplog.text
+    assert "intake-story-model-copy-secret" not in caplog.text
+    assert "client_secret" not in caplog.text
 
 
 def test_intake_feedback_dry_run_returns_payload_artifact_without_mutating(

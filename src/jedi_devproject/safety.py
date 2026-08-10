@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.models import Story
 
@@ -20,6 +20,8 @@ class StoryType(StrEnum):
 
 
 class AllowlistPolicy(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_types: set[StoryType]
     tables: set[str]
     operations: set[str]
@@ -27,6 +29,8 @@ class AllowlistPolicy(BaseModel):
 
 
 class EligibilityResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     decision: EligibilityDecision
     story_type: StoryType
     reasons: list[str] = Field(default_factory=list)

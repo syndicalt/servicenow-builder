@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.bootstrap_lifecycle import (
     LifecycleWebhookClient,
@@ -15,14 +15,22 @@ from jedi_devproject.bootstrap_lifecycle import (
     _require_non_empty,
 )
 
+UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC = (
+    "Update Set importer lookup contains non-JSON value"
+)
+
 
 class UpdateSetImporterApplyResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     applied: bool
     upserted_records: list[dict[str, Any]]
     reasons: list[str]
 
 
 class UpdateSetImporterDefinitionSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     name: str
     service_id: str
     active: bool
@@ -32,6 +40,8 @@ class UpdateSetImporterDefinitionSpec(BaseModel):
 
 
 class UpdateSetImporterOperationSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     name: str
     http_method: str
     active: bool
@@ -44,6 +54,8 @@ class UpdateSetImporterOperationSpec(BaseModel):
 
 
 class UpdateSetImporterBootstrapSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     definition: UpdateSetImporterDefinitionSpec
     operation: UpdateSetImporterOperationSpec
 
@@ -137,21 +149,23 @@ def apply_update_set_importer_records(
         spec,
         web_service_definition_sys_id=None,
     ):
-        result = client.upsert_table_record(
-            table=str(record["table"]),
-            lookup=record["lookup"],
-            fields=record["fields"],
+        result = _update_set_importer_upsert_result(
+            client.upsert_table_record(
+                table=str(record["table"]),
+                lookup=record["lookup"],
+                fields=record["fields"],
+            )
         )
+        definition_sys_id = _update_set_importer_lookup_text(result.get("sys_id"))
         upserted_records.append(
             {
                 "table": record["table"],
                 "lookup": record["lookup"],
-                "sys_id": result.get("sys_id"),
+                "sys_id": definition_sys_id,
             }
         )
         if record["table"] != "sys_ws_definition":
             continue
-        definition_sys_id = str(result.get("sys_id") or "")
         if not definition_sys_id:
             continue
         for operation_record in _update_set_importer_apply_records(
@@ -160,16 +174,21 @@ def apply_update_set_importer_records(
         ):
             if operation_record["table"] != "sys_ws_operation":
                 continue
-            operation_result = client.upsert_table_record(
-                table=str(operation_record["table"]),
-                lookup=operation_record["lookup"],
-                fields=operation_record["fields"],
+            operation_result = _update_set_importer_upsert_result(
+                client.upsert_table_record(
+                    table=str(operation_record["table"]),
+                    lookup=operation_record["lookup"],
+                    fields=operation_record["fields"],
+                )
+            )
+            operation_sys_id = _update_set_importer_lookup_text(
+                operation_result.get("sys_id")
             )
             upserted_records.append(
                 {
                     "table": operation_record["table"],
                     "lookup": operation_record["lookup"],
-                    "sys_id": operation_result.get("sys_id"),
+                    "sys_id": operation_sys_id,
                 }
             )
         break
@@ -193,6 +212,7 @@ def verify_update_set_importer_records(
         table="sys_ws_definition",
         lookup={"service_id": spec.definition.service_id},
     )
+    definition_record = _update_set_importer_fetch_result(definition_record)
     definition_plan = update_set_importer_servicenow_record_plan(spec)[0]
     if definition_record is None:
         missing_records.append("sys_ws_definition")
@@ -203,7 +223,9 @@ def verify_update_set_importer_records(
         else:
             matched_records.append("sys_ws_definition")
 
-    definition_sys_id = str((definition_record or {}).get("sys_id") or "")
+    definition_sys_id = _update_set_importer_lookup_text(
+        (definition_record or {}).get("sys_id")
+    )
     if definition_sys_id:
         operation_record = client.fetch_table_record(
             table="sys_ws_operation",
@@ -212,6 +234,7 @@ def verify_update_set_importer_records(
                 "name": spec.operation.name,
             },
         )
+        operation_record = _update_set_importer_fetch_result(operation_record)
         operation_plan = _update_set_importer_verification_records(
             spec,
             web_service_definition_sys_id=definition_sys_id,
@@ -277,6 +300,30 @@ def _update_set_importer_verification_records(
         spec,
         web_service_definition_sys_id=web_service_definition_sys_id,
     )
+
+
+def _update_set_importer_lookup_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) in {bool, int}:
+        return str(value)
+    raise ValueError(UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC)
+
+
+def _update_set_importer_upsert_result(result: object) -> dict[str, Any]:
+    if type(result) is not dict:
+        raise ValueError(UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC)
+    return result
+
+
+def _update_set_importer_fetch_result(result: object) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    if type(result) is not dict:
+        raise ValueError(UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC)
+    return result
 
 
 def _update_set_importer_operation_script(*, integration_identity: str) -> str:

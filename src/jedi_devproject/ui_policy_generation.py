@@ -15,9 +15,11 @@ from jedi_devproject.xml_builder import (
     text_element,
 )
 
+UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC = "UI Policy generation field contains non-JSON value"
+
 
 class UiPolicyActionIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     policy_name: str = ""
     target_table: str
@@ -45,7 +47,7 @@ class UiPolicyActionIntent(BaseModel):
 
 
 class UiPolicyIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     policy_name: str
@@ -160,13 +162,15 @@ def _ui_policy_intent(changes: list[CandidateChange]) -> UiPolicyIntent:
     if policy_change.operation != "insert":
         raise ValueError("UI Policy handoff supports policy insert only")
     policy_fields = dict(policy_change.fields)
-    policy_name = str(
-        policy_fields.get("short_description")
-        or policy_fields.get("policy_name")
-        or policy_fields.get("name")
-        or ""
+    policy_name = _ui_policy_first_text(
+        policy_fields.get("short_description"),
+        policy_fields.get("policy_name"),
+        policy_fields.get("name"),
     )
-    target_table = str(policy_fields.get("table") or policy_fields.get("target_table") or "")
+    target_table = _ui_policy_first_text(
+        policy_fields.get("table"),
+        policy_fields.get("target_table"),
+    )
     actions = [
         _ui_policy_action_intent(
             change,
@@ -178,16 +182,21 @@ def _ui_policy_intent(changes: list[CandidateChange]) -> UiPolicyIntent:
     return UiPolicyIntent(
         target_table=target_table,
         policy_name=policy_name,
-        conditions=str(policy_fields.get("conditions") or policy_fields.get("condition") or ""),
-        reverse_if_false=bool_value(policy_fields.get("reverse_if_false")),
-        run_scripts=bool_value(policy_fields.get("run_scripts")),
-        active=bool_value(policy_fields.get("active"), default=True),
-        on_load=bool_value(policy_fields.get("on_load")),
+        conditions=_ui_policy_first_text(
+            policy_fields.get("conditions"),
+            policy_fields.get("condition"),
+        ),
+        reverse_if_false=bool_value(
+            _ui_policy_first_text(policy_fields.get("reverse_if_false"))
+        ),
+        run_scripts=bool_value(_ui_policy_first_text(policy_fields.get("run_scripts"))),
+        active=bool_value(_ui_policy_first_text(policy_fields.get("active")), default=True),
+        on_load=bool_value(_ui_policy_first_text(policy_fields.get("on_load"))),
         order=_int_value(policy_fields.get("order"), default=100),
-        description=str(policy_fields.get("description") or ""),
-        view=str(policy_fields.get("view") or ""),
-        script_true=str(policy_fields.get("script_true") or ""),
-        script_false=str(policy_fields.get("script_false") or ""),
+        description=_ui_policy_first_text(policy_fields.get("description")),
+        view=_ui_policy_first_text(policy_fields.get("view")),
+        script_true=_ui_policy_first_text(policy_fields.get("script_true")),
+        script_false=_ui_policy_first_text(policy_fields.get("script_false")),
         actions=actions,
     )
 
@@ -202,16 +211,26 @@ def _ui_policy_action_intent(
         raise ValueError("UI Policy handoff supports action insert only")
     fields = dict(change.fields)
     disabled_value = fields.get("disabled")
-    if str(disabled_value if disabled_value is not None else "").strip().lower() in {"", "ignore"}:
+    if _ui_policy_first_text(disabled_value).strip().lower() in {"", "ignore"}:
         disabled_value = fields.get("read_only", disabled_value)
     return UiPolicyActionIntent(
-        policy_name=str(fields.get("policy_name") or fields.get("ui_policy_name") or policy_name),
-        target_table=str(fields.get("table") or fields.get("target_table") or policy_target_table),
-        field=str(fields.get("field") or fields.get("field_name") or ""),
+        policy_name=_ui_policy_first_text(
+            fields.get("policy_name"),
+            fields.get("ui_policy_name"),
+            policy_name,
+        ),
+        target_table=_ui_policy_first_text(
+            fields.get("table"),
+            fields.get("target_table"),
+            policy_target_table,
+        ),
+        field=_ui_policy_first_text(fields.get("field"), fields.get("field_name")),
         mandatory=_tristate(fields.get("mandatory")),
         visible=_tristate(fields.get("visible")),
         disabled=_tristate(disabled_value),
-        cleared=bool_value(fields.get("cleared", fields.get("clear_value"))),
+        cleared=bool_value(
+            _ui_policy_first_text(fields.get("cleared", fields.get("clear_value")))
+        ),
     )
 
 
@@ -313,7 +332,7 @@ def _stable_sys_id(value: str) -> str:
 
 def _int_value(value: Any, *, default: int) -> int:
     try:
-        return int(str(value).strip())
+        return int(_ui_policy_first_text(value).strip())
     except ValueError:
         return default
 
@@ -321,7 +340,25 @@ def _int_value(value: Any, *, default: int) -> int:
 def _tristate(value: Any) -> str:
     if isinstance(value, bool):
         return bool_text(value)
-    text = str(value if value is not None else "ignore").strip().lower()
+    text = _ui_policy_first_text(value, "ignore").strip().lower()
     if text in {"", "none", "leave alone"}:
         return "ignore"
     return text
+
+
+def _ui_policy_first_text(*values: Any) -> str:
+    for value in values:
+        text = _ui_policy_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _ui_policy_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC)

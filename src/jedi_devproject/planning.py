@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.models import Story, UpdateSetCandidate
 from jedi_devproject.safety import EligibilityDecision, EligibilityResult
 
 
 class RepointingSuggestion(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     original_points: float
     suggested_points: float
@@ -14,6 +16,8 @@ class RepointingSuggestion(BaseModel):
 
 
 class RunMetrics(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     eligible: int
     manual_review: int
     rejected: int

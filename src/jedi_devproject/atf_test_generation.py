@@ -24,9 +24,12 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from jedi_devproject.models import CandidateChange, UpdateSetCandidate
-from jedi_devproject.validation_helpers import bool_value, stable_record_sys_id, string_list
+from jedi_devproject.validation_helpers import stable_record_sys_id
 
 ATF_TEST_PLAN_SCHEMA_VERSION: Final = "atf-test-plan-v1"
+ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC: Final = (
+    "ATF test plan generation field contains non-JSON value"
+)
 
 # Declarative out-of-box ATF step config display names this generator assumes.
 # These are sys_atf_step_config records whose sys_ids vary by instance
@@ -62,7 +65,7 @@ _EQUALITY_CONDITION_PATTERN = re.compile(
 class AtfStepCandidate(BaseModel):
     """One proposed ``sys_atf_step`` record inside a proposed test."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     sys_id: str
     order: int = Field(ge=1)
@@ -82,7 +85,7 @@ class AtfStepCandidate(BaseModel):
 class AtfTestCandidate(BaseModel):
     """One proposed ``sys_atf_test`` record with its ordered steps."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     sys_id: str
     name: str
@@ -101,7 +104,7 @@ class AtfTestCandidate(BaseModel):
 class AtfNotCoveredChange(BaseModel):
     """A candidate change the generator explicitly declines to cover."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: str
     operation: str
@@ -112,7 +115,7 @@ class AtfNotCoveredChange(BaseModel):
 class AtfTestPlan(BaseModel):
     """Reviewable ATF test plan derived from one Update Set candidate."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     schema_version: Literal["atf-test-plan-v1"] = ATF_TEST_PLAN_SCHEMA_VERSION
     story_number: str
@@ -441,7 +444,7 @@ class _PlanBuilder:
                     )
                     continue
                 states: dict[str, bool] = {"visible": True}
-                if bool_value(variable_change.fields.get("mandatory")):
+                if _atf_bool_value(variable_change.fields.get("mandatory")):
                     states["mandatory"] = True
                 variable_states[variable_name] = states
             if variable_states:
@@ -501,7 +504,7 @@ class _PlanBuilder:
             return
         target_table = _text(change.fields, "collection", "table")
         rule_name = _text(change.fields, "name")
-        fields_written = string_list(change.fields.get("fields_written"))
+        fields_written = _atf_string_list(change.fields.get("fields_written"))
         if not target_table or not rule_name:
             self._record_not_covered(
                 change,
@@ -531,14 +534,14 @@ class _PlanBuilder:
                 "rule's condition is met."
             )
         runs_on_insert = (
-            bool_value(change.fields.get("action_insert"))
-            or bool_value(change.fields.get("insert"))
-            or bool_value(change.fields.get("operation_insert"))
+            _atf_bool_value(change.fields.get("action_insert"))
+            or _atf_bool_value(change.fields.get("insert"))
+            or _atf_bool_value(change.fields.get("operation_insert"))
         )
         runs_on_update = (
-            bool_value(change.fields.get("action_update"))
-            or bool_value(change.fields.get("update"))
-            or bool_value(change.fields.get("operation_update"))
+            _atf_bool_value(change.fields.get("action_update"))
+            or _atf_bool_value(change.fields.get("update"))
+            or _atf_bool_value(change.fields.get("operation_update"))
         )
         test_name = f"ATF {self._candidate.story_number} business rule {rule_name}"
         factory = _StepFactory(test_name)
@@ -712,10 +715,35 @@ class _PlanBuilder:
 
 def _text(fields: dict[str, Any], *keys: str) -> str:
     for key in keys:
-        value = str(fields.get(key) or "").strip()
+        value = _atf_field_text(fields.get(key)).strip()
         if value:
             return value
     return ""
+
+
+def _atf_string_list(value: Any, *, ignore_none_token: bool = False) -> list[str]:
+    if type(value) is list:
+        return [text for item in value if (text := _atf_field_text(item).strip())]
+    text = _atf_field_text(value).strip()
+    if not text or (ignore_none_token and text.lower() == "none"):
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _atf_bool_value(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return _atf_field_text(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _atf_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC)
 
 
 def _action_states(
@@ -746,7 +774,7 @@ def _action_states(
 
 def _tristate(fields: dict[str, Any], *keys: str) -> str:
     for key in keys:
-        value = str(fields.get(key) if fields.get(key) is not None else "").strip().lower()
+        value = _atf_field_text(fields.get(key)).strip().lower()
         if value in {_TRISTATE_TRUE, _TRISTATE_FALSE}:
             return value
     return "ignore"
@@ -776,7 +804,7 @@ def _equality_conditions(conditions: str) -> tuple[dict[str, str], list[str]]:
         if match is None or not (match.group("value") or "").strip():
             unconverted.append(term)
             continue
-        values[match.group("field")] = str(match.group("value")).strip()
+        values[match.group("field")] = (match.group("value") or "").strip()
     return values, unconverted
 
 

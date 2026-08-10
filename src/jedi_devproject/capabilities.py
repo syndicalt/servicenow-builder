@@ -44,7 +44,7 @@ class SuitabilityOutcome(StrEnum):
 
 
 class FieldFormIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     field_label: str
@@ -84,7 +84,7 @@ class FieldFormIntent(BaseModel):
 
 
 class CapabilityProfile(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     capability: Capability
     status: str
@@ -101,7 +101,7 @@ class CapabilityProfile(BaseModel):
 
 
 class StoryCapabilityAssessment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     story_number: str
     outcome: SuitabilityOutcome

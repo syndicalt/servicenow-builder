@@ -6,9 +6,30 @@ from unittest.mock import patch
 
 import pytest
 
+from jedi_devproject import cli_delivery, cli_io, cli_pipeline
 from jedi_devproject.cli import main
+from jedi_devproject.external_build import SuccessfulBuildRequiredError
 from jedi_devproject.models import DataClassification, Story
 from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
+
+
+class _CliOperationalStore:
+    def __init__(self, *, ready: bool = True) -> None:
+        self.ready = ready
+        self.entered = False
+        self.exited = False
+        self.verified = 0
+
+    def __enter__(self) -> "_CliOperationalStore":
+        self.entered = True
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.exited = True
+
+    def verify_schema_ready(self) -> bool:
+        self.verified += 1
+        return self.ready
 
 
 def _sha256(path: Path) -> str:
@@ -30,6 +51,75 @@ def test_cli_without_arguments_prints_help(capsys: pytest.CaptureFixture[str]) -
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "usage: jedi-devproject" in captured.out
+
+
+def test_cli_init_operational_store_verifies_schema_without_echoing_database_url(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    database_url = "postgresql://jedi:secret-password@db.example.invalid:5432/jedi"
+    env_path.write_text(
+        "\n".join(
+            [
+                f"DATABASE_URL={database_url}",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    store = _CliOperationalStore()
+    seen_database_urls: list[str] = []
+
+    def connect(database_url_value: str) -> _CliOperationalStore:
+        seen_database_urls.append(database_url_value)
+        return store
+
+    with patch("jedi_devproject.cli.connect_operational_store", connect):
+        exit_code = main(["init-operational-store", "--env-file", str(env_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert store.entered is True
+    assert store.exited is True
+    assert store.verified == 1
+    assert seen_database_urls == [database_url]
+    assert "operational_store_schema_ready=true" in captured.out
+    assert "postgresql://" not in captured.out
+    assert "secret-password" not in captured.out
+
+
+def test_cli_init_operational_store_fails_when_schema_is_not_ready(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://jedi:secret-password@db.example.invalid:5432/jedi",
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+                f"JEDI_AUDIT_ROOT={tmp_path}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    store = _CliOperationalStore(ready=False)
+
+    with patch("jedi_devproject.cli.connect_operational_store", lambda _database_url: store):
+        exit_code = main(["init-operational-store", "--env-file", str(env_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert store.verified == 1
+    assert "operational_store_schema_ready=false" in captured.out
+    assert "postgresql://" not in captured.out
+    assert "secret-password" not in captured.out
 
 
 def test_cli_run_local_processes_sample_stories(
@@ -266,6 +356,55 @@ def test_cli_build_implementation_packet_fails_closed_when_pdi_story_missing(
     assert "implementation_packets=0" in captured.out
     assert "reason=no_stories_found" in captured.out
     assert "client-secret" not in captured.out
+
+
+def test_cli_build_implementation_packet_rejects_story_collection_subclass_without_leak(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class SecretBearingStories(list[Story]):
+        def __len__(self) -> int:
+            raise AssertionError("client_secret=cli-packet-stories-len-secret")
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "implementation-packets"
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = SecretBearingStories(fake_client.stories)
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "build-implementation-packet",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STRY0010013",
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "packet-run-unsafe",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "implementation_packets=0" in captured.out
+    assert "reason=story_lookup_result_unsafe" in captured.out
+    assert not artifact_root.exists()
+    assert "SecretBearingStories" not in captured.out
+    assert "cli-packet-stories-len-secret" not in captured.out
+    assert "client_secret" not in captured.out
 
 
 def test_cli_build_implementation_candidate_writes_validated_candidate_artifact(
@@ -789,6 +928,96 @@ def test_cli_run_implementation_candidates_isolates_failed_jobs(
     assert "abc123" not in serialized_report
 
 
+class UnstringifiableCliBatchError(ValueError):
+    def __str__(self) -> str:
+        raise ValueError("client-secret-value")
+
+
+def test_cli_run_implementation_candidates_records_unstringifiable_blocked_reason_safely(
+    tmp_path: Path,
+) -> None:
+    story_path = tmp_path / "story.json"
+    provider_response_path = tmp_path / "provider-response.json"
+    jobs_path = tmp_path / "implementation-jobs.json"
+    artifact_root = tmp_path / "implementation-candidates"
+    batch_report_root = tmp_path / "implementation-candidate-batches"
+    story_path.write_text(
+        json.dumps(
+            {
+                "sys_id": "abc123",
+                "number": "STRY0010014",
+                "short_description": "Add implementation notes to the story form",
+                "description": "Create a string field named u_ai_review_notes on rm_story.",
+                "story_points": 3,
+                "priority": 4,
+                "state": "Ready",
+                "data_classification": "public",
+                "acceptance_criteria": "The field appears on the default story form.",
+                "affected_tables": ["sys_dictionary", "sys_ui_form"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    provider_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [],
+                "test_plan": ["Confirm no candidate is produced."],
+                "rollback_notes": ["No rollback required."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    jobs_path.write_text(
+        json.dumps(
+            [
+                {
+                    "sample_file": str(story_path),
+                    "provider_response_file": str(provider_response_path),
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def fail_build_offline_implementation_candidate(*args: object, **kwargs: object) -> object:
+        raise UnstringifiableCliBatchError
+
+    with patch.object(
+        cli_pipeline,
+        "_build_offline_implementation_candidate",
+        fail_build_offline_implementation_candidate,
+    ):
+        exit_code = main(
+            [
+                "run-implementation-candidates",
+                "--jobs-file",
+                str(jobs_path),
+                "--artifact-root",
+                str(artifact_root),
+                "--batch-report-root",
+                str(batch_report_root),
+                "--run-id",
+                "candidate-batch-unstringifiable",
+            ]
+        )
+
+    report = json.loads(
+        (batch_report_root / "candidate-batch-unstringifiable.json").read_text(encoding="utf-8")
+    )
+
+    assert exit_code == 1
+    assert report["summary"] == {"total": 1, "built": 0, "blocked": 1}
+    assert report["outcomes"] == [
+        {
+            "story_number": "STRY0010014",
+            "status": "blocked",
+            "reason": "CLI batch raised unstringifiable UnstringifiableCliBatchError",
+        }
+    ]
+    assert "client-secret-value" not in json.dumps(report)
+
+
 def test_cli_run_lifecycle_smoke_builds_artifacts_and_plans_writeback(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -937,6 +1166,73 @@ def test_cli_run_lifecycle_smoke_fails_closed_when_story_missing(
     assert not artifact_root.exists()
 
 
+def test_cli_run_lifecycle_smoke_rejects_story_collection_subclass_without_leak(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class SecretBearingStories(list[Story]):
+        def __bool__(self) -> bool:
+            raise AssertionError("client_secret=cli-lifecycle-stories-bool-secret")
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    provider_response_path = tmp_path / "provider-response.json"
+    provider_response_path.write_text(
+        json.dumps(
+            {
+                "changes": [],
+                "test_plan": ["Confirm no implementation was generated."],
+                "rollback_notes": ["No rollback required."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "artifacts"
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = SecretBearingStories(fake_client.stories)
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "run-lifecycle-smoke",
+                "--env-file",
+                str(env_path),
+                "--story-number",
+                "STORY0010001",
+                "--provider-response-file",
+                str(provider_response_path),
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "lifecycle-smoke-unsafe",
+                "--build-reference",
+                "build-lifecycle-smoke-unsafe",
+                "--from-state",
+                "Ready",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "packet_built=0" in captured.out
+    assert "candidate_built=0" in captured.out
+    assert "reason=story_lookup_result_unsafe" in captured.out
+    assert not artifact_root.exists()
+    assert "SecretBearingStories" not in captured.out
+    assert "cli-lifecycle-stories-bool-secret" not in captured.out
+    assert "client_secret" not in captured.out
+
+
 class FakeServiceNowClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
@@ -945,6 +1241,7 @@ class FakeServiceNowClient:
         self.upserted_table_records: list[dict[str, object]] = []
         self.table_records: dict[str, dict[str, object]] = {}
         self.attached_files: list[dict[str, object]] = []
+        self.attachment_response_sys_id: object = None
         self.ai_status = "Ready for Testing"
         self.build_reference = "build-20260513-001"
         self.candidate_artifact = "artifacts/STORY0010001.json"
@@ -1130,6 +1427,8 @@ class FakeServiceNowClient:
             "content_type": content_type,
         }
         self.attached_files.append(payload)
+        if self.attachment_response_sys_id is not None:
+            return {"sys_id": self.attachment_response_sys_id}
         return {"sys_id": f"attachment-{len(self.attached_files)}"}
 
 
@@ -1215,6 +1514,58 @@ def test_cli_run_pdi_uses_optional_sysparm_query(
     assert exit_code == 0
     assert fake_client.calls[0] == {"sysparm_query": "active=true", "limit": 1}
     assert "stories_processed=1" in capsys.readouterr().out
+
+
+def test_cli_run_pdi_rejects_story_collection_subclass_without_leak(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class SecretBearingStories(list[Story]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=cli-run-pdi-stories-iter-secret")
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "artifacts"
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = SecretBearingStories(fake_client.stories)
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "run-pdi",
+                "--env-file",
+                str(env_path),
+                "--artifact-root",
+                str(artifact_root),
+                "--run-id",
+                "run-unsafe",
+                "--limit",
+                "1",
+                "--sysparm-query",
+                "active=true",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "stories_processed=0" in captured.out
+    assert "generated_candidates=0" in captured.out
+    assert "reason=story_lookup_result_unsafe" in captured.out
+    assert not artifact_root.exists()
+    assert "SecretBearingStories" not in captured.out
+    assert "cli-run-pdi-stories-iter-secret" not in captured.out
+    assert "client_secret" not in captured.out
 
 
 def test_cli_plan_writeback_dry_run_uses_instance_state_mapping_without_mutation(
@@ -1810,6 +2161,39 @@ def test_cli_process_external_build_result_writes_writeback_and_delivery_jobs(
     assert "sys_id" not in json.dumps({"writeback": writeback_jobs, "delivery": delivery_jobs})
 
 
+def test_cli_process_external_build_result_redacts_invalid_input_path_details(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_io, "CLI_JSON_INPUT_MAX_BYTES", 4, raising=False)
+    result_path = tmp_path / "client_secret=external-build-secret.json"
+    result_path.write_text('{"ok": true}', encoding="utf-8")
+
+    exit_code = main(
+        [
+            "process-external-build-result",
+            "--result-file",
+            str(result_path),
+            "--from-state",
+            "Work in Progress",
+            "--run-id",
+            "external-build-redaction",
+            "--writeback-job-root",
+            str(tmp_path / "writeback-jobs"),
+            "--delivery-job-root",
+            str(tmp_path / "delivery-jobs"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "external_build_results=0" in captured.out
+    assert "json_input_too_large" in captured.out
+    assert "external-build-secret" not in captured.out
+    assert "client_secret=" not in captured.out
+
+
 def test_cli_process_failed_external_build_result_writes_only_writeback_job(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -1857,6 +2241,65 @@ def test_cli_process_failed_external_build_result_writes_only_writeback_job(
     assert "reviewed_delivery_jobs=0" in captured.out
     assert writeback_jobs[0]["build_status"] == "failed"
     assert not (delivery_root / "external-build-001.json").exists()
+
+
+def test_cli_process_external_build_result_uses_typed_successful_build_requirement(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_path = tmp_path / "candidate.json"
+    candidate_path.write_text('{"story_number":"STRY0010013"}', encoding="utf-8")
+    result_path = tmp_path / "build-result.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "story_number": "STRY0010013",
+                "build_reference": "build-20260513-010",
+                "status": "failed",
+                "candidate_artifact_path": str(candidate_path),
+                "build_actor_id": "external-builder",
+                "failure_reasons": ["unit tests failed"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    writeback_root = tmp_path / "writeback-jobs"
+    delivery_root = tmp_path / "delivery-jobs"
+
+    def require_successful_build(_result: object) -> list[dict[str, object]]:
+        raise SuccessfulBuildRequiredError("not-the-legacy-sentinel")
+
+    monkeypatch.setattr(
+        cli_delivery,
+        "reviewed_delivery_jobs_from_build_result",
+        require_successful_build,
+    )
+
+    exit_code = main(
+        [
+            "process-external-build-result",
+            "--result-file",
+            str(result_path),
+            "--from-state",
+            "Work in Progress",
+            "--run-id",
+            "external-build-typed",
+            "--writeback-job-root",
+            str(writeback_root),
+            "--delivery-job-root",
+            str(delivery_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    writeback_jobs = json.loads((writeback_root / "external-build-typed.json").read_text())
+
+    assert exit_code == 0
+    assert "writeback_jobs=1" in captured.out
+    assert "reviewed_delivery_jobs=0" in captured.out
+    assert writeback_jobs[0]["build_status"] == "failed"
+    assert not (delivery_root / "external-build-typed.json").exists()
 
 
 def test_cli_process_lifecycle_event_writes_story_ready_plan(
@@ -2251,6 +2694,126 @@ def test_cli_write_artifact_handoff_summary_dry_run_does_not_mutate(
     assert fake_client.updated_fields == []
 
 
+def test_cli_write_artifact_handoff_summary_rejects_non_string_story_number(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": 12345,
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 0,
+                    "internal_evidence": 1,
+                    "delivery_evidence": 0,
+                },
+                "decisions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "write-artifact-handoff-summary",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "handoff_summary_written=False" in captured.out
+    assert "reason=artifact_handoff_report_invalid" in captured.out
+    assert "12345" not in captured.out
+    assert fake_client.updated_fields == []
+
+
+def test_cli_write_artifact_handoff_summary_rejects_story_collection_subclass_without_leak(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class SecretBearingStories(list[Story]):
+        def __len__(self) -> int:
+            raise RuntimeError("client_secret=cli-handoff-stories-len-secret")
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 0,
+                    "internal_evidence": 1,
+                    "delivery_evidence": 0,
+                },
+                "decisions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = SecretBearingStories(fake_client.stories)
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "write-artifact-handoff-summary",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "handoff_summary_written=False" in captured.out
+    assert "reason=story_lookup_result_unsafe" in captured.out
+    assert fake_client.updated_fields == []
+    assert "SecretBearingStories" not in captured.out
+    assert "cli-handoff-stories-len-secret" not in captured.out
+    assert "client_secret" not in captured.out
+
+
 def test_cli_attach_delivery_artifacts_dry_run_does_not_attach(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -2312,6 +2875,140 @@ def test_cli_attach_delivery_artifacts_dry_run_does_not_attach(
     assert "delivery_attachments_planned=1" in captured.out
     assert "delivery_attachments_applied=0" in captured.out
     assert fake_client.attached_files == []
+
+
+def test_cli_attach_delivery_artifacts_rejects_non_string_story_number(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": 12345,
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
+                        "artifact_sha256": _sha256(export_path),
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "delivery_attachments_planned=0" in captured.out
+    assert "delivery_attachments_applied=0" in captured.out
+    assert "reason=artifact_handoff_report_invalid" in captured.out
+    assert "12345" not in captured.out
+    assert fake_client.attached_files == []
+
+
+def test_cli_attach_delivery_artifacts_hash_check_uses_streaming_read(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    reviewed_hash = _sha256(export_path)
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
+                        "artifact_sha256": reviewed_hash,
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fail_read_bytes(self: Path) -> bytes:
+        raise AssertionError(f"unexpected whole-file read for {self}")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+
+    exit_code = main(
+        [
+            "attach-delivery-artifacts",
+            "--env-file",
+            str(env_path),
+            "--report-file",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "delivery_attachments_applied=0" in captured.out
+    assert "dry_run=True" in captured.out
 
 
 def test_cli_attach_delivery_artifacts_requires_confirmation_to_apply(
@@ -2398,6 +3095,168 @@ def test_cli_attach_delivery_artifacts_requires_confirmation_to_apply(
     assert audit["attachments"][0]["attachment_sys_id"] == "attachment-1"
     assert fake_client.updated_fields == []
     assert "abc123" not in captured.out
+
+
+def test_cli_attach_delivery_artifacts_rejects_story_collection_subclass_without_leak(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class SecretBearingStories(list[Story]):
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=cli-attachment-stories-bool-secret")
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
+                        "artifact_sha256": _sha256(export_path),
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.stories = SecretBearingStories(fake_client.stories)
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+                "--audit-root",
+                str(tmp_path / "attachment-audit"),
+                "--run-id",
+                "attach-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "delivery_attachments_applied=0" in captured.out
+    assert "reason=story_lookup_result_unsafe" in captured.out
+    assert fake_client.attached_files == []
+    assert list((tmp_path / "attachment-audit").glob("*.json")) == []
+    assert "SecretBearingStories" not in captured.out
+    assert "cli-attachment-stories-bool-secret" not in captured.out
+    assert "client_secret" not in captured.out
+
+
+class HostileAttachmentSysId:
+    def __str__(self) -> str:
+        raise ValueError("attachment-sys-id-secret")
+
+
+def test_cli_attach_delivery_artifacts_audit_rejects_malformed_attachment_sys_id(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "STRY0010013.xml"
+    export_path.write_text("<unload/>", encoding="utf-8")
+    report_path = tmp_path / "handoff-001.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "run_id": "handoff-001",
+                "story_number": "STORY0010001",
+                "summary": {
+                    "total": 1,
+                    "attach_to_servicenow": 1,
+                    "internal_evidence": 0,
+                    "delivery_evidence": 1,
+                },
+                "decisions": [
+                    {
+                        "artifact_kind": "update_set_xml",
+                        "artifact_path": str(export_path),
+                        "attach_to_servicenow": True,
+                        "delivery_contract": "reviewed_export",
+                        "artifact_sha256": _sha256(export_path),
+                        "service_now_attachment_label": "Approved Update Set XML",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_client = FakeServiceNowClient()
+    fake_client.attachment_response_sys_id = HostileAttachmentSysId()
+
+    with patch("jedi_devproject.cli.servicenow_client_from_env", return_value=fake_client):
+        exit_code = main(
+            [
+                "attach-delivery-artifacts",
+                "--env-file",
+                str(env_path),
+                "--report-file",
+                str(report_path),
+                "--apply",
+                "--confirm-story-number",
+                "STORY0010001",
+                "--actor-id",
+                "svc-jedi-orchestrator",
+                "--audit-root",
+                str(tmp_path / "attachment-audit"),
+                "--run-id",
+                "attach-001",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    audit = json.loads((tmp_path / "attachment-audit" / "attach-001.json").read_text())
+
+    assert exit_code == 0
+    assert "delivery_attachments_applied=1" in captured.out
+    assert "attachment-sys-id-secret" not in captured.out
+    assert audit["attachments"][0]["attachment_sys_id"] == "[attachment sys_id unavailable]"
 
 
 def test_cli_attach_delivery_artifacts_dry_run_blocks_hash_mismatch(
@@ -2782,6 +3641,33 @@ def test_cli_run_delivery_artifact_smoke_creates_placeholder_and_plans_attachmen
     assert "sys_id" not in json.dumps(report)
 
 
+def test_cli_run_delivery_artifact_smoke_rejects_broken_symlink_export(
+    tmp_path: Path,
+) -> None:
+    artifact_root = tmp_path / "delivery-smoke"
+    export_dir = artifact_root / "exports" / "delivery-smoke-001"
+    export_dir.mkdir(parents=True)
+    outside_path = tmp_path / "escape.xml"
+    export_link = export_dir / "STRY0010013.xml"
+    export_link.symlink_to(outside_path)
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "run-delivery-artifact-smoke",
+                "--run-id",
+                "delivery-smoke-001",
+                "--story-number",
+                "STRY0010013",
+                "--artifact-root",
+                str(artifact_root),
+            ]
+        )
+
+    assert export_link.is_symlink()
+    assert not outside_path.exists()
+
+
 def test_cli_run_reviewed_delivery_smoke_creates_reviewed_handoff_path(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -2836,6 +3722,35 @@ def test_cli_run_reviewed_delivery_smoke_creates_reviewed_handoff_path(
     }
     assert "sys_id" not in json.dumps(report)
     assert "sys_id" not in json.dumps(manifest)
+
+
+def test_cli_run_reviewed_delivery_smoke_rejects_broken_symlink_export(
+    tmp_path: Path,
+) -> None:
+    artifact_root = tmp_path / "reviewed-delivery-smoke"
+    export_dir = artifact_root / "exports" / "reviewed-delivery-smoke-001"
+    export_dir.mkdir(parents=True)
+    outside_path = tmp_path / "escape.xml"
+    export_link = export_dir / "STRY0010013.xml"
+    export_link.symlink_to(outside_path)
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "run-reviewed-delivery-smoke",
+                "--run-id",
+                "reviewed-delivery-smoke-001",
+                "--story-number",
+                "STRY0010013",
+                "--reviewer-id",
+                "release-coordinator",
+                "--artifact-root",
+                str(artifact_root),
+            ]
+        )
+
+    assert export_link.is_symlink()
+    assert not outside_path.exists()
 
 
 def test_cli_verify_writeback_fails_when_remote_story_does_not_match(
@@ -3191,6 +4106,48 @@ def test_cli_apply_lifecycle_webhook_requires_confirmation_without_mutation(
     assert "reason=lifecycle_webhook_confirmation_required" in captured.out
     assert fake_client.upserted_table_records == []
     assert not (tmp_path / "bootstrap-audit" / "lifecycle-webhook-apply-001.json").exists()
+
+
+def test_cli_apply_lifecycle_webhook_redacts_invalid_spec_path_details(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_io, "CLI_JSON_INPUT_MAX_BYTES", 4, raising=False)
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SERVICENOW_INSTANCE_URL=https://dev205693.service-now.com",
+                "SERVICENOW_CLIENT_ID=client-id",
+                "SERVICENOW_CLIENT_SECRET=client-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    spec_path = tmp_path / "client_secret=lifecycle-spec-secret.json"
+    spec_path.write_text('{"ok": true}', encoding="utf-8")
+
+    exit_code = main(
+        [
+            "apply-lifecycle-webhook",
+            "--env-file",
+            str(env_path),
+            "--spec-file",
+            str(spec_path),
+            "--audit-root",
+            str(tmp_path / "bootstrap-audit"),
+            "--run-id",
+            "lifecycle-webhook-redaction",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "lifecycle_webhook_applied=False" in captured.out
+    assert "json_input_too_large" in captured.out
+    assert "lifecycle-spec-secret" not in captured.out
+    assert "client_secret=" not in captured.out
 
 
 def test_cli_apply_lifecycle_webhook_upserts_records_and_writes_audit(

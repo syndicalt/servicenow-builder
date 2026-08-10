@@ -5,7 +5,6 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from jedi_devproject.validation_helpers import reference_value
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     bool_element,
@@ -14,6 +13,11 @@ from jedi_devproject.xml_builder import (
     reference_qualifier_elements,
     text_element,
 )
+
+DICTIONARY_FORM_METADATA_NON_JSON_DIAGNOSTIC = (
+    "dictionary/form metadata field contains non-JSON value"
+)
+DICTIONARY_FORM_METADATA_MISSING_DIAGNOSTIC = "dictionary/form metadata field is missing"
 
 
 class DictionaryFormMetadataClient(Protocol):
@@ -28,7 +32,7 @@ class DictionaryFormMetadataClient(Protocol):
 
 
 class DictionaryFormIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     field_label: str
@@ -104,11 +108,13 @@ def _form_updates(
     intent: DictionaryFormIntent,
     remote_update_set_sys_id: str,
 ) -> list[dict[str, Any]]:
-    sections = client.fetch_table_records(
-        table="sys_ui_section",
-        lookup={"name": intent.target_table},
-        fields=["sys_id", "name", "caption", "view", "sys_user"],
-        limit=100,
+    sections = _dictionary_form_metadata_records(
+        client.fetch_table_records(
+            table="sys_ui_section",
+            lookup={"name": intent.target_table},
+            fields=["sys_id", "name", "caption", "view", "sys_user"],
+            limit=100,
+        )
     )
     updates: list[dict[str, Any]] = []
     anchor_found = False
@@ -116,11 +122,13 @@ def _form_updates(
         if not _is_global_main_view_section(section):
             continue
         section_sys_id = reference_value(section.get("sys_id"))
-        elements = client.fetch_table_records(
-            table="sys_ui_element",
-            lookup={"name": intent.target_table, "sys_ui_section": section_sys_id},
-            fields=["sys_id", "element", "position"],
-            limit=200,
+        elements = _dictionary_form_metadata_records(
+            client.fetch_table_records(
+                table="sys_ui_element",
+                lookup={"name": intent.target_table, "sys_ui_section": section_sys_id},
+                fields=["sys_id", "element", "position"],
+                limit=200,
+            )
         )
         insert_position = _insert_position(elements=elements, intent=intent)
         anchor_found = anchor_found or insert_position is not None
@@ -155,6 +163,17 @@ def _form_updates(
     return updates
 
 
+def _dictionary_form_metadata_records(value: Any) -> list[dict[str, Any]]:
+    if type(value) is not list:
+        raise ValueError(DICTIONARY_FORM_METADATA_NON_JSON_DIAGNOSTIC)
+    records: list[dict[str, Any]] = []
+    for record in value:
+        if type(record) is not dict:
+            raise ValueError(DICTIONARY_FORM_METADATA_NON_JSON_DIAGNOSTIC)
+        records.append(record)
+    return records
+
+
 def _insert_position(
     *,
     elements: list[dict[str, Any]],
@@ -166,7 +185,7 @@ def _insert_position(
     anchor_positions = [
         _record_position(record)
         for record in elements
-        if str(record.get("element") or "") == intent.placement_anchor
+        if _metadata_text(record.get("element")) == intent.placement_anchor
     ]
     if len(anchor_positions) != 1:
         return None
@@ -184,12 +203,12 @@ def _is_global_main_view_section(section: dict[str, Any]) -> bool:
     if reference_value(section.get("caption")).strip() != "":
         return False
     view = section.get("view")
-    if isinstance(view, dict):
-        display_value = str(view.get("display_value") or "").strip().lower()
-        reference = str(view.get("value") or "").strip().lower()
+    if type(view) is dict:
+        display_value = _metadata_text(view.get("display_value")).strip().lower()
+        reference = _metadata_text(view.get("value")).strip().lower()
         values = {display_value or reference}
     else:
-        values = {str(view or "").strip().lower()}
+        values = {_metadata_text(view).strip().lower()}
     return bool(values.intersection({"", "default", "default view", "scrum"}))
 
 
@@ -202,7 +221,7 @@ def _form_elements_with_inserted_field(
     planned: list[dict[str, str]] = []
     inserted = False
     for record in sorted(elements, key=_record_position):
-        element = str(record.get("element") or "")
+        element = _metadata_text(record.get("element"))
         if element == field_element:
             continue
         position = _record_position(record)
@@ -211,7 +230,7 @@ def _form_elements_with_inserted_field(
             inserted = True
         planned.append(
             {
-                "sys_id": reference_value(record.get("sys_id")),
+                "sys_id": required_reference_value(record.get("sys_id")),
                 "element": element,
                 "position": str(position + 1 if position >= insert_position else position),
             }
@@ -294,10 +313,10 @@ def _form_layout_payload(
     caption = reference_value(section.get("caption"))
     view = section.get("view")
     view_name = _view_payload_value(view)
-    if isinstance(view, dict):
-        view_display = str(view.get("display_value") or view.get("value") or "")
+    if type(view) is dict:
+        view_display = _metadata_first_text(view.get("display_value"), view.get("value"))
     else:
-        view_display = str(view or "")
+        view_display = _metadata_text(view)
     section_update_name = f"sys_ui_section_{section_sys_id}"
     element_xml = "".join(
         container_element(
@@ -354,11 +373,11 @@ def _form_layout_payload(
 
 
 def _view_payload_value(view: Any) -> str:
-    if isinstance(view, dict):
-        value = str(view.get("value") or "")
-        display = str(view.get("display_value") or "")
+    if type(view) is dict:
+        value = _metadata_text(view.get("value"))
+        display = _metadata_text(view.get("display_value"))
         return "" if value.lower() in {"default", "default view"} else display or value
-    text = str(view or "")
+    text = _metadata_text(view)
     return "" if text.lower() in {"default", "default view"} else text
 
 
@@ -377,4 +396,36 @@ def _table_label(table_name: str) -> str:
 
 
 def _record_position(record: dict[str, Any]) -> int:
-    return int(str(record.get("position") or "0"))
+    text = _metadata_text(record.get("position")) or "0"
+    return int(text)
+
+
+def reference_value(value: Any) -> str:
+    if type(value) is dict:
+        return _metadata_text(value.get("value"))
+    return _metadata_text(value)
+
+
+def required_reference_value(value: Any) -> str:
+    text = reference_value(value)
+    if text == "":
+        raise ValueError(DICTIONARY_FORM_METADATA_MISSING_DIAGNOSTIC)
+    return text
+
+
+def _metadata_first_text(*values: Any) -> str:
+    for value in values:
+        text = _metadata_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _metadata_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(DICTIONARY_FORM_METADATA_NON_JSON_DIAGNOSTIC)

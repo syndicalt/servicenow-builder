@@ -27,6 +27,7 @@ from jedi_devproject.discovery.fetch import (
     _reference_value,
 )
 from jedi_devproject.discovery.models import InstanceDiscoveryClient
+from jedi_devproject.exception_diagnostics import exception_diagnostic_message
 from jedi_devproject.flow_designer_generation import (
     FlowBuilderReadinessContract,
     FlowRuntimeEvidenceSummary,
@@ -42,6 +43,9 @@ FlowXmlEvidenceStatus = Literal["collected", "validated", "missing", "invalid"]
 FLOW_SNAPSHOT_EVIDENCE_MISSING_REASON = "flow_snapshot_evidence_missing"
 FLOW_SNAPSHOT_EVIDENCE_INVALID_REASON = "flow_snapshot_evidence_invalid"
 FLOW_SNAPSHOT_EVIDENCE_STALE_REASON = "flow_snapshot_evidence_stale_graph_hash_mismatch"
+FLOW_XML_EVIDENCE_RECORDS_NON_JSON_DIAGNOSTIC = (
+    "Flow XML evidence records contain non-JSON value"
+)
 
 _SYS_UPDATE_XML_FIELDS = ["sys_id", "name", "action", "type", "target_name", "payload"]
 _FLOW_RECORD_FIELDS = ["sys_id", "name", "active", "status", "latest_snapshot"]
@@ -49,7 +53,7 @@ _SNAPSHOT_RECORD_FIELDS = ["sys_id", "name", "parent_flow", "note"]
 
 
 class FlowXmlShapeEvidenceRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: str
     customer_update_name: str = ""
@@ -61,7 +65,7 @@ class FlowXmlShapeEvidenceRecord(BaseModel):
 
 
 class FlowSnapshotEvidenceRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     snapshot_table: Literal["sys_hub_flow_snapshot"]
     snapshot_reference_field: Literal["latest_snapshot"]
@@ -73,7 +77,7 @@ class FlowSnapshotEvidenceRecord(BaseModel):
 
 
 class FlowXmlEvidenceBundle(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-xml-evidence-v1"]
     repository_version: Literal["flow-xml-shapes-v1"]
@@ -136,11 +140,13 @@ def collect_flow_xml_evidence(
     cleaned_graph_hash = retrieved_graph_hash.strip().lower()
     if not re.fullmatch(r"[a-f0-9]{32,128}", cleaned_graph_hash):
         raise ValueError("Flow XML evidence retrieved_graph_hash must be a stable hash")
-    flow_records = client.fetch_table_records(
-        table="sys_hub_flow",
-        lookup={"name": cleaned_flow_name},
-        fields=list(_FLOW_RECORD_FIELDS),
-        limit=2,
+    flow_records = _flow_evidence_records(
+        client.fetch_table_records(
+            table="sys_hub_flow",
+            lookup={"name": cleaned_flow_name},
+            fields=list(_FLOW_RECORD_FIELDS),
+            limit=2,
+        )
     )
     if not flow_records:
         raise ValueError(f"Flow XML evidence flow not found: {cleaned_flow_name}")
@@ -223,11 +229,13 @@ def _flow_instance_sys_ids(
     table: str,
     flow_sys_id: str,
 ) -> list[str]:
-    records = client.fetch_table_records(
-        table=table,
-        lookup={"flow": flow_sys_id},
-        fields=["sys_id"],
-        limit=200,
+    records = _flow_evidence_records(
+        client.fetch_table_records(
+            table=table,
+            lookup={"flow": flow_sys_id},
+            fields=["sys_id"],
+            limit=200,
+        )
     )
     sys_ids: list[str] = []
     for record in records:
@@ -255,11 +263,13 @@ def _collect_shape_evidence(
     customer_update_name = ""
     for record_sys_id in record_sys_ids:
         customer_update_name = strategy.customer_update_name(table, record_sys_id)
-        rows = client.fetch_table_records(
-            table="sys_update_xml",
-            lookup={"name": customer_update_name},
-            fields=list(_SYS_UPDATE_XML_FIELDS),
-            limit=1,
+        rows = _flow_evidence_records(
+            client.fetch_table_records(
+                table="sys_update_xml",
+                lookup={"name": customer_update_name},
+                fields=list(_SYS_UPDATE_XML_FIELDS),
+                limit=1,
+            )
         )
         if rows:
             return _validate_shape_row(
@@ -304,7 +314,10 @@ def _validate_shape_row(
             table=table,
             customer_update_name=customer_update_name,
             status="invalid",
-            reason=str(exc),
+            reason=exception_diagnostic_message(
+                exc,
+                fallback_subject="flow xml evidence",
+            ),
             payload_sha256=payload_sha256,
             metadata=metadata,
         )
@@ -345,11 +358,13 @@ def _collect_snapshot_evidence(
             status="invalid",
             reason=f"{FLOW_SNAPSHOT_EVIDENCE_INVALID_REASON}: {exc}",
         )
-    rows = client.fetch_table_records(
-        table="sys_hub_flow_snapshot",
-        lookup={"sys_id": snapshot_sys_id},
-        fields=list(_SNAPSHOT_RECORD_FIELDS),
-        limit=1,
+    rows = _flow_evidence_records(
+        client.fetch_table_records(
+            table="sys_hub_flow_snapshot",
+            lookup={"sys_id": snapshot_sys_id},
+            fields=list(_SNAPSHOT_RECORD_FIELDS),
+            limit=1,
+        )
     )
     if not rows:
         evidence.append("sys_hub_flow_snapshot:missing")
@@ -361,9 +376,27 @@ def _collect_snapshot_evidence(
             snapshot_sys_id=snapshot_sys_id,
         )
     row = rows[0]
-    content_sha256 = hashlib.sha256(
-        json.dumps(row, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()
+    try:
+        snapshot_json = json.dumps(row, sort_keys=True, allow_nan=False)
+    except ValueError:
+        evidence.append("sys_hub_flow_snapshot:invalid")
+        return FlowSnapshotEvidenceRecord(
+            snapshot_table="sys_hub_flow_snapshot",
+            snapshot_reference_field="latest_snapshot",
+            status="invalid",
+            reason=f"{FLOW_SNAPSHOT_EVIDENCE_INVALID_REASON}: non-finite snapshot value",
+            snapshot_sys_id=snapshot_sys_id,
+        )
+    except TypeError:
+        evidence.append("sys_hub_flow_snapshot:invalid")
+        return FlowSnapshotEvidenceRecord(
+            snapshot_table="sys_hub_flow_snapshot",
+            snapshot_reference_field="latest_snapshot",
+            status="invalid",
+            reason=f"{FLOW_SNAPSHOT_EVIDENCE_INVALID_REASON}: non-JSON snapshot value",
+            snapshot_sys_id=snapshot_sys_id,
+        )
+    content_sha256 = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
     evidence.append("sys_hub_flow_snapshot:collected")
     return FlowSnapshotEvidenceRecord(
         snapshot_table="sys_hub_flow_snapshot",
@@ -373,3 +406,12 @@ def _collect_snapshot_evidence(
         content_sha256=content_sha256,
         metadata=_record_metadata(row, exclude=set()),
     )
+
+
+def _flow_evidence_records(records: object) -> list[dict[str, Any]]:
+    if type(records) is not list:
+        raise ValueError(FLOW_XML_EVIDENCE_RECORDS_NON_JSON_DIAGNOSTIC)
+    for record in records:
+        if type(record) is not dict:
+            raise ValueError(FLOW_XML_EVIDENCE_RECORDS_NON_JSON_DIAGNOSTIC)
+    return records

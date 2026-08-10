@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from jedi_devproject.external_build import (
     ExternalBuildPipelineResult,
     ExternalBuildPipelineStatus,
+    SuccessfulBuildRequiredError,
     reviewed_delivery_jobs_from_build_result,
     writeback_job_from_build_result,
 )
@@ -92,7 +93,7 @@ def test_failed_external_build_contract_rejects_delivery_jobs(
     writeback_job = writeback_job_from_build_result(result, from_state="Work in Progress")
 
     assert writeback_job["build_status"] == "failed"
-    with pytest.raises(ValueError, match="successful_build_required"):
+    with pytest.raises(SuccessfulBuildRequiredError):
         reviewed_delivery_jobs_from_build_result(result)
 
 

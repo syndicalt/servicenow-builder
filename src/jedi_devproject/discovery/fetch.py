@@ -15,6 +15,14 @@ from jedi_devproject.discovery.models import (
     SurfaceName,
 )
 
+DISCOVERY_NUMERIC_METADATA_UNSAFE_DIAGNOSTIC = (
+    "dictionary/form discovery numeric metadata is unsafe"
+)
+DISCOVERY_ACTIVE_METADATA_UNSAFE_DIAGNOSTIC = "discovery active metadata is unsafe"
+DISCOVERY_TEXT_METADATA_NON_JSON_DIAGNOSTIC = (
+    "discovery text metadata contains non-JSON value"
+)
+
 
 def _records_surface(
     *,
@@ -25,6 +33,7 @@ def _records_surface(
     required: bool,
     evidence: str,
 ) -> ServiceNowSurfaceContext:
+    safe_records = _surface_records(records)
     return ServiceNowSurfaceContext(
         surface=surface,
         source_table=source_table,
@@ -37,15 +46,15 @@ def _records_surface(
                 summary=_record_summary(record),
                 metadata=_record_metadata(record, exclude={"sys_id", "name", "active"}),
             )
-            for record in records
+            for record in safe_records
         ],
         evidence=[evidence],
-        confidence=0.95 if records else 0.0,
+        confidence=0.95 if safe_records else 0.0,
         citations=[
             {
                 "source_table": source_table,
                 "query": _query_string(lookup),
-                "record_count": str(len(records)),
+                "record_count": str(len(safe_records)),
             }
         ],
     )
@@ -62,11 +71,13 @@ def _table_surface(
     evidence: str,
     limit: int = 100,
 ) -> ServiceNowSurfaceContext:
-    records = client.fetch_table_records(
-        table=source_table,
-        lookup=lookup,
-        fields=fields,
-        limit=limit,
+    records = _surface_records(
+        client.fetch_table_records(
+            table=source_table,
+            lookup=lookup,
+            fields=fields,
+            limit=limit,
+        )
     )
     return ServiceNowSurfaceContext(
         surface=surface,
@@ -92,6 +103,17 @@ def _table_surface(
             }
         ],
     )
+
+
+def _surface_records(value: object) -> list[dict[str, Any]]:
+    if type(value) is not list:
+        raise ValueError(DISCOVERY_TEXT_METADATA_NON_JSON_DIAGNOSTIC)
+    records: list[dict[str, Any]] = []
+    for record in value:
+        if type(record) is not dict:
+            raise ValueError(DISCOVERY_TEXT_METADATA_NON_JSON_DIAGNOSTIC)
+        records.append(record)
+    return records
 
 
 def _empty_surface(
@@ -126,24 +148,50 @@ def _unique_record_values(
 
 
 def _display_or_value(value: object) -> str:
-    if isinstance(value, dict):
-        return str(value.get("display_value") or value.get("value") or "")
-    return str(value or "")
+    if type(value) is dict:
+        display_value = _optional_exact_text(value.get("display_value"))
+        if display_value:
+            return display_value
+        return _optional_exact_text(value.get("value"))
+    return _optional_exact_text(value)
 
 
 def _reference_value(value: object) -> str:
-    if isinstance(value, dict):
-        return str(value.get("value") or value.get("display_value") or "")
-    return str(value or "")
+    if type(value) is dict:
+        record_value = _optional_exact_text(value.get("value"))
+        if record_value:
+            return record_value
+        return _optional_exact_text(value.get("display_value"))
+    return _optional_exact_text(value)
+
+
+def _optional_exact_text(value: object) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    raise ValueError(DISCOVERY_TEXT_METADATA_NON_JSON_DIAGNOSTIC)
 
 
 def _optional_int(value: object) -> int | None:
-    text = str(value or "").strip()
-    return int(text) if text.isdigit() else None
+    if value is None:
+        return None
+    if type(value) is int:
+        return value
+    if type(value) is str:
+        text = value.strip()
+        return int(text) if text.isdigit() else None
+    raise ValueError(DISCOVERY_NUMERIC_METADATA_UNSAFE_DIAGNOSTIC)
 
 
 def _optional_bool(value: object) -> bool | None:
-    text = str(value or "").strip().lower()
+    if value is None:
+        return None
+    if type(value) is bool:
+        return value
+    if type(value) is not str:
+        raise ValueError(DISCOVERY_ACTIVE_METADATA_UNSAFE_DIAGNOSTIC)
+    text = value.strip().lower()
     if text in {"true", "1", "yes"}:
         return True
     if text in {"false", "0", "no"}:
@@ -161,7 +209,7 @@ def _record_name(record: dict[str, Any]) -> str:
         "column_label",
         "element",
     ]:
-        value = str(record.get(field_name) or "").strip()
+        value = _display_or_value(record.get(field_name)).strip()
         if value:
             return value
     return "unnamed"
@@ -169,7 +217,7 @@ def _record_name(record: dict[str, Any]) -> str:
 
 def _record_summary(record: dict[str, Any]) -> str:
     for field_name in ["short_description", "description", "type", "when", "rest_endpoint"]:
-        value = str(record.get(field_name) or "").strip()
+        value = _display_or_value(record.get(field_name)).strip()
         if value:
             if field_name == "rest_endpoint":
                 return _redact_url(value)
@@ -203,8 +251,8 @@ def _minimize_metadata_value(*, key: str, value: Any) -> str:
         "topic",
         "catalog_item",
         "content_type",
-    } and isinstance(value, dict):
-        return str(value.get("value") or value.get("display_value") or "")
+    }:
+        return _reference_value(value)
     text = _display_or_value(value)
     if key in {"rest_endpoint", "endpoint", "url"}:
         return _redact_url(text)

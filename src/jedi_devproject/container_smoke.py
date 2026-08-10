@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ContainerLifecycleSmokePlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     story_number: str
     event_id: str

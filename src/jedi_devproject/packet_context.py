@@ -4,8 +4,15 @@ context entries for the required surfaces."""
 
 from __future__ import annotations
 
+import json
+import math
 from collections.abc import Sequence
+from datetime import date
+from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel
+from pydantic_core import PydanticSerializationError
 
 from jedi_devproject.builder_maturity import (
     MaturityEvidenceProvider,
@@ -23,6 +30,68 @@ from jedi_devproject.packet_model import (
     _compact_surface_context_bundle,
     _model_context_elisions,
 )
+
+CONTEXT_DOSSIER_DTO_NON_FINITE_DIAGNOSTIC = (
+    "context dossier DTO payload contains non-finite numeric values"
+)
+CONTEXT_DOSSIER_DTO_NON_JSON_DIAGNOSTIC = (
+    "context dossier DTO payload contains non-JSON values"
+)
+
+
+def _context_model_payload(
+    model: BaseModel,
+    *,
+    diagnostic: str,
+    non_json_diagnostic: str = CONTEXT_DOSSIER_DTO_NON_JSON_DIAGNOSTIC,
+) -> dict[str, Any]:
+    try:
+        _ensure_context_dto_payload_json_safe(
+            model.model_dump(mode="python", warnings=False)
+        )
+        json.dumps(
+            model.model_dump(mode="json", warnings=False),
+            sort_keys=True,
+            allow_nan=False,
+        )
+    except PydanticSerializationError:
+        raise ValueError(non_json_diagnostic) from None
+    except ValueError:
+        raise ValueError(diagnostic) from None
+    except TypeError:
+        raise ValueError(non_json_diagnostic) from None
+    return model.model_dump(mode="json", warnings=False)
+
+
+def _ensure_context_dto_payload_json_safe(value: Any) -> None:
+    if (
+        value is None
+        or type(value) is str
+        or type(value) is bool
+        or type(value) is int
+        or type(value) is date
+        or isinstance(value, Enum)
+    ):
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise ValueError("non-finite context dossier DTO payload value")
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError("non-JSON context dossier DTO payload key")
+            _ensure_context_dto_payload_json_safe(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _ensure_context_dto_payload_json_safe(item)
+        return
+    if type(value) is tuple:
+        for item in value:
+            _ensure_context_dto_payload_json_safe(item)
+        return
+    raise TypeError("non-JSON context dossier DTO payload value")
 
 
 def _context_sufficiency(
@@ -93,10 +162,18 @@ def _context_dossier(
         surface_context_bundle.required_surfaces if surface_context_bundle is not None else []
     )
     instance_context_payload = (
-        discovery_context.model_dump(mode="json") if discovery_context is not None else None
+        _context_model_payload(
+            discovery_context,
+            diagnostic=CONTEXT_DOSSIER_DTO_NON_FINITE_DIAGNOSTIC,
+        )
+        if discovery_context is not None
+        else None
     )
     bundle_payload = (
-        surface_context_bundle.model_dump(mode="json")
+        _context_model_payload(
+            surface_context_bundle,
+            diagnostic=CONTEXT_DOSSIER_DTO_NON_FINITE_DIAGNOSTIC,
+        )
         if surface_context_bundle is not None
         else None
     )

@@ -7,6 +7,7 @@ import pytest
 from jedi_devproject.catalog_item_generation import catalog_item_customer_updates
 from jedi_devproject.models import CandidateChange
 from jedi_devproject.record_producer_generation import (
+    RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC,
     RECORD_PRODUCER_SCRIPT_REASON_CODE,
     RecordProducerIntent,
     RecordProducerVariableIntent,
@@ -262,6 +263,157 @@ def test_record_producer_customer_updates_rejects_producer_script_with_stable_co
             ),
             remote_update_set_sys_id="remote-update-set-sys-id",
         )
+
+
+def test_record_producer_customer_updates_rejects_non_json_producer_field_without_leak() -> None:
+    class SecretBearingProducerField:
+        def __str__(self) -> str:
+            return "leaked-record-producer-secret"
+
+    client = FakeRecordProducerMetadataClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        record_producer_customer_updates(
+            client=client,
+            changes=_producer_changes(
+                producer_fields={"name": SecretBearingProducerField()},
+            ),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-record-producer-secret" not in message
+    assert "SecretBearingProducerField" not in message
+    assert client.fetches == []
+
+
+def test_record_producer_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingProducerText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=record-producer-string-subclass")
+
+    client = FakeRecordProducerMetadataClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        record_producer_customer_updates(
+            client=client,
+            changes=_producer_changes(
+                producer_fields={"table_name": SecretBearingProducerText("incident")},
+            ),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC
+    assert "record-producer-string-subclass" not in message
+    assert "SecretBearingProducerText" not in message
+    assert client.fetches == []
+
+
+def test_record_producer_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingProducerOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=record-producer-scalar")
+
+    client = FakeRecordProducerMetadataClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        record_producer_customer_updates(
+            client=client,
+            changes=_producer_changes(
+                producer_fields={
+                    "name": SecretBearingProducerOrder(1),
+                    "artifact_name": "Report Security Incident",
+                },
+            ),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "record-producer-scalar" not in message
+    assert "SecretBearingProducerOrder" not in message
+    assert client.fetches == []
+
+
+def test_record_producer_customer_updates_rejects_metadata_record_collection_subclass() -> None:
+    class SecretBearingProducerRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=record-producer-records-iter")
+
+    class HostileDictionaryClient(FakeRecordProducerMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_dictionary":
+                return SecretBearingProducerRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        record_producer_customer_updates(
+            client=HostileDictionaryClient(),
+            changes=_producer_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingProducerRecords" not in message
+    assert "client_secret" not in message
+    assert "record-producer-records-iter" not in message
+
+
+def test_record_producer_customer_updates_rejects_metadata_record_subclass() -> None:
+    class SecretBearingProducerRecord(dict[str, Any]):
+        def get(self, key: object, default: Any = None) -> Any:
+            raise RuntimeError("client_secret=record-producer-record-get")
+
+    class HostileDictionaryClient(FakeRecordProducerMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_dictionary":
+                return [SecretBearingProducerRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        record_producer_customer_updates(
+            client=HostileDictionaryClient(),
+            changes=_producer_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingProducerRecord" not in message
+    assert "client_secret" not in message
+    assert "record-producer-record-get" not in message
 
 
 def test_record_producer_customer_updates_fails_closed_for_ambiguous_category() -> None:

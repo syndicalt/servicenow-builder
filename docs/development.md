@@ -9,12 +9,14 @@ This project is built test-first. Production code must not be added until a fail
 Run the full local quality gate before treating any sprint task as complete:
 
 ```bash
-python3 -m ruff check src tests && python3 -m mypy src tests && python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90
+python3 -m ruff check src tests && python3 -m bandit -q -r src && python3 -m pip_audit . --progress-spinner off && python3 -m mypy src tests && python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90
 ```
 
 The same commands are recorded in `pyproject.toml` under `tool.jedi-devproject.commands`:
 
 - `python3 -m ruff check src tests`
+- `python3 -m bandit -q -r src`
+- `python3 -m pip_audit . --progress-spinner off`
 - `python3 -m mypy src tests`
 - `python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90`
 

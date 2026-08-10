@@ -80,6 +80,61 @@ def test_story_rejects_unknown_data_classification() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("model_class", "values", "sensitive_parts"),
+    [
+        (
+            Story,
+            {
+                "sys_id": "story-sys-id",
+                "number": "STRY0010013",
+                "short_description": "Build secret workflow",
+                "description": "Story description includes protected context.",
+                "story_points": "secret-points",
+                "priority": 3,
+                "state": "Ready",
+                "data_classification": DataClassification.PUBLIC,
+            },
+            ("secret-points",),
+        ),
+        (
+            UpdateSetCandidate,
+            {
+                "story_number": "STRY0010013",
+                "name": "candidate",
+                "eligibility_decision": "eligible",
+                "eligibility_reasons": ["reason includes protected context"],
+                "confidence": "secret-confidence",
+                "risk_score": 0.1,
+                "status": CandidateStatus.DRAFT,
+            },
+            ("secret-confidence",),
+        ),
+        (
+            RetrievalCitation,
+            {
+                "source": "meeting-notes",
+                "content_hash": "hash",
+                "confidence": "secret-confidence",
+            },
+            ("secret-confidence",),
+        ),
+    ],
+)
+def test_core_model_validation_errors_do_not_echo_rejected_inputs(
+    model_class: type[Any],
+    values: dict[str, Any],
+    sensitive_parts: tuple[str, ...],
+) -> None:
+    with pytest.raises(ValidationError) as exc:
+        model_class.model_validate(values)
+
+    message = str(exc.value)
+    assert "input_value" not in message
+    for sensitive_part in sensitive_parts:
+        assert sensitive_part not in message
+
+
 def test_candidate_rejects_invalid_status() -> None:
     with pytest.raises(ValidationError):
         UpdateSetCandidate(
@@ -145,6 +200,119 @@ def test_stable_artifact_hash_is_order_independent_for_mapping_keys() -> None:
 
     assert left == right
     assert len(left) == 64
+
+
+def test_stable_artifact_hash_rejects_non_finite_values_without_payload_leak() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        stable_artifact_hash(
+            {
+                "safe_score": 1.0,
+                "bad_score": float("nan"),
+                "client_secret": "hash-secret",
+            }
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact hash payload contains non-finite numeric values"
+    assert "bad_score" not in diagnostic
+    assert "NaN" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "hash-secret" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_stable_artifact_hash_rejects_non_json_values_without_payload_leak() -> None:
+    class StringifiesSecret:
+        def __str__(self) -> str:
+            return "hash-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        stable_artifact_hash(
+            {
+                "safe_score": 1.0,
+                "unsafe_object": StringifiesSecret(),
+                "client_secret": "hash-secret",
+            }
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact hash payload contains non-JSON values"
+    assert "unsafe_object" not in diagnostic
+    assert "StringifiesSecret" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "hash-secret" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_stable_artifact_hash_rejects_string_subclass_values_without_payload_leak() -> None:
+    class HostileHashText(str):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=hash-str-secret")
+
+    with pytest.raises(ValueError) as exc_info:
+        stable_artifact_hash(
+            {
+                "safe_score": 1.0,
+                "unsafe_text": HostileHashText("hash-secret"),
+                "client_secret": "hash-secret",
+            }
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact hash payload contains non-JSON values"
+    assert "unsafe_text" not in diagnostic
+    assert "HostileHashText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "hash-secret" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_stable_artifact_hash_rejects_scalar_subclass_values_without_payload_leak() -> None:
+    class HostileHashOrder(int):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=hash-scalar-secret")
+
+    with pytest.raises(ValueError) as exc_info:
+        stable_artifact_hash(
+            {
+                "safe_score": 1.0,
+                "unsafe_order": HostileHashOrder(3),
+                "client_secret": "hash-secret",
+            }
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact hash payload contains non-JSON values"
+    assert "unsafe_order" not in diagnostic
+    assert "HostileHashOrder" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "hash-secret" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_stable_artifact_hash_rejects_container_subclasses_without_payload_leak() -> None:
+    class HostileHashDict(dict[str, Any]):
+        def items(self) -> Any:
+            raise AssertionError("client_secret=hash-dict-subclass-secret")
+
+    class HostileHashList(list[Any]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=hash-list-subclass-secret")
+
+    for value in (
+        HostileHashDict({"secret": "hidden dict"}),
+        {"items": HostileHashList(["hidden list"])},
+    ):
+        with pytest.raises(ValueError) as exc_info:
+            stable_artifact_hash(value)
+
+        diagnostic = str(exc_info.value)
+        assert diagnostic == "artifact hash payload contains non-JSON values"
+        assert "HostileHash" not in diagnostic
+        assert "client_secret" not in diagnostic
+        assert "subclass-secret" not in diagnostic
+        assert "hidden" not in diagnostic
+        assert exc_info.value.__cause__ is None
 
 
 def test_project_context_rejects_empty_name() -> None:

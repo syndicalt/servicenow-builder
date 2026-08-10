@@ -75,3 +75,31 @@ def test_evaluate_cicd_update_set_capability_blocks_forbidden_probe() -> None:
     assert result.available is False
     assert result.probes[0].accessible is False
     assert result.reasons == ["create:status_403:Forbidden"]
+
+
+def test_evaluate_cicd_capability_blocks_malformed_result_without_echoing_value() -> None:
+    client = FakeCicdClient(
+        {
+            "create": {
+                "status_code": 200,
+                "result": "client_secret=result-secret",
+            },
+            "retrieve": {
+                "status_code": 400,
+                "result": {
+                    "status": "3",
+                    "status_label": "Failed",
+                    "status_message": "Missing required parameter: update_set_id",
+                },
+            },
+        }
+    )
+
+    result = evaluate_cicd_update_set_capability(client)
+
+    assert result.available is False
+    assert result.probes[0].accessible is False
+    assert result.probes[0].error == "malformed_result_payload"
+    assert result.reasons == ["create:status_200:malformed_result_payload"]
+    assert "client_secret" not in repr(result)
+    assert "result-secret" not in repr(result)

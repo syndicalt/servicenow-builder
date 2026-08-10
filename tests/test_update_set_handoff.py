@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, SupportsIndex
 
-from jedi_devproject.form_section_generation import form_section_customer_updates
+import pytest
+
+import jedi_devproject.update_set_handoff as update_set_handoff_module
+from jedi_devproject.form_section_generation import (
+    FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC,
+    form_section_customer_updates,
+)
 from jedi_devproject.models import (
     CandidateChange,
     CandidateStatus,
@@ -10,8 +16,11 @@ from jedi_devproject.models import (
 )
 from jedi_devproject.servicenow import StoryStateChoice
 from jedi_devproject.update_set_handoff import (
+    CUSTOMER_UPDATE_NON_JSON_DIAGNOSTIC,
+    IMPORTED_UPDATE_SET_LOOKUP_NON_JSON_DIAGNOSTIC,
     UpdateSetHandoffRequest,
     create_update_set_handoff,
+    import_retrieved_update_set,
 )
 
 
@@ -607,6 +616,249 @@ def _form_section_removal_candidate() -> UpdateSetCandidate:
     )
 
 
+def test_form_section_customer_updates_rejects_non_json_section_scalar_without_leak() -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=form-section-secret"
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=client,
+            remote_update_set_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={
+                        "table": "dmn_demand",
+                        "sections": ["Assessment", SecretBearingObject()],
+                        "view": "Default view",
+                    },
+                    rationale="Remove requested Demand form sections.",
+                )
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "form section removal field contains non-JSON value"
+    assert client.fetches == []
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "form-section-secret" not in diagnostic
+
+
+def test_form_section_customer_updates_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingFormSectionText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=form-section-string-subclass")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=client,
+            remote_update_set_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={
+                        "table": "dmn_demand",
+                        "sections": [SecretBearingFormSectionText("Assessment")],
+                        "view": "Default view",
+                    },
+                    rationale="Remove requested Demand form sections.",
+                )
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "form section removal field contains non-JSON value"
+    assert client.fetches == []
+    assert "SecretBearingFormSectionText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "form-section-string-subclass" not in diagnostic
+
+
+def test_form_section_customer_updates_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingFormSectionOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=form-section-scalar-subclass")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=client,
+            remote_update_set_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={
+                        "table": "dmn_demand",
+                        "sections": [SecretBearingFormSectionOrder(1)],
+                        "view": "Default view",
+                    },
+                    rationale="Remove requested Demand form sections.",
+                )
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "form section removal field contains non-JSON value"
+    assert client.fetches == []
+    assert "SecretBearingFormSectionOrder" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "form-section-scalar-subclass" not in diagnostic
+
+
+def test_form_section_customer_updates_rejects_list_subclass_field_without_leak() -> None:
+    class SecretBearingFormSectionList(list[str]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=form-section-list-subclass")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=client,
+            remote_update_set_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={
+                        "table": "dmn_demand",
+                        "sections": SecretBearingFormSectionList(["Assessment"]),
+                        "view": "Default view",
+                    },
+                    rationale="Remove requested Demand form sections.",
+                )
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "form section removal field contains non-JSON value"
+    assert exc_info.value.__cause__ is None
+    assert client.fetches == []
+    assert "SecretBearingFormSectionList" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "form-section-list-subclass" not in diagnostic
+
+
+def test_form_section_customer_updates_rejects_dict_subclass_metadata_without_leak() -> None:
+    class SecretBearingFormSectionReference(dict[str, str]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise RuntimeError("client_secret=form-section-reference-subclass")
+
+    class HostileSectionClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_ui_section" and lookup == {"name": "dmn_demand"}:
+                return [
+                    {
+                        **records[1],
+                        "caption": SecretBearingFormSectionReference(
+                            {
+                                "display_value": "Assessment Data",
+                                "value": "Assessment Data",
+                            }
+                        ),
+                    }
+                ]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=HostileSectionClient(),
+            remote_update_set_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={
+                        "table": "dmn_demand",
+                        "sections": ["Assessment Data"],
+                        "view": "Default view",
+                    },
+                    rationale="Remove requested Demand form sections.",
+                )
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "form section removal field contains non-JSON value"
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingFormSectionReference" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "form-section-reference-subclass" not in diagnostic
+
+
+def test_form_section_customer_updates_rejects_missing_section_sys_id() -> None:
+    class MissingSectionSysIdClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_ui_section" and lookup == {"name": "dmn_demand"}:
+                return [
+                    {
+                        "name": "dmn_demand",
+                        "caption": "Assessment Data",
+                        "view": {
+                            "display_value": "Default view",
+                            "value": "Default view",
+                        },
+                        "sys_user": "",
+                    }
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=MissingSectionSysIdClient(),
+            remote_update_set_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={
+                        "table": "dmn_demand",
+                        "sections": ["Assessment Data"],
+                        "view": "Default view",
+                    },
+                    rationale="Remove requested Demand form sections.",
+                )
+            ],
+        )
+
+    assert str(exc_info.value) == "form section removal field is missing"
+
+
 def test_create_update_set_handoff_imports_retrieved_update_set_and_links_story() -> None:
     client = FakeUpdateSetClient()
 
@@ -687,6 +939,449 @@ def test_create_update_set_handoff_imports_xml_instead_of_table_writing_updates(
     )
     assert client.story_updates[-1]["fields"]["state"] == "-7"
     assert client.story_updates[-1]["fields"]["u_ai_status"] == "Ready for Testing"
+
+
+def test_create_update_set_handoff_rejects_story_number_object_without_leak() -> None:
+    class SecretBearingStoryNumber:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-story-number-secret")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest.model_construct(
+                story_sys_id="story-sys-id",
+                story_number=SecretBearingStoryNumber(),
+                candidate=_candidate(),
+                candidate_artifact_ref="db://artifact_blobs/43",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff story number contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingStoryNumber" not in diagnostic
+    assert "handoff-story-number-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_instance_url_object_without_leak() -> None:
+    class SecretBearingInstanceUrl:
+        def rstrip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=handoff-instance-url-secret")
+
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-instance-url-string-secret")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest.model_construct(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=_candidate(),
+                candidate_artifact_ref="db://artifact_blobs/44",
+                instance_url=SecretBearingInstanceUrl(),
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff instance URL contains non-JSON value"
+    assert len(client.imports) == 1
+    assert client.story_updates == []
+    assert "SecretBearingInstanceUrl" not in diagnostic
+    assert "handoff-instance-url-secret" not in diagnostic
+    assert "handoff-instance-url-string-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_story_sys_id_object_without_leak() -> None:
+    class SecretBearingStorySysId:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-story-sys-id-secret")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest.model_construct(
+                story_sys_id=SecretBearingStorySysId(),
+                story_number="STRY0010013",
+                candidate=_candidate(),
+                candidate_artifact_ref="db://artifact_blobs/45",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff story sys_id contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingStorySysId" not in diagnostic
+    assert "handoff-story-sys-id-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_artifact_ref_object_without_leak() -> None:
+    class SecretBearingArtifactRef:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-artifact-ref-secret")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest.model_construct(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=_candidate(),
+                candidate_artifact_ref=SecretBearingArtifactRef(),
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff artifact reference contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingArtifactRef" not in diagnostic
+    assert "handoff-artifact-ref-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_import_retrieved_update_set_rejects_non_json_customer_update_scalar_without_leak() -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=handoff-secret"
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        import_retrieved_update_set(
+            client=client,
+            update_set_name="JEDI STRY0010013 - AI Candidate",
+            remote_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            description="Generated retrieved update set.",
+            customer_updates=[
+                {
+                    "action": "INSERT_OR_UPDATE",
+                    "name": SecretBearingObject(),
+                    "payload": "<record_update/>",
+                    "target_name": "AI Review Notes",
+                    "type": "Dictionary",
+                }
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set customer update contains non-JSON value"
+    assert client.imports == []
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "handoff-secret" not in diagnostic
+
+
+def test_import_retrieved_update_set_rejects_string_subclass_customer_update_without_leak() -> None:
+    class SecretBearingPayloadText(str):
+        def replace(self, old: str, new: str, count: SupportsIndex = -1) -> str:
+            raise RuntimeError("client_secret=customer-update-string-subclass")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        import_retrieved_update_set(
+            client=client,
+            update_set_name="JEDI STRY0010013 - AI Candidate",
+            remote_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            description="Generated retrieved update set.",
+            customer_updates=[
+                {
+                    "action": "INSERT_OR_UPDATE",
+                    "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                    "payload": SecretBearingPayloadText("<record_update/>"),
+                    "target_name": "AI Review Notes",
+                    "type": "Dictionary",
+                }
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == CUSTOMER_UPDATE_NON_JSON_DIAGNOSTIC
+    assert client.imports == []
+    assert "SecretBearingPayloadText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "customer-update-string-subclass" not in diagnostic
+
+
+def test_import_retrieved_update_set_rejects_customer_update_collection_subclass() -> None:
+    class SecretBearingCustomerUpdates(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=customer-updates-iter-secret")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        import_retrieved_update_set(
+            client=client,
+            update_set_name="JEDI STRY0010013 - AI Candidate",
+            remote_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            description="Generated retrieved update set.",
+            customer_updates=SecretBearingCustomerUpdates(
+                [
+                    {
+                        "action": "INSERT_OR_UPDATE",
+                        "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                        "payload": "<record_update/>",
+                        "target_name": "AI Review Notes",
+                        "type": "Dictionary",
+                    }
+                ]
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == CUSTOMER_UPDATE_NON_JSON_DIAGNOSTIC
+    assert client.imports == []
+    assert "SecretBearingCustomerUpdates" not in diagnostic
+    assert "customer-updates-iter-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_generated_customer_update_collection_subclass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SecretBearingGeneratedUpdates(list[dict[str, Any]]):
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=generated-customer-updates-bool")
+
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=generated-customer-updates-iter")
+
+    def generated_customer_updates(**_: object) -> list[dict[str, Any]]:
+        return SecretBearingGeneratedUpdates(
+            [
+                {
+                    "action": "INSERT_OR_UPDATE",
+                    "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                    "payload": "<record_update/>",
+                    "target_name": "AI Review Notes",
+                    "type": "Dictionary",
+                }
+            ]
+        )
+
+    monkeypatch.setattr(
+        update_set_handoff_module,
+        "dictionary_form_customer_updates",
+        generated_customer_updates,
+    )
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=_candidate(),
+                candidate_artifact_ref="db://artifact_blobs/40",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == CUSTOMER_UPDATE_NON_JSON_DIAGNOSTIC
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingGeneratedUpdates" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "generated-customer-updates-bool" not in diagnostic
+    assert "generated-customer-updates-iter" not in diagnostic
+
+
+def test_import_retrieved_update_set_rejects_metadata_string_subclass_without_leak() -> None:
+    class SecretBearingUpdateSetName(str):
+        def replace(self, old: str, new: str, count: SupportsIndex = -1) -> str:
+            raise RuntimeError("client_secret=update-set-metadata-secret")
+
+    client = FakeUpdateSetClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        import_retrieved_update_set(
+            client=client,
+            update_set_name=SecretBearingUpdateSetName("JEDI STRY0010013 - AI Candidate"),
+            remote_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            description="Generated retrieved update set.",
+            customer_updates=[
+                {
+                    "action": "INSERT_OR_UPDATE",
+                    "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                    "payload": "<record_update/>",
+                    "target_name": "AI Review Notes",
+                    "type": "Dictionary",
+                }
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set metadata contains non-JSON value"
+    assert client.imports == []
+    assert "SecretBearingUpdateSetName" not in diagnostic
+    assert "update-set-metadata-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_import_retrieved_update_set_rejects_non_json_lookup_sys_id_without_leak() -> None:
+    class SecretBearingSysId:
+        def __str__(self) -> str:
+            return "client_secret=lookup-secret"
+
+    class CorruptLookupClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_remote_update_set":
+                return [{"sys_id": SecretBearingSysId()}]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    client = CorruptLookupClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        import_retrieved_update_set(
+            client=client,
+            update_set_name="JEDI STRY0010013 - AI Candidate",
+            remote_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            description="Generated retrieved update set.",
+            customer_updates=[
+                {
+                    "action": "INSERT_OR_UPDATE",
+                    "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                    "payload": "<record_update/>",
+                    "target_name": "AI Review Notes",
+                    "type": "Dictionary",
+                }
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == IMPORTED_UPDATE_SET_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert len(client.imports) == 1
+    assert "SecretBearingSysId" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "lookup-secret" not in diagnostic
+
+
+def test_import_retrieved_update_set_rejects_lookup_collection_subclass_without_leak() -> None:
+    class SecretBearingLookupRecords(list[dict[str, Any]]):
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=lookup-records-bool-secret")
+
+    class CorruptLookupClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_remote_update_set":
+                return SecretBearingLookupRecords([{"sys_id": "remote-update-set-sys-id"}])
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    client = CorruptLookupClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        import_retrieved_update_set(
+            client=client,
+            update_set_name="JEDI STRY0010013 - AI Candidate",
+            remote_sys_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            description="Generated retrieved update set.",
+            customer_updates=[
+                {
+                    "action": "INSERT_OR_UPDATE",
+                    "name": "sys_dictionary_rm_story_u_ai_review_notes",
+                    "payload": "<record_update/>",
+                    "target_name": "AI Review Notes",
+                    "type": "Dictionary",
+                }
+            ],
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == IMPORTED_UPDATE_SET_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert len(client.imports) == 1
+    assert "SecretBearingLookupRecords" not in diagnostic
+    assert "lookup-records-bool-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_sanitizes_work_note_artifact_reference() -> None:
+    client = FakeUpdateSetClient()
+    artifact_ref = "db://artifact_blobs/2\nclient_secret=artifact-secret"
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=_candidate(),
+            candidate_artifact_ref=artifact_ref,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    fields = client.story_updates[-1]["fields"]
+    work_notes = str(fields["work_notes"])
+    assert fields["u_ai_artifact_reference"] == artifact_ref
+    assert "artifact-secret" not in work_notes
+    assert "client_secret=***REDACTED***" in work_notes
+    assert "Candidate artifact: db://artifact_blobs/2 client_secret=" in work_notes
+
+
+def test_create_update_set_handoff_bounds_work_note_artifact_reference() -> None:
+    client = FakeUpdateSetClient()
+    artifact_ref = f"db://artifact_blobs/2 {'A' * 2200}"
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=_candidate(),
+            candidate_artifact_ref=artifact_ref,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    fields = client.story_updates[-1]["fields"]
+    work_notes = str(fields["work_notes"])
+    assert fields["u_ai_artifact_reference"] == artifact_ref
+    assert "...[truncated]" in work_notes
+    assert len(work_notes) < 900
 
 
 def test_create_update_set_handoff_imports_retrieved_form_layout_updates() -> None:
@@ -877,7 +1572,7 @@ def test_form_section_customer_updates_rejects_ambiguous_section_match() -> None
                     {
                         "sys_id": "assessment-b",
                         "name": "dmn_demand",
-                        "caption": "Assessment Summary",
+                        "caption": "Assessment Data",
                         "view": {"display_value": "Default view", "value": "Default view"},
                     },
                 ]
@@ -895,16 +1590,108 @@ def test_form_section_customer_updates_rejects_ambiguous_section_match() -> None
                 CandidateChange(
                     table="sys_ui_section",
                     operation="delete",
-                    fields={"table": "dmn_demand", "sections": ["Assessment"]},
+                    fields={"table": "dmn_demand", "sections": ["Assessment Data"]},
                     rationale="Ambiguous section.",
                 )
             ],
             remote_update_set_sys_id="remote-sys-id",
         )
     except ValueError as exc:
-        assert "form section match is ambiguous: Assessment" in str(exc)
+        assert "form section match is ambiguous: Assessment Data" in str(exc)
     else:
         raise AssertionError("ambiguous form section request was accepted")
+
+
+def test_form_section_customer_updates_rejects_metadata_collection_subclass_without_leak() -> (
+    None
+):
+    class SecretBearingSectionRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=form-section-record-collection")
+
+    class CorruptSectionClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_ui_section" and lookup == {"name": "rm_story"}:
+                return SecretBearingSectionRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=CorruptSectionClient(),
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={"table": "rm_story", "sections": "Notes", "view": "Scrum"},
+                    rationale="Remove the Notes section from the Scrum view.",
+                )
+            ],
+            remote_update_set_sys_id="remote-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC
+    assert "form-section-record-collection" not in message
+    assert "SecretBearingSectionRecords" not in message
+    assert "client_secret" not in message
+
+
+def test_form_section_customer_updates_rejects_metadata_record_subclass_without_leak() -> None:
+    class SecretBearingSectionRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise RuntimeError("client_secret=form-section-record")
+
+    class CorruptSectionClient(FakeUpdateSetClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_ui_section" and lookup == {"name": "rm_story"}:
+                return [SecretBearingSectionRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        form_section_customer_updates(
+            client=CorruptSectionClient(),
+            changes=[
+                CandidateChange(
+                    table="sys_ui_section",
+                    operation="delete",
+                    fields={"table": "rm_story", "sections": "Notes", "view": "Scrum"},
+                    rationale="Remove the Notes section from the Scrum view.",
+                )
+            ],
+            remote_update_set_sys_id="remote-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC
+    assert "form-section-record" not in message
+    assert "SecretBearingSectionRecord" not in message
+    assert "client_secret" not in message
 
 
 def test_create_update_set_handoff_accepts_table_aliases_and_position_hints() -> None:
@@ -1006,6 +1793,64 @@ def test_create_update_set_handoff_preserves_reference_field_metadata() -> None:
     assert "<use_reference_qualifier>simple</use_reference_qualifier>" in imported_xml
     assert "<reference_qual>vendor=true</reference_qual>" in imported_xml
     assert "<reference_qual_condition>vendor=true</reference_qual_condition>" in imported_xml
+
+
+def test_create_update_set_handoff_rejects_reference_dict_subclass_without_leak() -> None:
+    class SecretBearingReference(dict[str, str]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise RuntimeError("client_secret=handoff-reference-dict-subclass")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "Problem",
+                        "element": "u_vendor_reference",
+                        "column_label": "Vendor Reference",
+                        "internal_type": "reference",
+                        "reference": SecretBearingReference(
+                            {"value": "core_company", "display_value": "Company"}
+                        ),
+                    },
+                    rationale="Create the vendor reference field.",
+                ),
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "name": "Problem",
+                        "field": "u_vendor_reference",
+                        "position_hint": "below Description",
+                    },
+                    rationale="Place the field below Description.",
+                ),
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010002",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/45",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingReference" not in diagnostic
+    assert "handoff-reference-dict-subclass" not in diagnostic
+    assert "client_secret" not in diagnostic
 
 
 def test_create_update_set_handoff_blocks_non_dictionary_candidates_until_builder_matures() -> None:
@@ -1208,6 +2053,786 @@ def test_create_update_set_handoff_rejects_missing_dictionary_required_fields() 
         raise AssertionError("dictionary change with missing required fields was accepted")
 
     assert client.imports == []
+
+
+def test_create_update_set_handoff_rejects_non_json_dictionary_form_field_without_leak() -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=dictionary-form-secret"
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                        "column_label": SecretBearingObject(),
+                    },
+                    rationale="Malformed label.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/34",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "dictionary-form-secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_truthy_object_field_without_leak() -> None:
+    class SecretBearingTruthyObject:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=dictionary-form-truthiness-secret")
+
+        def __str__(self) -> str:
+            return "client_secret=dictionary-form-truthiness-string"
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                        "column_label": SecretBearingTruthyObject(),
+                    },
+                    rationale="Malformed label.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/36",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingTruthyObject" not in diagnostic
+    assert "dictionary-form-truthiness-secret" not in diagnostic
+    assert "dictionary-form-truthiness-string" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_sanitizes_description_summary_without_stringifying() -> None:
+    class SecretBearingSummaryValue:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-description-summary-secret")
+
+    client = FakeUpdateSetClient()
+    dictionary_change = _candidate().changes[0].model_copy(
+        update={
+            "fields": {
+                **_candidate().changes[0].fields,
+                "diagnostic_notes": SecretBearingSummaryValue(),
+            }
+        }
+    )
+    candidate = _candidate().model_copy(
+        update={"changes": [dictionary_change, _candidate().changes[1]]}
+    )
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/37",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "diagnostic_notes=[non-json summary value]" in imported_xml
+    assert "SecretBearingSummaryValue" not in imported_xml
+    assert "handoff-description-summary-secret" not in imported_xml
+    assert "client_secret" not in imported_xml
+
+
+def test_create_update_set_handoff_sanitizes_reviewer_note_without_stringifying() -> None:
+    class SecretBearingReviewerNote:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-reviewer-note-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={"reviewer_notes": [SecretBearingReviewerNote()]}
+    )
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/38",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "- [non-string work note value]" in imported_xml
+    assert "SecretBearingReviewerNote" not in imported_xml
+    assert "handoff-reviewer-note-secret" not in imported_xml
+    assert "client_secret" not in imported_xml
+
+
+def test_create_update_set_handoff_rejects_reviewer_note_collection_subclass_without_leak() -> None:
+    class SecretBearingReviewerNotes(list[object]):
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-reviewer-notes-bool-secret")
+
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=handoff-reviewer-notes-iter-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={"reviewer_notes": SecretBearingReviewerNotes(["Confirm the field exists."])}
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/42",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff reviewer notes contain non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingReviewerNotes" not in diagnostic
+    assert "handoff-reviewer-notes-bool-secret" not in diagnostic
+    assert "handoff-reviewer-notes-iter-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_sanitizes_description_header_without_stringifying() -> None:
+    class SecretBearingArtifactHash:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-description-header-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(update={"artifact_hash": SecretBearingArtifactHash()})
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest.model_construct(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/40",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "Candidate hash: [non-string work note value]" in imported_xml
+    assert "SecretBearingArtifactHash" not in imported_xml
+    assert "handoff-description-header-secret" not in imported_xml
+    assert "client_secret" not in imported_xml
+
+
+def test_create_update_set_handoff_sanitizes_description_metrics_without_stringifying() -> None:
+    class SecretBearingMetric:
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-description-metric-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={"confidence": SecretBearingMetric(), "risk_score": SecretBearingMetric()}
+    )
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/40",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "Confidence: [non-json summary value]" in imported_xml
+    assert "Risk score: [non-json summary value]" in imported_xml
+    assert "SecretBearingMetric" not in imported_xml
+    assert "handoff-description-metric-secret" not in imported_xml
+    assert "client_secret" not in imported_xml
+
+
+def test_create_update_set_handoff_rejects_changes_collection_subclass_without_leak() -> None:
+    class SecretBearingChanges(list[CandidateChange]):
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-changes-bool-secret")
+
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=handoff-changes-iter-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={"changes": SecretBearingChanges(_candidate().changes)}
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/41",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff changes contain non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingChanges" not in diagnostic
+    assert "handoff-changes-bool-secret" not in diagnostic
+    assert "handoff-changes-iter-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_change_table_string_subclass_without_leak() -> None:
+    class SecretBearingTable(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-change-table-str-secret")
+
+        def __lt__(self, other: object) -> bool:
+            raise RuntimeError("client_secret=handoff-change-table-sort-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange.model_construct(
+                    table=SecretBearingTable("sys_dictionary"),
+                    operation="insert",
+                    fields={
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                        "column_label": "AI Review Notes",
+                        "internal_type": "string",
+                    },
+                    rationale="Create a malformed field change.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/43",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff changes contain non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingTable" not in diagnostic
+    assert "handoff-change-table-str-secret" not in diagnostic
+    assert "handoff-change-table-sort-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_change_operation_string_subclass_without_leak() -> None:
+    class SecretBearingOperation(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-change-operation-str-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange.model_construct(
+                    table="sys_dictionary",
+                    operation=SecretBearingOperation("insert"),
+                    fields={
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                        "column_label": "AI Review Notes",
+                        "internal_type": "string",
+                    },
+                    rationale="Create a malformed field change.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/44",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff changes contain non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingOperation" not in diagnostic
+    assert "handoff-change-operation-str-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_change_fields_dict_subclass_without_leak() -> None:
+    class SecretBearingFields(dict[str, Any]):
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-change-fields-bool-secret")
+
+        def items(self) -> Any:
+            raise RuntimeError("client_secret=handoff-change-fields-items-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange.model_construct(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields=SecretBearingFields(
+                        {
+                            "name": "rm_story",
+                            "element": "u_ai_review_notes",
+                            "column_label": "AI Review Notes",
+                            "internal_type": "string",
+                        }
+                    ),
+                    rationale="Create a malformed field change.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/45",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff change fields contain non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingFields" not in diagnostic
+    assert "handoff-change-fields-bool-secret" not in diagnostic
+    assert "handoff-change-fields-items-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_change_field_key_string_subclass_without_leak() -> None:
+    class SecretBearingFieldKey(str):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=handoff-change-field-key-str-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange.model_construct(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        SecretBearingFieldKey("name"): "rm_story",
+                        "element": "u_ai_review_notes",
+                        "column_label": "AI Review Notes",
+                        "internal_type": "string",
+                    },
+                    rationale="Create a malformed field change.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/46",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff change fields contain non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingFieldKey" not in diagnostic
+    assert "handoff-change-field-key-str-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_truthy_form_table_alias_without_leak() -> None:
+    class SecretBearingTruthyAlias:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-form-table-alias-bool-secret")
+
+        def __str__(self) -> str:
+            return "client_secret=handoff-form-table-alias-str-secret"
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                _candidate().changes[0],
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "table": SecretBearingTruthyAlias(),
+                        "field": "u_ai_review_notes",
+                        "position_hint": "below Description",
+                    },
+                    rationale="Malformed form table alias.",
+                ),
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/47",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingTruthyAlias" not in diagnostic
+    assert "handoff-form-table-alias-bool-secret" not in diagnostic
+    assert "handoff-form-table-alias-str-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_truthy_placement_anchor_without_leak() -> None:
+    class SecretBearingPlacementAnchor:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-placement-anchor-bool-secret")
+
+        def __str__(self) -> str:
+            return "client_secret=handoff-placement-anchor-str-secret"
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                _candidate().changes[0],
+                CandidateChange(
+                    table="sys_ui_form",
+                    operation="update",
+                    fields={
+                        "name": "rm_story",
+                        "field": "u_ai_review_notes",
+                        "placement_anchor": SecretBearingPlacementAnchor(),
+                    },
+                    rationale="Malformed placement anchor.",
+                ),
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/48",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingPlacementAnchor" not in diagnostic
+    assert "handoff-placement-anchor-bool-secret" not in diagnostic
+    assert "handoff-placement-anchor-str-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_truthy_reference_alias_without_leak() -> None:
+    class SecretBearingReferenceAlias:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-reference-alias-bool-secret")
+
+        def __str__(self) -> str:
+            return "client_secret=handoff-reference-alias-str-secret"
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "rm_story",
+                        "element": "u_vendor_reference",
+                        "column_label": "Vendor Reference",
+                        "internal_type": "reference",
+                        "reference": SecretBearingReferenceAlias(),
+                    },
+                    rationale="Malformed reference metadata.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/49",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingReferenceAlias" not in diagnostic
+    assert "handoff-reference-alias-bool-secret" not in diagnostic
+    assert "handoff-reference-alias-str-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_state_choice_collection_subclass_without_leak() -> None:
+    class SecretBearingStateChoices(list[StoryStateChoice]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=handoff-state-choices-iter-secret")
+
+    class MalformedStateChoiceClient(FakeUpdateSetClient):
+        def fetch_story_state_choices(self) -> list[StoryStateChoice]:
+            return SecretBearingStateChoices(
+                [
+                    StoryStateChoice(label="Ready for Testing", value="-7", sequence=300),
+                ]
+            )
+
+    client = MalformedStateChoiceClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=_candidate(),
+                candidate_artifact_ref="db://artifact_blobs/50",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff state choices contain non-JSON value"
+    assert len(client.imports) == 1
+    assert client.imports[0]["service_id"] == "jedi_update_set_import"
+    assert client.story_updates == []
+    assert "SecretBearingStateChoices" not in diagnostic
+    assert "handoff-state-choices-iter-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_rejects_state_choice_item_subclass_without_leak() -> None:
+    class SecretBearingStateChoice(StoryStateChoice):
+        def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise RuntimeError("client_secret=handoff-state-choice-model-dump-secret")
+
+    class MalformedStateChoiceClient(FakeUpdateSetClient):
+        def fetch_story_state_choices(self) -> list[StoryStateChoice]:
+            return [
+                SecretBearingStateChoice(
+                    label="Ready for Testing",
+                    value="-7",
+                    sequence=300,
+                ),
+            ]
+
+    client = MalformedStateChoiceClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=_candidate(),
+                candidate_artifact_ref="db://artifact_blobs/51",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "retrieved Update Set handoff state choices contain non-JSON value"
+    assert len(client.imports) == 1
+    assert client.story_updates == []
+    assert "SecretBearingStateChoice" not in diagnostic
+    assert "handoff-state-choice-model-dump-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_create_update_set_handoff_remote_sys_id_ignores_malformed_hash() -> None:
+    class SecretBearingArtifactHash:
+        def __bool__(self) -> bool:
+            raise RuntimeError("client_secret=handoff-remote-sys-id-secret")
+
+        def lower(self) -> str:
+            raise RuntimeError("client_secret=handoff-remote-sys-id-lower-secret")
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={"artifact_hash": SecretBearingArtifactHash()}
+    )
+
+    create_update_set_handoff(
+        client=client,
+        request=UpdateSetHandoffRequest(
+            story_sys_id="story-sys-id",
+            story_number="STRY0010013",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/39",
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    imported_xml = client.imports[0]["update_set_xml"]
+    assert "<remote_sys_id>d0010013eea000000000000000000000</remote_sys_id>" in imported_xml
+    assert "SecretBearingArtifactHash" not in imported_xml
+    assert "handoff-remote-sys-id-secret" not in imported_xml
+    assert "handoff-remote-sys-id-lower-secret" not in imported_xml
+    assert "client_secret" not in imported_xml
+
+
+def test_create_update_set_handoff_rejects_integer_subclass_field_without_leak() -> None:
+    class SecretBearingInt(int):
+        def __str__(self) -> str:
+            return "client_secret=integer-subclass-secret"
+
+    client = FakeUpdateSetClient()
+    candidate = _candidate().model_copy(
+        update={
+            "changes": [
+                CandidateChange(
+                    table="sys_dictionary",
+                    operation="insert",
+                    fields={
+                        "name": "rm_story",
+                        "element": "u_ai_review_notes",
+                        "column_label": "AI Review Notes",
+                        "internal_type": "string",
+                        "max_length": SecretBearingInt(100),
+                    },
+                    rationale="Malformed length.",
+                ),
+                _candidate().changes[1],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        create_update_set_handoff(
+            client=client,
+            request=UpdateSetHandoffRequest(
+                story_sys_id="story-sys-id",
+                story_number="STRY0010013",
+                candidate=candidate,
+                candidate_artifact_ref="db://artifact_blobs/35",
+                instance_url="https://dev205693.service-now.com",
+            ),
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "dictionary/form handoff field contains non-JSON value"
+    assert client.imports == []
+    assert client.story_updates == []
+    assert "SecretBearingInt" not in diagnostic
+    assert "integer-subclass-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
 
 
 def test_create_update_set_handoff_rejects_mismatched_dictionary_and_form_tables() -> None:

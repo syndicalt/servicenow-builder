@@ -29,7 +29,7 @@ class SurfaceOperationStatus(StrEnum):
 
 
 class SurfaceOperation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     kind: SurfaceOperationKind
     status: SurfaceOperationStatus
@@ -39,7 +39,7 @@ class SurfaceOperation(BaseModel):
 
 
 class SurfaceOperationPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     surface: ServiceNowSurface
     target_table: str | None = None

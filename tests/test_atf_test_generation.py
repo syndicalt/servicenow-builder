@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from jedi_devproject.atf_test_generation import (
+    ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC,
     REASON_FORM_PLACEMENT_WITHOUT_DICTIONARY_INSERT,
     REASON_MISSING_REQUIRED_FIELDS,
     REASON_POLICY_ACTION_WITHOUT_POLICY,
@@ -330,6 +331,124 @@ def test_business_rule_update_timing_generates_insert_update_validation() -> Non
         "record_conditions": "work_notesISNOTEMPTY^u_escalatedISNOTEMPTY",
         "assert_type": "record_validated",
     }
+
+
+def test_atf_test_plan_rejects_non_json_candidate_field_without_leak() -> None:
+    class SecretBearingAtfField:
+        def __str__(self) -> str:
+            return "leaked-atf-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        generate_atf_test_plan(
+            _candidate(
+                [
+                    CandidateChange(
+                        table="sys_script",
+                        operation="insert",
+                        fields={
+                            "name": SecretBearingAtfField(),
+                            "collection": "incident",
+                            "action_insert": True,
+                            "fields_written": ["work_notes"],
+                        },
+                    )
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-atf-secret" not in message
+    assert "SecretBearingAtfField" not in message
+
+
+def test_atf_test_plan_rejects_string_subclass_candidate_field_without_leak() -> None:
+    class SecretBearingAtfText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=atf-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        generate_atf_test_plan(
+            _candidate(
+                [
+                    CandidateChange(
+                        table="sys_script",
+                        operation="insert",
+                        fields={
+                            "name": "Set work notes",
+                            "collection": "incident",
+                            "action_insert": SecretBearingAtfText("true"),
+                            "fields_written": ["work_notes"],
+                        },
+                    )
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC
+    assert "atf-string-subclass" not in message
+    assert "SecretBearingAtfText" not in message
+
+
+def test_atf_test_plan_rejects_scalar_subclass_candidate_field_without_leak() -> None:
+    class SecretBearingAtfOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=atf-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        generate_atf_test_plan(
+            _candidate(
+                [
+                    CandidateChange(
+                        table="sys_script",
+                        operation="insert",
+                        fields={
+                            "name": "Set work notes",
+                            "collection": "incident",
+                            "action_insert": SecretBearingAtfOrder(1),
+                            "fields_written": ["work_notes"],
+                        },
+                    )
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "atf-scalar" not in message
+    assert "SecretBearingAtfOrder" not in message
+
+
+def test_atf_test_plan_rejects_list_subclass_candidate_field_without_leak() -> None:
+    class SecretBearingAtfList(list[object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise RuntimeError("client_secret=atf-list")
+
+    with pytest.raises(ValueError) as exc_info:
+        generate_atf_test_plan(
+            _candidate(
+                [
+                    CandidateChange(
+                        table="sys_script",
+                        operation="insert",
+                        fields={
+                            "name": "Set work notes",
+                            "collection": "incident",
+                            "action_insert": True,
+                            "fields_written": SecretBearingAtfList(["work_notes"]),
+                        },
+                    )
+                ]
+            )
+        )
+
+    message = str(exc_info.value)
+    assert message == ATF_GENERATION_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "atf-list" not in message
+    assert "SecretBearingAtfList" not in message
 
 
 def test_business_rule_insert_timing_skips_record_update_step() -> None:

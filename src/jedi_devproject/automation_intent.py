@@ -41,7 +41,7 @@ class AutomationIntentType(StrEnum):
 class CatalogVariableGroupIntent(BaseModel):
     """A titled container section grouping a catalog item's own new variables."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     title: str
     variables: list[str] = Field(default_factory=list)
@@ -57,7 +57,7 @@ class RecordProducerIntent(BaseModel):
     is never represented here.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     short_description: str
@@ -70,7 +70,7 @@ class RecordProducerIntent(BaseModel):
 class CatalogUiPolicyActionRuleIntent(BaseModel):
     """One declarative effect a catalog UI policy applies to an item variable."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     variable: str
     visible: str = "ignore"
@@ -82,7 +82,7 @@ class CatalogUiPolicyActionRuleIntent(BaseModel):
 class CatalogUiPolicyRuleIntent(BaseModel):
     """A declarative variable behavior rule on the catalog item's own variables."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     title: str
     condition: str
@@ -93,7 +93,7 @@ class CatalogUiPolicyRuleIntent(BaseModel):
 class CatalogClientScriptActionIntent(BaseModel):
     """One declarative g_form effect: set a variable's value or clear it."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     kind: str
     variable: str
@@ -103,7 +103,7 @@ class CatalogClientScriptActionIntent(BaseModel):
 class CatalogClientScriptSpecIntent(BaseModel):
     """A declarative catalog client script on the catalog item's own variables."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     script_type: str
@@ -112,7 +112,7 @@ class CatalogClientScriptSpecIntent(BaseModel):
 
 
 class AutomationIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     source: AutomationIntentSource
     intent_type: AutomationIntentType

@@ -8,7 +8,16 @@ from typing import Any, Literal
 
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome
 from jedi_devproject.packet_model import ImplementationPacket
-from jedi_devproject.providers import ModelResponseError
+from jedi_devproject.provider_response_normalization import MAX_PROVIDER_CANDIDATE_CHANGES
+from jedi_devproject.providers import ModelResponseError, _safe_model_response_diagnostic
+from jedi_devproject.unicode_controls import is_control_character
+
+RAW_XML_SCAN_NODE_LIMIT = 1000
+RAW_XML_SCAN_DEPTH_LIMIT = 32
+RAW_XML_FIELD_NAMES = frozenset({"payload", "xml", "update_xml", "raw_xml"})
+RAW_XML_TOKENS = ("<record_update", "<sys_update_xml", "<unload", "payload><![cdata")
+MAX_IMPLEMENTATION_REVIEW_ITEMS = 100
+MAX_IMPLEMENTATION_REVIEW_ITEM_CHARS = 2000
 
 
 def _candidate_decision(value: str) -> Literal["eligible", "manual_review", "rejected"]:
@@ -24,18 +33,47 @@ def _candidate_decision(value: str) -> Literal["eligible", "manual_review", "rej
         return "manual_review"
     if value == "rejected":
         return "rejected"
-    raise ModelResponseError(f"unsupported safety decision: {value}")
+    raise ModelResponseError(
+        "unsupported safety decision: "
+        f"{_safe_model_response_diagnostic(value)}"
+    )
 
 
 def _validate_implementation_contract(response: dict[str, Any]) -> None:
     changes = response.get("changes")
     if not isinstance(changes, list) or not changes:
         raise ModelResponseError("changes must be a non-empty list")
+    if len(changes) > MAX_PROVIDER_CANDIDATE_CHANGES:
+        raise ModelResponseError(
+            "implementation response includes too many changes "
+            f"(max {MAX_PROVIDER_CANDIDATE_CHANGES})"
+        )
     _validate_no_raw_xml(response)
     for field_name in ["test_plan", "rollback_notes"]:
-        value = response.get(field_name)
-        if not isinstance(value, list) or not value:
-            raise ModelResponseError(f"{field_name} must be a non-empty list")
+        _validate_review_items(field_name=field_name, value=response.get(field_name))
+
+
+def _validate_review_items(*, field_name: str, value: Any) -> None:
+    if not isinstance(value, list) or not value:
+        raise ModelResponseError(f"{field_name} must be a non-empty list")
+    if len(value) > MAX_IMPLEMENTATION_REVIEW_ITEMS:
+        raise ModelResponseError(
+            f"{field_name} includes too many items "
+            f"(max {MAX_IMPLEMENTATION_REVIEW_ITEMS})"
+        )
+    if any(type(item) is not str or item.strip() == "" for item in value):
+        raise ModelResponseError(f"{field_name} items must be non-empty exact strings")
+    if any(len(item) > MAX_IMPLEMENTATION_REVIEW_ITEM_CHARS for item in value):
+        raise ModelResponseError(
+            f"{field_name} item exceeds length limit "
+            f"(max {MAX_IMPLEMENTATION_REVIEW_ITEM_CHARS})"
+        )
+    if any(_has_control_character(item) for item in value):
+        raise ModelResponseError(f"{field_name} items must not contain control characters")
+
+
+def _has_control_character(value: str) -> bool:
+    return any(is_control_character(character) for character in value)
 
 
 def _validate_response_tables_match_capability(
@@ -49,16 +87,26 @@ def _validate_response_tables_match_capability(
     changes = response.get("changes")
     if not isinstance(changes, list):
         return
-    actual_tables = {
-        str(change.get("table") or "")
-        for change in changes
-        if isinstance(change, dict) and str(change.get("table") or "").strip()
-    }
+    actual_tables: set[str] = set()
+    for change in changes:
+        if not isinstance(change, dict):
+            continue
+        table = change.get("table")
+        if table is None:
+            continue
+        if type(table) is not str:
+            raise ModelResponseError("model response table names must be exact strings")
+        table = table.strip()
+        if table:
+            actual_tables.add(table)
     unexpected = sorted(actual_tables - expected_tables)
     if unexpected:
+        safe_unexpected = ", ".join(
+            _safe_model_response_diagnostic(table) for table in unexpected
+        )
         raise ModelResponseError(
             "model response tables do not match assessed capability: "
-            f"{', '.join(unexpected)}"
+            f"{safe_unexpected}"
         )
 
 
@@ -100,18 +148,28 @@ def _expected_tables_for_packet(packet: ImplementationPacket) -> set[str]:
 
 
 def _validate_no_raw_xml(value: Any) -> None:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if str(key).strip().lower() in {"payload", "xml", "update_xml", "raw_xml"}:
-                raise ModelResponseError("model response must not include raw XML fields")
-            _validate_no_raw_xml(item)
-        return
-    if isinstance(value, list):
-        for item in value:
-            _validate_no_raw_xml(item)
-        return
-    if isinstance(value, str) and any(
-        token in value.lower()
-        for token in ["<record_update", "<sys_update_xml", "<unload", "payload><![cdata"]
-    ):
-        raise ModelResponseError("model response must not include raw XML content")
+    scanned_nodes = 0
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        scanned_nodes += 1
+        if scanned_nodes > RAW_XML_SCAN_NODE_LIMIT:
+            raise ModelResponseError("model response size exceeds scan limit")
+        if depth > RAW_XML_SCAN_DEPTH_LIMIT:
+            raise ModelResponseError("model response nesting exceeds limit")
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if type(key) is not str:
+                    raise ModelResponseError("model response object keys must be exact strings")
+                if key.strip().lower() in RAW_XML_FIELD_NAMES:
+                    raise ModelResponseError("model response must not include raw XML fields")
+                stack.append((child, depth + 1))
+            continue
+        if isinstance(item, list):
+            stack.extend((child, depth + 1) for child in item)
+            continue
+        if type(item) is str and any(
+            token in item.lower()
+            for token in RAW_XML_TOKENS
+        ):
+            raise ModelResponseError("model response must not include raw XML content")

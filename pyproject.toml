@@ -8,6 +8,7 @@ version = "0.2.0"
 description = "FedRAMP-aligned AI-assisted ServiceNow Update Set candidate generator."
 requires-python = ">=3.11"
 dependencies = [
+  "defusedxml>=0.7.1",
   "fastapi>=0.124",
   "pydantic>=2.12",
   "psycopg>=3.2",
@@ -16,11 +17,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "bandit[toml]",
   "coverage",
   "mypy",
+  "pip-audit",
   "pytest",
   "pytest-cov",
   "ruff",
+  "types-defusedxml",
 ]
 
 [project.scripts]
@@ -52,6 +56,9 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.bandit]
+exclude_dirs = ["tests"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
@@ -60,6 +67,7 @@ mypy_path = "src"
 [tool.jedi-devproject.commands]
 test = "python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90"
 lint = "python3 -m ruff check src tests"
+security = "python3 -m bandit -q -r src && python3 -m pip_audit . --progress-spinner off"
 format = "python3 -m ruff format src tests"
 typecheck = "python3 -m mypy src tests"
-verify = "python3 -m ruff check src tests && python3 -m mypy src tests && python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90"
+verify = "python3 -m ruff check src tests && python3 -m bandit -q -r src && python3 -m pip_audit . --progress-spinner off && python3 -m mypy src tests && python3 -m pytest --cov=jedi_devproject --cov-report=term-missing --cov-fail-under=90"

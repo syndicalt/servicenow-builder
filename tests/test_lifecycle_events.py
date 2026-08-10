@@ -78,6 +78,28 @@ def test_lifecycle_event_still_rejects_unknown_payload_fields() -> None:
     assert "Extra inputs are not permitted" in str(exc.value)
 
 
+def test_lifecycle_event_validation_errors_do_not_echo_rejected_inputs() -> None:
+    with pytest.raises(ValidationError) as exc:
+        LifecycleStateChangeEvent.model_validate(
+            {
+                "event_id": "evt-20260513-001",
+                "event_type": "story_state_changed",
+                "source": "servicenow-business-rule",
+                "table": "rm_story",
+                "story_number": "",
+                "previous_state": "Draft",
+                "current_state": "Ready",
+                "occurred_at": "2026-05-13T15:45:00Z",
+                "correlation_id": "STRY0010013-Draft-Ready-20260513T154500Z",
+                "emitted_by": "jedi-devproject-lifecycle-integration",
+            }
+        )
+
+    message = str(exc.value)
+    assert "story_number" in message
+    assert "input_value" not in message
+
+
 def test_non_ready_transition_does_not_plan_evaluation() -> None:
     event = LifecycleStateChangeEvent.model_validate(
         {

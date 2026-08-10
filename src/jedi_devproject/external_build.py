@@ -17,8 +17,12 @@ class ExternalBuildPipelineStatus(StrEnum):
     BLOCKED = "blocked"
 
 
+class SuccessfulBuildRequiredError(ValueError):
+    """Raised when reviewed delivery artifacts are requested for an unsuccessful build."""
+
+
 class ExternalBuildPipelineResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     story_number: str
     build_reference: str
@@ -63,7 +67,7 @@ def reviewed_delivery_jobs_from_build_result(
     result: ExternalBuildPipelineResult,
 ) -> list[dict[str, object]]:
     if result.status is not ExternalBuildPipelineStatus.SUCCEEDED:
-        raise ValueError("successful_build_required")
+        raise SuccessfulBuildRequiredError("successful_build_required")
     if result.reviewed_update_set_xml_path is None or result.test_evidence_path is None:
         raise ValueError("reviewed_delivery_outputs_required")
     return [

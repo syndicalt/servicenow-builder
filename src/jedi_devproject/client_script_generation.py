@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
-from jedi_devproject.validation_helpers import single_insert_change, slug, string_list
+from jedi_devproject.validation_helpers import single_insert_change, slug
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     container_element,
@@ -14,9 +14,13 @@ from jedi_devproject.xml_builder import (
     text_element,
 )
 
+CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC = (
+    "Client Script generation field contains non-JSON value"
+)
+
 
 class ClientScriptIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     script_name: str
@@ -84,14 +88,38 @@ def client_script_customer_updates(
 def _client_script_intent(change: CandidateChange) -> ClientScriptIntent:
     fields = dict(change.fields)
     return ClientScriptIntent(
-        target_table=str(fields.get("table") or fields.get("target_table") or ""),
-        script_name=str(fields.get("name") or fields.get("script_name") or ""),
-        script_type=str(fields.get("type") or fields.get("client_script_type") or ""),
-        field_name=str(fields.get("field") or fields.get("field_name") or ""),
-        script=str(fields.get("script") or fields.get("script_body") or ""),
-        fields_read=string_list(fields.get("fields_read"), ignore_none_token=True),
-        fields_written=string_list(fields.get("fields_written"), ignore_none_token=True),
-        messages_shown=string_list(fields.get("messages_shown"), ignore_none_token=True),
+        target_table=_client_script_first_text(
+            fields.get("table"),
+            fields.get("target_table"),
+        ),
+        script_name=_client_script_first_text(
+            fields.get("name"),
+            fields.get("script_name"),
+        ),
+        script_type=_client_script_first_text(
+            fields.get("type"),
+            fields.get("client_script_type"),
+        ),
+        field_name=_client_script_first_text(
+            fields.get("field"),
+            fields.get("field_name"),
+        ),
+        script=_client_script_first_text(
+            fields.get("script"),
+            fields.get("script_body"),
+        ),
+        fields_read=_client_script_string_list(
+            fields.get("fields_read"),
+            ignore_none_token=True,
+        ),
+        fields_written=_client_script_string_list(
+            fields.get("fields_written"),
+            ignore_none_token=True,
+        ),
+        messages_shown=_client_script_string_list(
+            fields.get("messages_shown"),
+            ignore_none_token=True,
+        ),
     )
 
 
@@ -150,3 +178,34 @@ def _validate_field_writes(*, script: str, fields_written: list[str]) -> None:
     undeclared = sorted(written_fields - declared)
     if undeclared:
         raise ValueError(f"Client Script writes undeclared field: {undeclared[0]}")
+
+
+def _client_script_string_list(
+    value: Any,
+    *,
+    ignore_none_token: bool = False,
+) -> list[str]:
+    if type(value) is list:
+        return [text for item in value if (text := _client_script_field_text(item).strip())]
+    text = _client_script_field_text(value).strip()
+    if not text or (ignore_none_token and text.lower() == "none"):
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _client_script_first_text(*values: Any) -> str:
+    for value in values:
+        text = _client_script_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _client_script_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC)

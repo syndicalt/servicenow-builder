@@ -1,9 +1,15 @@
 import json
+import math
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from jedi_devproject.artifacts import ArtifactWriteError, write_candidate_artifact
+from jedi_devproject.artifacts import (
+    ArtifactWriteError,
+    _ensure_artifact_dto_payload_json_safe,
+    write_candidate_artifact,
+)
 from jedi_devproject.candidates import generate_template_candidate
 from jedi_devproject.models import CandidateStatus, DataClassification, Story
 from jedi_devproject.rag import Document, RagDomain, SpecializedRags
@@ -114,6 +120,142 @@ def test_candidate_artifact_writer_refuses_to_overwrite_existing_run_file(tmp_pa
 
     payload = json.loads(first_path.read_text(encoding="utf-8"))
     assert payload["story_number"] == "STORY0010001"
+
+
+def test_candidate_artifact_writer_rejects_broken_symlink_escape(tmp_path: Path) -> None:
+    candidate = generate_template_candidate(
+        story=_story(),
+        safety_result=evaluate_story(_story(), _policy()),
+        rags=_rags(),
+    )
+    run_dir = tmp_path / "run-001"
+    run_dir.mkdir()
+    outside_path = tmp_path / "escape.json"
+    artifact_link = run_dir / "STORY0010001.json"
+    artifact_link.symlink_to(outside_path)
+
+    with pytest.raises(ArtifactWriteError):
+        write_candidate_artifact(tmp_path, run_id="run-001", candidate=candidate)
+
+    assert artifact_link.is_symlink()
+    assert not outside_path.exists()
+
+
+def test_candidate_artifact_writer_rejects_path_traversal_run_id(tmp_path: Path) -> None:
+    candidate = generate_template_candidate(
+        story=_story(),
+        safety_result=evaluate_story(_story(), _policy()),
+        rags=_rags(),
+    )
+
+    with pytest.raises(ArtifactWriteError, match="unsafe artifact path component"):
+        write_candidate_artifact(tmp_path / "artifacts", run_id="../escape", candidate=candidate)
+
+    assert not (tmp_path / "escape" / "STORY0010001.json").exists()
+
+
+def test_candidate_artifact_writer_rejects_non_finite_candidate_without_payload_leak(
+    tmp_path: Path,
+) -> None:
+    candidate = generate_template_candidate(
+        story=_story(),
+        safety_result=evaluate_story(_story(), _policy()),
+        rags=_rags(),
+    ).model_copy(update={"confidence": math.nan})
+
+    with pytest.raises(ArtifactWriteError) as exc_info:
+        write_candidate_artifact(tmp_path, run_id="run-001", candidate=candidate)
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact DTO payload contains non-finite numeric values"
+    assert exc_info.value.__cause__ is None
+    assert "confidence" not in diagnostic
+    assert "NaN" not in diagnostic
+    assert "STORY0010001" not in diagnostic
+    assert not (tmp_path / "run-001" / "STORY0010001.json").exists()
+
+
+def test_candidate_artifact_writer_rejects_non_json_candidate_without_payload_leak(
+    tmp_path: Path,
+) -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=candidate-secret"
+
+    candidate = generate_template_candidate(
+        story=_story(),
+        safety_result=evaluate_story(_story(), _policy()),
+        rags=_rags(),
+    ).model_copy(update={"artifact_hash": SecretBearingObject()})
+
+    with pytest.raises(ArtifactWriteError) as exc_info:
+        write_candidate_artifact(tmp_path, run_id="run-001", candidate=candidate)
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact DTO payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "artifact_hash" not in diagnostic
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "candidate-secret" not in diagnostic
+    assert not (tmp_path / "run-001" / "STORY0010001.json").exists()
+
+
+def test_candidate_artifact_writer_rejects_string_subclass_candidate_without_payload_leak(
+    tmp_path: Path,
+) -> None:
+    class HostileCandidateText(str):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=candidate-str-secret")
+
+    candidate = generate_template_candidate(
+        story=_story(),
+        safety_result=evaluate_story(_story(), _policy()),
+        rags=_rags(),
+    ).model_copy(update={"artifact_hash": HostileCandidateText("candidate-secret")})
+
+    with pytest.raises(ArtifactWriteError) as exc_info:
+        write_candidate_artifact(tmp_path, run_id="run-001", candidate=candidate)
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "artifact DTO payload contains non-JSON values"
+    assert exc_info.value.__cause__ is None
+    assert "artifact_hash" not in diagnostic
+    assert "HostileCandidateText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "candidate" not in diagnostic
+    assert not (tmp_path / "run-001" / "STORY0010001.json").exists()
+
+
+def test_artifact_dto_payload_rejects_container_subclasses_without_payload_leak() -> (
+    None
+):
+    class HostileArtifactDict(dict[str, Any]):
+        def items(self) -> Any:
+            raise AssertionError("client_secret=artifact-dict-subclass-secret")
+
+    class HostileArtifactList(list[Any]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=artifact-list-subclass-secret")
+
+    class HostileArtifactTuple(tuple[Any, ...]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=artifact-tuple-subclass-secret")
+
+    for value in (
+        HostileArtifactDict({"secret": "hidden dict"}),
+        HostileArtifactList(["hidden list"]),
+        HostileArtifactTuple(("hidden tuple",)),
+    ):
+        with pytest.raises(TypeError) as exc_info:
+            _ensure_artifact_dto_payload_json_safe(value)
+
+        diagnostic = str(exc_info.value)
+        assert diagnostic == "non-JSON artifact DTO payload value"
+        assert "HostileArtifact" not in diagnostic
+        assert "client_secret" not in diagnostic
+        assert "subclass-secret" not in diagnostic
+        assert "hidden" not in diagnostic
 
 
 def test_dictionary_form_story_generates_controlled_candidate() -> None:

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Literal
-from xml.etree import ElementTree
 
+from defusedxml import ElementTree
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
@@ -13,7 +13,7 @@ FlowGraphDiffOperation = Literal["add_action", "update_condition"]
 
 
 class FlowGraphDiffStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     operation: FlowGraphDiffOperation
     node_id: str
@@ -32,7 +32,7 @@ class FlowGraphDiffStep(BaseModel):
 
 
 class FlowGraphDiffIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     capability: Literal["flow_modify"]
     flow_name: str
@@ -73,12 +73,12 @@ class FlowGraphDiffIntent(BaseModel):
         if not _looks_like_hash(self.existing_graph_hash):
             raise ValueError("Flow graph diff existing_graph_hash must be a stable hash")
         _validate_no_raw_xml(self.customer_update_records)
-        _validate_safe_payload(self.model_dump(mode="json"))
+        _validate_safe_payload(self.model_dump(mode="python"))
         return self
 
 
 class FlowGraphBuilderPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     capability: Literal["flow_modify"]
     flow_name: str
@@ -106,7 +106,7 @@ class FlowGraphBuilderPlan(BaseModel):
 
 
 class FlowXmlShape(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: str
     update_type: str
@@ -119,7 +119,7 @@ class FlowXmlShape(BaseModel):
 
 
 class FlowXmlShapeRepository(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-xml-shapes-v1"]
     runtime_generation_enabled: bool
@@ -135,7 +135,7 @@ class FlowXmlShapeRepository(BaseModel):
 
 
 class FlowXmlShapeEvidence(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: str
     repository_version: Literal["flow-xml-shapes-v1"]
@@ -149,7 +149,7 @@ class FlowXmlShapeEvidence(BaseModel):
 
 
 class FlowCustomerUpdateStrategy(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-customer-update-strategy-v1"]
     naming_pattern: Literal["table_sys_id"]
@@ -167,7 +167,7 @@ class FlowCustomerUpdateStrategy(BaseModel):
 
 
 class FlowSnapshotUpdateStrategy(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-snapshot-update-strategy-v1"]
     flow_record_table: Literal["sys_hub_flow"]
@@ -194,7 +194,7 @@ class FlowSnapshotUpdateStrategy(BaseModel):
 
 
 class FlowPreviewCommitReviewStrategy(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-preview-commit-review-strategy-v1"]
     review_boundary: Literal["retrieved_update_set_preview_commit"]
@@ -213,7 +213,7 @@ class FlowPreviewCommitReviewStrategy(BaseModel):
 
 
 class FlowBuilderReadinessContract(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     version: Literal["flow-builder-readiness-v1"]
     required_evidence: list[str]
@@ -238,7 +238,7 @@ class FlowRuntimeEvidenceSummary(BaseModel):
     flow graph hash.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     bundle_version: Literal["flow-xml-evidence-v1"]
     flow_name: str
@@ -248,7 +248,7 @@ class FlowRuntimeEvidenceSummary(BaseModel):
 
 
 class FlowUnsupportedReasonGuidance(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     code: str
     summary: str
@@ -271,11 +271,21 @@ def validate_flow_graph_diff_candidate(
     try:
         intent = FlowGraphDiffIntent.model_validate(dict(change.fields))
     except ValidationError as exc:
-        if "requested_graph_diff" in str(exc) and "operation" in str(exc):
-            raise ValueError("unsupported Flow graph diff operation") from exc
+        if _validation_error_has_location(exc, "requested_graph_diff", "operation"):
+            raise ValueError("unsupported Flow graph diff operation") from None
         raise
     _validate_retrieved_nodes(intent=intent, retrieved_node_ids=retrieved_node_ids)
     return intent
+
+
+def _validation_error_has_location(error: ValidationError, *path_parts: str) -> bool:
+    for entry in error.errors():
+        location = entry.get("loc", ())
+        if not isinstance(location, tuple | list):
+            continue
+        if all(path_part in location for path_part in path_parts):
+            return True
+    return False
 
 
 def plan_flow_graph_builder(
@@ -347,8 +357,8 @@ def validate_flow_xml_shape_evidence(*, table: str, xml_payload: str) -> FlowXml
     shape = repository.shape(table)
     try:
         root = ElementTree.fromstring(xml_payload)
-    except ElementTree.ParseError as exc:
-        raise ValueError("Flow XML shape evidence is not valid XML") from exc
+    except ElementTree.ParseError:
+        raise ValueError("Flow XML shape evidence is not valid XML") from None
     if root.tag != shape.root_element:
         raise ValueError(f"Flow XML shape evidence root must be {shape.root_element}")
     record = root.find(shape.record_element)
@@ -717,7 +727,11 @@ def _validate_retrieved_nodes(
 
 
 def _validate_no_raw_xml(customer_update_records: list[dict[str, Any]]) -> None:
-    raw_text = json.dumps(customer_update_records, sort_keys=True, default=str)
+    raw_text = _strict_validation_json(
+        customer_update_records,
+        non_finite_message="Flow graph diff contains a non-finite customer update value",
+        non_json_message="Flow graph diff contains a non-JSON customer update value",
+    )
     if re.search(r"<\s*/?\s*(record_update|sys_hub_|xml|sys_update_xml)", raw_text, re.I):
         raise ValueError("Flow graph diff must not include raw XML")
 
@@ -741,10 +755,28 @@ FORBIDDEN_FLOW_TOKENS = [
 
 
 def _validate_safe_payload(payload: dict[str, Any]) -> None:
-    text = json.dumps(payload, sort_keys=True, default=str).lower()
+    text = _strict_validation_json(
+        payload,
+        non_finite_message="Flow graph diff contains a non-finite payload value",
+        non_json_message="Flow graph diff contains a non-JSON payload value",
+    ).lower()
     for token in FORBIDDEN_FLOW_TOKENS:
         if token.lower() in text:
             raise ValueError(f"forbidden Flow graph diff token: {token}")
+
+
+def _strict_validation_json(
+    value: Any,
+    *,
+    non_finite_message: str,
+    non_json_message: str,
+) -> str:
+    try:
+        return json.dumps(value, sort_keys=True, allow_nan=False)
+    except ValueError:
+        raise ValueError(non_finite_message) from None
+    except TypeError:
+        raise ValueError(non_json_message) from None
 
 
 def _looks_like_hash(value: str) -> bool:

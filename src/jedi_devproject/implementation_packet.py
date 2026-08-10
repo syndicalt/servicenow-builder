@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+import json
+import math
+import re
+from datetime import date, datetime, time
+from decimal import Decimal
+from enum import Enum
 from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel
+from pydantic_core import PydanticSerializationError
 
 from jedi_devproject.builder_maturity import (
     CATALOG_FULFILLMENT_FLOW_SURFACE,
@@ -10,6 +20,7 @@ from jedi_devproject.builder_maturity import (
 from jedi_devproject.capabilities import Capability, SuitabilityOutcome
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.context_escalation import plan_context_escalation
+from jedi_devproject.diagnostic_redaction import _redact_diagnostic_text
 from jedi_devproject.instance_discovery import (
     InstanceDiscoveryContext,
     ServiceNowSurfaceContextBundle,
@@ -34,6 +45,7 @@ from jedi_devproject.packet_model import (
     PacketStory,
 )
 from jedi_devproject.packet_validation import (
+    MAX_IMPLEMENTATION_REVIEW_ITEM_CHARS,
     _candidate_decision,
     _validate_implementation_contract,
     _validate_response_tables_match_capability,
@@ -61,6 +73,121 @@ __all__ = [
     "generate_implementation_update_set_candidate",
     "generate_implementation_update_set_candidate_from_packet",
 ]
+
+MAX_SURFACE_OPERATION_REASON_ITEMS = 50
+PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC = (
+    "implementation packet nested payload contains non-finite numeric values"
+)
+PACKET_NESTED_PAYLOAD_NON_JSON_DIAGNOSTIC = (
+    "implementation packet nested payload contains non-JSON values"
+)
+PACKET_RAW_PAYLOAD_NON_FINITE_DIAGNOSTIC = (
+    "implementation packet raw payload contains non-finite numeric values"
+)
+PACKET_RAW_PAYLOAD_NON_JSON_DIAGNOSTIC = (
+    "implementation packet raw payload contains non-JSON values"
+)
+
+
+def _ensure_packet_model_payload_json_safe(value: Any) -> None:
+    if (
+        value is None
+        or type(value) is str
+        or type(value) is bool
+        or type(value) is int
+        or type(value) is UUID
+        or isinstance(value, Enum)
+    ):
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise ValueError(PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC)
+    if type(value) is Decimal:
+        if value.is_finite():
+            return
+        raise ValueError(PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC)
+    if type(value) in {datetime, date, time}:
+        return
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError(PACKET_NESTED_PAYLOAD_NON_JSON_DIAGNOSTIC)
+            _ensure_packet_model_payload_json_safe(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _ensure_packet_model_payload_json_safe(item)
+        return
+    if type(value) is tuple:
+        for item in value:
+            _ensure_packet_model_payload_json_safe(item)
+        return
+    if type(value) is set:
+        for item in value:
+            _ensure_packet_model_payload_json_safe(item)
+        return
+    if type(value) is frozenset:
+        for item in value:
+            _ensure_packet_model_payload_json_safe(item)
+        return
+    raise TypeError(PACKET_NESTED_PAYLOAD_NON_JSON_DIAGNOSTIC)
+
+
+def _packet_model_payload(model: BaseModel, *, diagnostic: str) -> dict[str, Any]:
+    try:
+        _ensure_packet_model_payload_json_safe(
+            model.model_dump(mode="python", warnings=False)
+        )
+        payload = model.model_dump(mode="json", warnings=False)
+        json.dumps(payload, sort_keys=True, allow_nan=False)
+    except PydanticSerializationError:
+        raise ValueError(PACKET_NESTED_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    except ValueError:
+        raise ValueError(diagnostic) from None
+    except TypeError:
+        raise ValueError(PACKET_NESTED_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    return payload
+
+
+def _packet_raw_payload(payload: dict[str, Any], *, diagnostic: str) -> dict[str, Any]:
+    try:
+        _ensure_packet_raw_payload_json_safe(payload)
+        json.dumps(payload, separators=(",", ":"), allow_nan=False)
+    except ValueError:
+        raise ValueError(diagnostic) from None
+    except TypeError:
+        raise ValueError(PACKET_RAW_PAYLOAD_NON_JSON_DIAGNOSTIC) from None
+    return payload
+
+
+def _ensure_packet_raw_payload_json_safe(value: Any) -> None:
+    if (
+        value is None
+        or type(value) is str
+        or type(value) is bool
+        or type(value) is int
+    ):
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise ValueError(PACKET_RAW_PAYLOAD_NON_FINITE_DIAGNOSTIC)
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError(PACKET_RAW_PAYLOAD_NON_JSON_DIAGNOSTIC)
+            _ensure_packet_raw_payload_json_safe(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _ensure_packet_raw_payload_json_safe(item)
+        return
+    if type(value) is tuple:
+        for item in value:
+            _ensure_packet_raw_payload_json_safe(item)
+        return
+    raise TypeError(PACKET_RAW_PAYLOAD_NON_JSON_DIAGNOSTIC)
 
 
 def build_implementation_packet(
@@ -103,8 +230,46 @@ def build_implementation_packet(
     citations = [result.citation for results in retrieved.values() for result in results]
     surface_operation_plan = plan_surface_operations(assessment.automation_intent)
     surface_operation_plan_payload = (
-        surface_operation_plan.model_dump(mode="json")
+        _packet_model_payload(
+            surface_operation_plan,
+            diagnostic=PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC,
+        )
         if surface_operation_plan.operations
+        else None
+    )
+    capability_assessment_payload = _packet_model_payload(
+        assessment,
+        diagnostic=PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC,
+    )
+    normalized_intent = (
+        _packet_raw_payload(
+            assessment.automation_intent,
+            diagnostic=PACKET_RAW_PAYLOAD_NON_FINITE_DIAGNOSTIC,
+        )
+        if assessment.automation_intent is not None
+        else (
+            _packet_model_payload(
+                assessment.intent,
+                diagnostic=PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC,
+            )
+            if assessment.intent is not None
+            else None
+        )
+    )
+    instance_context_payload = (
+        _packet_model_payload(
+            discovery_context,
+            diagnostic=PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC,
+        )
+        if discovery_context is not None
+        else None
+    )
+    instance_context_bundle_payload = (
+        _packet_model_payload(
+            surface_context_bundle,
+            diagnostic=PACKET_NESTED_PAYLOAD_NON_FINITE_DIAGNOSTIC,
+        )
+        if surface_context_bundle is not None
         else None
     )
     context_sufficiency = _context_sufficiency(
@@ -130,28 +295,14 @@ def build_implementation_packet(
         risk_score=assessment.risk_score,
         allowed_tables=sorted(policy.tables),
         allowed_operations=sorted(policy.operations),
-        capability_assessment=assessment.model_dump(mode="json"),
-        normalized_intent=(
-            assessment.automation_intent
-            if assessment.automation_intent is not None
-            else (
-                assessment.intent.model_dump(mode="json")
-                if assessment.intent is not None
-                else None
-            )
-        ),
+        capability_assessment=capability_assessment_payload,
+        normalized_intent=normalized_intent,
         surface_operation_plan=surface_operation_plan_payload,
-        instance_context=(
-            discovery_context.model_dump(mode="json") if discovery_context is not None else None
-        ),
-        instance_context_bundle=(
-            surface_context_bundle.model_dump(mode="json")
-            if surface_context_bundle is not None
-            else None
-        ),
+        instance_context=instance_context_payload,
+        instance_context_bundle=instance_context_bundle_payload,
         context_dossier=_context_dossier(
             story=story,
-            assessment=assessment.model_dump(mode="json"),
+            assessment=capability_assessment_payload,
             discovery_context=discovery_context,
             surface_context_bundle=surface_context_bundle,
             context_sufficiency=context_sufficiency,
@@ -422,9 +573,17 @@ def _normalize_placeholder_sys_ids(response: dict[str, Any]) -> dict[str, Any]:
     return {**response, "changes": normalized_changes}
 
 
+# Placeholder sys_ids emitted by models when they have no instance sys_id. Matches
+# bracketed uppercase snake_case labels ending with ``_SYS_ID_HERE`` (e.g.
+# ``[FORM_SYS_ID_HERE]``) and rejects free-form bracketed strings like
+# ``[attachment sys_id unavailable]``.
+_PLACEHOLDER_SYS_ID_PATTERN = re.compile(r"^\[[A-Z][A-Z0-9_]*_SYS_ID_HERE\]$")
+
+
 def _is_placeholder_sys_id(value: Any) -> bool:
-    text = str(value or "").strip().lower()
-    return text.startswith("[") and text.endswith("]") and "sys_id" in text
+    if value is None or type(value) is not str:
+        return False
+    return _PLACEHOLDER_SYS_ID_PATTERN.match(value.strip()) is not None
 
 
 def _reconcile_response_with_packet(
@@ -432,19 +591,42 @@ def _reconcile_response_with_packet(
     packet: ImplementationPacket,
     response: dict[str, Any],
 ) -> dict[str, Any]:
+    changes: list[Any] = list(response.get("changes", []))
     if _packet_has_capability(packet, Capability.RECORD_PRODUCER_CREATE):
-        return {
-            **response,
-            "changes": _record_producer_changes_from_normalized_intent(
-                packet.normalized_intent
-            ),
-        }
-    if not _packet_has_capability(packet, Capability.CATALOG_ITEM_CREATE):
-        return response
-    return {
-        **response,
-        "changes": _catalog_item_changes_from_normalized_intent(packet.normalized_intent),
+        changes = _merge_deterministic_changes(
+            changes,
+            _record_producer_changes_from_normalized_intent(packet.normalized_intent),
+        )
+    if _packet_has_capability(packet, Capability.CATALOG_ITEM_CREATE):
+        changes = _merge_deterministic_changes(
+            changes,
+            _catalog_item_changes_from_normalized_intent(packet.normalized_intent),
+        )
+    return {**response, "changes": changes}
+
+
+def _merge_deterministic_changes(
+    response_changes: list[Any],
+    deterministic_changes: list[dict[str, Any]],
+) -> list[Any]:
+    """Replace model changes for tables covered by deterministic intent, keep the rest."""
+    if not deterministic_changes:
+        return response_changes
+    deterministic_tables = {
+        change["table"]
+        for change in deterministic_changes
+        if isinstance(change, dict) and isinstance(change.get("table"), str)
     }
+    kept_changes = [
+        change
+        for change in response_changes
+        if not (
+            isinstance(change, dict)
+            and isinstance(change.get("table"), str)
+            and change["table"] in deterministic_tables
+        )
+    ]
+    return [*kept_changes, *deterministic_changes]
 
 
 def _packet_has_capability(packet: ImplementationPacket, capability: Capability) -> bool:
@@ -545,14 +727,30 @@ def _automation_feedback_notes(packet: ImplementationPacket) -> list[str]:
     if not isinstance(assessment, dict):
         return []
     notes = [
-        str(note).strip()
+        safe_note
         for note in assessment.get("operator_feedback", [])
-        if str(note).strip()
+        if isinstance(note, str)
+        for safe_note in [_safe_feedback_note(note)]
+        if safe_note
     ]
     suggested_story = assessment.get("suggested_story")
     if isinstance(suggested_story, str) and suggested_story.strip():
-        notes.append(f"Suggested rewrite:\n{suggested_story.strip()}")
+        safe_suggested_story = _safe_feedback_note(suggested_story)
+        if safe_suggested_story:
+            notes.append(f"Suggested rewrite: {safe_suggested_story}")
     return notes
+
+
+def _safe_feedback_note(value: str) -> str:
+    redacted = _redact_diagnostic_text(value) or ""
+    normalized = " ".join(redacted.split())
+    if len(normalized) <= MAX_IMPLEMENTATION_REVIEW_ITEM_CHARS:
+        return normalized
+    marker = "...[truncated]"
+    return (
+        normalized[: MAX_IMPLEMENTATION_REVIEW_ITEM_CHARS - len(marker)].rstrip()
+        + marker
+    )
 
 
 def _surface_operation_reasons(packet: ImplementationPacket) -> list[str]:
@@ -563,15 +761,43 @@ def _surface_operation_reasons(packet: ImplementationPacket) -> list[str]:
     if not isinstance(operations, list):
         return []
     reasons: list[str] = []
-    for operation in operations:
+    unsupported_operations = [
+        operation
+        for operation in operations
+        if isinstance(operation, dict)
+        and operation.get("status") == SurfaceOperationStatus.UNSUPPORTED.value
+    ]
+    for operation in unsupported_operations[:MAX_SURFACE_OPERATION_REASON_ITEMS]:
         if not isinstance(operation, dict):
             continue
-        if operation.get("status") != SurfaceOperationStatus.UNSUPPORTED.value:
-            continue
-        kind = str(operation.get("kind") or SurfaceOperationKind.UNKNOWN.value)
+        kind_value = operation.get("kind") or SurfaceOperationKind.UNKNOWN.value
+        kind = (
+            _safe_feedback_note(kind_value)
+            if isinstance(kind_value, str)
+            else SurfaceOperationKind.UNKNOWN.value
+        )
         reasons.append(f"unsupported surface operation: {kind}")
-        for code in operation.get("reason_codes") or []:
-            reasons.append(f"surface operation reason: {code}")
+        raw_reason_codes = operation.get("reason_codes")
+        reason_codes = (
+            [code for code in raw_reason_codes if isinstance(code, str)]
+            if isinstance(raw_reason_codes, list)
+            else []
+        )
+        for code in reason_codes[:MAX_SURFACE_OPERATION_REASON_ITEMS]:
+            if not isinstance(code, str):
+                continue
+            safe_code = _safe_feedback_note(code)
+            if safe_code:
+                reasons.append(f"surface operation reason: {safe_code}")
+        omitted_codes = len(reason_codes) - MAX_SURFACE_OPERATION_REASON_ITEMS
+        if omitted_codes > 0:
+            reasons.append(f"surface operation reasons omitted: {omitted_codes} reason codes")
+    omitted_operations = len(unsupported_operations) - MAX_SURFACE_OPERATION_REASON_ITEMS
+    if omitted_operations > 0:
+        reasons.append(
+            "surface operation reasons omitted: "
+            f"{omitted_operations} unsupported operations"
+        )
     return reasons
 
 

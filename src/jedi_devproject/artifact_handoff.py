@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import hashlib
+import math
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from jedi_devproject.artifacts import artifact_sha256_file, open_regular_artifact_file
+from jedi_devproject.work_note_safety import safe_work_note_value
 
 
 class ArtifactKind(StrEnum):
@@ -23,6 +26,8 @@ class ArtifactExposure(StrEnum):
 
 
 class ArtifactHandoffPlan(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     artifact_kind: ArtifactKind
     artifact_path: str
@@ -47,6 +52,11 @@ _ATTACHMENT_LABELS = {
     ArtifactKind.TEST_EVIDENCE_BUNDLE: "Test Evidence Bundle",
 }
 _REVIEWED_DELIVERY_CONTRACT = "reviewed_export"
+_XML_SCAN_CHUNK_BYTES = 64 * 1024
+_XML_MARKER_SCAN_BYTES = 10 * 1024 * 1024
+_PLACEHOLDER_UPDATE_SET_MARKER = b"<placeholder_update_set"
+_SYS_UPDATE_XML_MARKER = b"<sys_update_xml"
+ARTIFACT_HANDOFF_REPORT_INVALID = "artifact_handoff_report_invalid"
 
 
 def build_reviewed_delivery_artifact_job(
@@ -60,12 +70,10 @@ def build_reviewed_delivery_artifact_job(
         raise ValueError("delivery_artifact_kind_required")
     if reviewer_id.strip() == "":
         raise ValueError("reviewer_id_required")
-    if artifact_kind is ArtifactKind.UPDATE_SET_XML:
-        update_set_xml = artifact_path.read_text(encoding="utf-8")
-        if update_set_xml.lstrip().startswith(
-            "<placeholder_update_set"
-        ) or "<sys_update_xml" not in update_set_xml:
-            raise ValueError("reviewed_export_artifact_required")
+    if artifact_kind is ArtifactKind.UPDATE_SET_XML and not _is_reviewed_update_set_xml_artifact(
+        artifact_path
+    ):
+        raise ValueError("reviewed_export_artifact_required")
     return {
         "story_number": story_number,
         "artifact_kind": artifact_kind.value,
@@ -73,7 +81,7 @@ def build_reviewed_delivery_artifact_job(
         "approved_for_delivery": True,
         "delivery_contract": _REVIEWED_DELIVERY_CONTRACT,
         "reviewer_id": reviewer_id,
-        "artifact_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+        "artifact_sha256": artifact_sha256_file(artifact_path),
     }
 
 
@@ -136,21 +144,31 @@ def build_artifact_handoff_report(
     story_number: str,
     artifacts: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    run_id = _handoff_required_text(run_id)
+    story_number = _handoff_required_text(story_number)
+    if type(artifacts) is not list:
+        raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
     decisions = []
     for artifact in artifacts:
-        artifact_path = Path(str(artifact["artifact_path"]))
+        if type(artifact) is not dict:
+            raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
+        artifact_path_text = _handoff_required_text(artifact.get("artifact_path"))
+        artifact_kind_text = _handoff_required_text(artifact.get("artifact_kind"))
+        approved_for_delivery = artifact.get("approved_for_delivery")
+        if type(approved_for_delivery) is not bool:
+            raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
+        delivery_contract_value = artifact.get("delivery_contract")
+        if delivery_contract_value is not None:
+            delivery_contract_value = _handoff_required_text(delivery_contract_value)
+        artifact_path = Path(artifact_path_text)
         plan = plan_artifact_handoff(
             story_number=story_number,
-            artifact_kind=ArtifactKind(str(artifact["artifact_kind"])),
-            artifact_path=str(artifact_path),
-            approved_for_delivery=bool(artifact["approved_for_delivery"]),
-            delivery_contract=(
-                str(artifact["delivery_contract"])
-                if artifact.get("delivery_contract") is not None
-                else None
-            ),
+            artifact_kind=ArtifactKind(artifact_kind_text),
+            artifact_path=artifact_path_text,
+            approved_for_delivery=approved_for_delivery,
+            delivery_contract=delivery_contract_value,
         ).model_dump(mode="json")
-        plan["artifact_sha256"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        plan["artifact_sha256"] = artifact_sha256_file(artifact_path)
         decisions.append(plan)
     return {
         "run_id": run_id,
@@ -183,19 +201,44 @@ def build_artifact_handoff_work_note(
     summary = report["summary"]
     return (
         "Artifact handoff planned. "
-        f"Report: {report_path}. "
-        f"total={summary['total']} "
-        f"attach_to_servicenow={summary['attach_to_servicenow']} "
-        f"internal_evidence={summary['internal_evidence']} "
-        f"delivery_evidence={summary['delivery_evidence']}."
+        f"Report: {safe_work_note_value(str(report_path))}. "
+        f"total={safe_work_note_value(_handoff_summary_value(summary['total']))} "
+        "attach_to_servicenow="
+        f"{safe_work_note_value(_handoff_summary_value(summary['attach_to_servicenow']))} "
+        "internal_evidence="
+        f"{safe_work_note_value(_handoff_summary_value(summary['internal_evidence']))} "
+        "delivery_evidence="
+        f"{safe_work_note_value(_handoff_summary_value(summary['delivery_evidence']))}."
     )
 
 
+def _handoff_summary_value(value: Any) -> str:
+    if type(value) is str:
+        return value
+    if value is None:
+        return "None"
+    if type(value) is bool:
+        return "True" if value else "False"
+    if type(value) is int:
+        return str(value)
+    if type(value) is float and math.isfinite(value):
+        return str(value)
+    return "[unsupported handoff summary value]"
+
+
 def delivery_attachment_jobs_from_report(report: dict[str, Any]) -> list[dict[str, str]]:
-    story_number = str(report["story_number"])
+    story_number = _handoff_required_text(report.get("story_number"))
+    decisions = report.get("decisions")
+    if type(decisions) is not list:
+        raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
     jobs = []
-    for decision in report["decisions"]:
-        if not decision["attach_to_servicenow"]:
+    for decision in decisions:
+        if type(decision) is not dict:
+            raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
+        attach_to_servicenow = decision.get("attach_to_servicenow")
+        if type(attach_to_servicenow) is not bool:
+            raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
+        if not attach_to_servicenow:
             continue
         if decision.get("delivery_contract") != _REVIEWED_DELIVERY_CONTRACT:
             raise ValueError("delivery_contract_required")
@@ -204,11 +247,81 @@ def delivery_attachment_jobs_from_report(report: dict[str, Any]) -> list[dict[st
         jobs.append(
             {
                 "story_number": story_number,
-                "artifact_kind": str(decision["artifact_kind"]),
-                "artifact_path": str(decision["artifact_path"]),
-                "delivery_contract": str(decision["delivery_contract"]),
-                "artifact_sha256": str(decision["artifact_sha256"]),
-                "attachment_label": str(decision["service_now_attachment_label"]),
+                "artifact_kind": _handoff_required_text(decision.get("artifact_kind")),
+                "artifact_path": _handoff_required_text(decision.get("artifact_path")),
+                "delivery_contract": _handoff_required_text(
+                    decision.get("delivery_contract")
+                ),
+                "artifact_sha256": _handoff_required_text(decision.get("artifact_sha256")),
+                "attachment_label": _handoff_required_text(
+                    decision.get("service_now_attachment_label")
+                ),
             }
         )
     return jobs
+
+
+def _handoff_required_text(value: Any) -> str:
+    if type(value) is not str or value.strip() == "":
+        raise ValueError(ARTIFACT_HANDOFF_REPORT_INVALID)
+    return value
+
+
+def _is_reviewed_update_set_xml_artifact(path: Path) -> bool:
+    first_content_prefix = _first_non_whitespace_prefix(
+        path,
+        max_prefix_bytes=len(_PLACEHOLDER_UPDATE_SET_MARKER),
+        max_scan_bytes=_XML_MARKER_SCAN_BYTES,
+    )
+    if first_content_prefix.startswith(_PLACEHOLDER_UPDATE_SET_MARKER):
+        return False
+    return _file_contains_marker(
+        path,
+        marker=_SYS_UPDATE_XML_MARKER,
+        max_scan_bytes=_XML_MARKER_SCAN_BYTES,
+    )
+
+
+def _first_non_whitespace_prefix(
+    path: Path,
+    *,
+    max_prefix_bytes: int,
+    max_scan_bytes: int,
+) -> bytes:
+    prefix = b""
+    found_content = False
+    scanned = 0
+    with open_regular_artifact_file(path) as artifact:
+        while scanned < max_scan_bytes and len(prefix) < max_prefix_bytes:
+            chunk = artifact.read(min(_XML_SCAN_CHUNK_BYTES, max_scan_bytes - scanned))
+            if not chunk:
+                break
+            scanned += len(chunk)
+            candidate = chunk if found_content else chunk.lstrip()
+            if not candidate:
+                continue
+            found_content = True
+            remaining = max_prefix_bytes - len(prefix)
+            prefix += candidate[:remaining]
+    return prefix
+
+
+def _file_contains_marker(
+    path: Path,
+    *,
+    marker: bytes,
+    max_scan_bytes: int,
+) -> bool:
+    tail = b""
+    scanned = 0
+    with open_regular_artifact_file(path) as artifact:
+        while scanned < max_scan_bytes:
+            chunk = artifact.read(min(_XML_SCAN_CHUNK_BYTES, max_scan_bytes - scanned))
+            if not chunk:
+                break
+            scanned += len(chunk)
+            window = tail + chunk
+            if marker in window:
+                return True
+            tail = window[-(len(marker) - 1) :]
+    return False

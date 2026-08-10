@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
-from jedi_devproject.validation_helpers import bool_value, single_insert_change, slug, string_list
+from jedi_devproject.validation_helpers import bool_value, single_insert_change, slug
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     bool_element,
@@ -15,9 +15,13 @@ from jedi_devproject.xml_builder import (
     text_element,
 )
 
+SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC = (
+    "Script Include generation field contains non-JSON value"
+)
+
 
 class ScriptIncludeIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     api_name: str
@@ -80,24 +84,39 @@ def script_include_customer_updates(
 
 def _script_include_intent(change: CandidateChange) -> ScriptIncludeIntent:
     fields = dict(change.fields)
-    script = str(fields.get("script") or fields.get("script_body") or "")
-    name = str(fields.get("name") or fields.get("script_include_name") or "")
+    script = _script_include_first_text(fields.get("script"), fields.get("script_body"))
+    name = _script_include_first_text(fields.get("name"), fields.get("script_include_name"))
     return ScriptIncludeIntent(
         name=name,
-        api_name=str(fields.get("api_name") or f"global.{name}"),
-        scope=str(fields.get("scope") or "global"),
-        client_callable=bool_value(fields.get("client_callable")),
-        active=bool_value(fields.get("active"), default=True),
-        description=str(fields.get("description") or ""),
+        api_name=_script_include_first_text(fields.get("api_name"), f"global.{name}"),
+        scope=_script_include_first_text(fields.get("scope"), "global"),
+        client_callable=bool_value(_script_include_first_text(fields.get("client_callable"))),
+        active=bool_value(_script_include_first_text(fields.get("active")), default=True),
+        description=_script_include_first_text(fields.get("description")),
         script=script,
         public_methods=(
-            string_list(fields.get("public_methods"), ignore_none_token=True)
+            _script_include_string_list(
+                fields.get("public_methods"),
+                ignore_none_token=True,
+            )
             or _public_methods_from_script(script)
         ),
-        tables_read=string_list(fields.get("tables_read"), ignore_none_token=True),
-        tables_written=string_list(fields.get("tables_written"), ignore_none_token=True),
-        fields_read=string_list(fields.get("fields_read"), ignore_none_token=True),
-        fields_written=string_list(fields.get("fields_written"), ignore_none_token=True),
+        tables_read=_script_include_string_list(
+            fields.get("tables_read"),
+            ignore_none_token=True,
+        ),
+        tables_written=_script_include_string_list(
+            fields.get("tables_written"),
+            ignore_none_token=True,
+        ),
+        fields_read=_script_include_string_list(
+            fields.get("fields_read"),
+            ignore_none_token=True,
+        ),
+        fields_written=_script_include_string_list(
+            fields.get("fields_written"),
+            ignore_none_token=True,
+        ),
     )
 
 
@@ -151,6 +170,37 @@ def _validate_script_safety(*, script: str, name: str) -> None:
 def _validate_identifier(value: str) -> None:
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", value) is None:
         raise ValueError("Script Include name must be a valid identifier")
+
+
+def _script_include_string_list(
+    value: Any,
+    *,
+    ignore_none_token: bool = False,
+) -> list[str]:
+    if type(value) is list:
+        return [text for item in value if (text := _script_include_field_text(item).strip())]
+    text = "" if value is None else _script_include_field_text(value).strip()
+    if not text or (ignore_none_token and text.lower() == "none"):
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _script_include_first_text(*values: Any) -> str:
+    for value in values:
+        text = _script_include_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _script_include_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(SCRIPT_INCLUDE_FIELD_NON_JSON_DIAGNOSTIC)
 
 
 def _public_methods_from_script(script: str) -> list[str]:

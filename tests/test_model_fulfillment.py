@@ -1,23 +1,33 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
+from jedi_devproject.atf_test_generation import AtfStepCandidate, AtfTestCandidate, AtfTestPlan
 from jedi_devproject.fulfillment_worker import FulfillmentPersistedArtifact
 from jedi_devproject.model_fulfillment import (
     ModelCandidateFulfillmentConfig,
+    _ensure_model_artifact_payload_json_safe,
+    _model_artifact_payload,
+    _required_surfaces_for_assessment,
+    _surface_context_and_rags_for_story,
     model_candidate_fulfillment_handler,
 )
 from jedi_devproject.models import (
+    CandidateChange,
     CandidateStatus,
     DataClassification,
     ProviderPolicy,
     ProviderStatus,
+    RetrievalCitation,
     Story,
+    UpdateSetCandidate,
 )
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.rag import (
@@ -26,6 +36,7 @@ from jedi_devproject.rag import (
     PublicWebResponse,
     PublicWebRetriever,
     RagDomain,
+    RetrievalResult,
     SpecializedRags,
 )
 from jedi_devproject.safety import AllowlistPolicy, StoryType
@@ -486,6 +497,139 @@ def _rags() -> SpecializedRags:
     )
 
 
+class HostileStoryText:
+    def __str__(self) -> str:
+        raise ValueError("story-text-secret")
+
+
+class HostileRequiredSurface:
+    def __str__(self) -> str:
+        raise ValueError("required-surface-secret")
+
+
+class HostileCitationVersion:
+    def __str__(self) -> str:
+        raise ValueError("public-doc-version-secret")
+
+
+def test_required_surfaces_skip_malformed_context_entries_without_coercion() -> None:
+    assessment = SimpleNamespace(
+        required_instance_context=[
+            "form_layout",
+            HostileRequiredSurface(),
+            "business_rules",
+        ],
+        automation_intent="generic_dictionary_form",
+    )
+
+    assert _required_surfaces_for_assessment(assessment) == [
+        "form_layout",
+        "business_rules",
+    ]
+
+
+def test_surface_context_public_doc_version_skips_malformed_metadata_without_coercion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment.analyze_story_capabilities",
+        lambda _story: SimpleNamespace(
+            intent=SimpleNamespace(target_table="incident"),
+            target_table="incident",
+            required_instance_context=[],
+            automation_intent="ui_policy_generate",
+        ),
+    )
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment.discover_servicenow_surface_context",
+        lambda **_kwargs: None,
+    )
+    citation = RetrievalCitation.model_construct(
+        source="https://docs.servicenow.com/ui-policy",
+        content_hash="a" * 64,
+        confidence=0.9,
+        version=HostileCitationVersion(),
+    )
+    result = RetrievalResult.model_construct(
+        content="UI Policies make fields mandatory or visible.",
+        citation=citation,
+    )
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment._retrieve_public_docs",
+        lambda **_kwargs: [result],
+    )
+
+    _context, rags = _surface_context_and_rags_for_story(
+        client=FakeModelClient(),
+        story=SimpleNamespace(
+            short_description="Create Incident UI Policy using public docs",
+            description="Use public documentation to configure field behavior.",
+            acceptance_criteria="Delivery includes cited public documentation.",
+        ),
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=FailingModelProvider(),
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    public_docs = rags.retrieve(RagDomain.PUBLIC_DOCUMENTATION, "UI Policies")
+
+    assert public_docs
+    assert public_docs[0].citation.version == ""
+
+
+def test_surface_context_story_text_skips_malformed_story_fields_without_coercion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment.analyze_story_capabilities",
+        lambda _story: SimpleNamespace(
+            intent=SimpleNamespace(target_table="incident"),
+            target_table="incident",
+        ),
+    )
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment._required_surfaces_for_assessment",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def capture_context(**kwargs: object) -> None:
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment.discover_servicenow_surface_context",
+        capture_context,
+    )
+
+    story = SimpleNamespace(
+        short_description="Create Incident assignment field",
+        description=HostileStoryText(),
+        acceptance_criteria="Assignment field appears on the Incident form.",
+    )
+
+    _surface_context_and_rags_for_story(
+        client=FakeModelClient(),
+        story=story,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=FailingModelProvider(),
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    assert captured["story_text"] == (
+        "Create Incident assignment field Assignment field appears on the Incident form."
+    )
+
+
 def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note(
     tmp_path: Path,
 ) -> None:
@@ -582,6 +726,172 @@ def test_model_candidate_handler_returns_packet_candidate_payloads_and_work_note
             },
         }
     ]
+
+
+def test_model_artifact_payload_rejects_non_finite_candidate_fields_without_leak() -> None:
+    candidate = UpdateSetCandidate.model_construct(
+        story_number="STRY0010013",
+        name="JEDI STRY0010013 - AI Candidate",
+        eligibility_decision="eligible",
+        eligibility_reasons=[],
+        confidence=0.82,
+        risk_score=0.2,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange.model_construct(
+                table="incident",
+                operation="update",
+                fields={
+                    "private_value_marker": "do-not-echo-this",
+                    "weight": float("nan"),
+                },
+            )
+        ],
+        scripts=[],
+        retrieval_citations=[],
+        assumptions=[],
+        reviewer_notes=[],
+        artifact_hash=None,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _model_artifact_payload(
+            candidate,
+            diagnostic="model fulfillment artifact payload contains non-finite numeric values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "model fulfillment artifact payload contains non-finite numeric values"
+    assert "private_value_marker" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+    assert "weight" not in diagnostic
+    assert "NaN" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_model_artifact_payload_rejects_non_json_candidate_fields_without_leak() -> None:
+    class SecretBearingObject:
+        def __str__(self) -> str:
+            return "client_secret=model-artifact-secret"
+
+    candidate = UpdateSetCandidate.model_construct(
+        story_number="STRY0010013",
+        name="JEDI STRY0010013 - AI Candidate",
+        eligibility_decision="eligible",
+        eligibility_reasons=[],
+        confidence=0.82,
+        risk_score=0.2,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange.model_construct(
+                table="incident",
+                operation="update",
+                fields={
+                    "private_value_marker": "do-not-echo-this",
+                    "unsafe": SecretBearingObject(),
+                },
+            )
+        ],
+        scripts=[],
+        retrieval_citations=[],
+        assumptions=[],
+        reviewer_notes=[],
+        artifact_hash=None,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _model_artifact_payload(
+            candidate,
+            diagnostic="model fulfillment artifact payload contains non-JSON values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "model fulfillment artifact payload contains non-JSON values"
+    assert "private_value_marker" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+    assert "unsafe" not in diagnostic
+    assert "SecretBearingObject" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "model-artifact-secret" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_model_artifact_payload_rejects_string_subclass_candidate_fields_without_leak() -> None:
+    class HostileModelArtifactText(str):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=model-artifact-str-secret")
+
+    candidate = UpdateSetCandidate.model_construct(
+        story_number="STRY0010013",
+        name="JEDI STRY0010013 - AI Candidate",
+        eligibility_decision="eligible",
+        eligibility_reasons=[],
+        confidence=0.82,
+        risk_score=0.2,
+        status=CandidateStatus.READY_FOR_REVIEW,
+        changes=[
+            CandidateChange.model_construct(
+                table="incident",
+                operation="update",
+                fields={
+                    "private_value_marker": "do-not-echo-this",
+                    "unsafe": HostileModelArtifactText("model-artifact-secret"),
+                },
+            )
+        ],
+        scripts=[],
+        retrieval_citations=[],
+        assumptions=[],
+        reviewer_notes=[],
+        artifact_hash=None,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _model_artifact_payload(
+            candidate,
+            diagnostic="model fulfillment artifact payload contains non-JSON values",
+        )
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "model fulfillment artifact payload contains non-JSON values"
+    assert "private_value_marker" not in diagnostic
+    assert "do-not-echo-this" not in diagnostic
+    assert "unsafe" not in diagnostic
+    assert "HostileModelArtifactText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "model-artifact-secret" not in diagnostic
+    assert exc_info.value.__cause__ is None
+
+
+def test_model_artifact_payload_rejects_container_subclasses_without_payload_leak() -> (
+    None
+):
+    class HostileModelArtifactDict(dict[str, Any]):
+        def items(self) -> Any:
+            raise AssertionError("client_secret=model-artifact-dict-subclass-secret")
+
+    class HostileModelArtifactList(list[Any]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=model-artifact-list-subclass-secret")
+
+    class HostileModelArtifactTuple(tuple[Any, ...]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=model-artifact-tuple-subclass-secret")
+
+    for value in (
+        HostileModelArtifactDict({"client_secret": "hidden dict"}),
+        HostileModelArtifactList(["hidden list"]),
+        HostileModelArtifactTuple(("hidden tuple",)),
+    ):
+        with pytest.raises(TypeError) as exc_info:
+            _ensure_model_artifact_payload_json_safe(value)
+
+        diagnostic = str(exc_info.value)
+        assert diagnostic == "non-JSON model fulfillment artifact payload value"
+        assert "HostileModelArtifact" not in diagnostic
+        assert "client_secret" not in diagnostic
+        assert "subclass-secret" not in diagnostic
+        assert "hidden" not in diagnostic
 
 
 def test_model_candidate_handler_imports_remote_update_set_without_local_apply(
@@ -817,6 +1127,91 @@ def test_model_candidate_handler_fetches_story_by_sys_id_when_job_has_sys_id() -
     )
     assert client.fetches[0]["lookup"] == {"query": "sys_id=correct-story-sys-id"}
     assert all(fetch["lookup"] != {"query": "number=STRY0010013"} for fetch in client.fetches)
+
+
+def test_model_candidate_handler_rejects_story_collection_subclass_without_leak() -> None:
+    class SecretBearingStories(list[Story]):
+        def __len__(self) -> int:
+            raise RuntimeError("client_secret=model-fulfillment-stories-len-secret")
+
+    class MalformedStoryClient(FakeModelClient):
+        def fetch_stories(
+            self,
+            sysparm_query: str | None = None,
+            *,
+            limit: int = 100,
+        ) -> list[Story]:
+            return SecretBearingStories(super().fetch_stories(sysparm_query, limit=limit))
+
+    client = MalformedStoryClient()
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        handler(_job())
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "model fulfillment stories contain non-JSON value"
+    assert provider.payloads == []
+    assert client.upserts == []
+    assert client.imports == []
+    assert client.updated_fields == []
+    assert client.fetches == []
+    assert "SecretBearingStories" not in diagnostic
+    assert "model-fulfillment-stories-len-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_model_candidate_handler_rejects_story_item_subclass_without_leak() -> None:
+    class SecretBearingStory(Story):
+        def model_copy(self, *args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("client_secret=model-fulfillment-story-model-copy-secret")
+
+    class MalformedStoryClient(FakeModelClient):
+        def fetch_stories(
+            self,
+            sysparm_query: str | None = None,
+            *,
+            limit: int = 100,
+        ) -> list[Story]:
+            story = super().fetch_stories(sysparm_query, limit=limit)[0]
+            return [SecretBearingStory.model_validate(story.model_dump())]
+
+    client = MalformedStoryClient()
+    provider = RecordingModelProvider()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=provider,
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        handler(_job())
+
+    diagnostic = str(exc_info.value)
+    assert diagnostic == "model fulfillment stories contain non-JSON value"
+    assert provider.payloads == []
+    assert client.upserts == []
+    assert client.imports == []
+    assert client.updated_fields == []
+    assert client.fetches == []
+    assert "SecretBearingStory" not in diagnostic
+    assert "model-fulfillment-story-model-copy-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
 
 
 def test_model_candidate_handler_blocks_model_when_required_surface_context_missing() -> None:
@@ -2247,6 +2642,161 @@ def test_model_fulfillment_work_note_names_missing_surface_context() -> None:
     assert "Missing ServiceNow context: flows" in fields["work_notes"]
 
 
+def test_model_fulfillment_rejects_persisted_artifact_path_subclass_without_leak() -> None:
+    class HostileArtifactPath(str):
+        def __str__(self) -> str:
+            return "client_secret=artifact-path-secret"
+
+    artifact = cast(
+        Any,
+        type(
+            "PersistedArtifact",
+            (),
+            {
+                "artifact_kind": "implementation_candidate",
+                "path": HostileArtifactPath("db://artifact_blobs/100"),
+            },
+        )(),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        __import__(
+            "jedi_devproject.model_fulfillment",
+            fromlist=["_candidate_artifact_ref"],
+        )._candidate_artifact_ref([artifact])
+
+    message = str(exc_info.value)
+    assert message == "persisted artifact path contains non-JSON value"
+    assert "HostileArtifactPath" not in message
+    assert "artifact-path-secret" not in message
+    assert "client_secret" not in message
+
+
+def test_model_fulfillment_manual_work_note_sanitizes_reasons_and_reviewer_notes() -> None:
+    candidate = cast(
+        Any,
+        type(
+            "Candidate",
+            (),
+            {
+                "eligibility_reasons": [
+                    "manual_review\nclient_secret=reason-secret",
+                    "context_insufficient:flows\napi_key=context-secret",
+                    {"client_secret": "dict-secret"},
+                ],
+                "reviewer_notes": [
+                    "Suggested rewrite:\nclient_secret=note-secret",
+                    {"client_secret": "note-dict-secret"},
+                ],
+                "status": CandidateStatus.MANUAL_BUILD,
+            },
+        )(),
+    )
+
+    fields = cast(
+        dict[str, str],
+        __import__(
+            "jedi_devproject.model_fulfillment",
+            fromlist=["_manual_feedback_fields"],
+        )._manual_feedback_fields(
+            story_number="STRY0010107",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/100",
+        ),
+    )
+
+    work_notes = fields["work_notes"]
+    assert "reason-secret" not in work_notes
+    assert "context-secret" not in work_notes
+    assert "dict-secret" not in work_notes
+    assert "note-secret" not in work_notes
+    assert "note-dict-secret" not in work_notes
+    assert "client_secret=***REDACTED***" in work_notes
+    assert "api_key=***REDACTED***" in work_notes
+    assert "\n" not in work_notes
+
+
+def test_model_fulfillment_manual_work_note_skips_string_subclass_metadata() -> None:
+    class HostileManualFeedbackText(str):
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=manual-feedback-string-secret")
+
+    candidate = cast(
+        Any,
+        type(
+            "Candidate",
+            (),
+            {
+                "eligibility_reasons": [
+                    HostileManualFeedbackText("context_insufficient:flows")
+                ],
+                "reviewer_notes": [
+                    HostileManualFeedbackText(
+                        "Suggested rewrite: client_secret=note-payload"
+                    )
+                ],
+                "status": CandidateStatus.MANUAL_BUILD,
+            },
+        )(),
+    )
+
+    fields = cast(
+        dict[str, str],
+        __import__(
+            "jedi_devproject.model_fulfillment",
+            fromlist=["_manual_feedback_fields"],
+        )._manual_feedback_fields(
+            story_number="STRY0010107",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/100",
+        ),
+    )
+
+    work_notes = fields["work_notes"]
+    assert "Missing ServiceNow context" not in work_notes
+    assert "Suggested rewrite" not in work_notes
+    assert "note-payload" not in work_notes
+    assert "manual-feedback-string-secret" not in work_notes
+    assert "candidate status is Manual Build" in work_notes
+
+
+def test_model_fulfillment_manual_work_note_bounds_reasons_and_reviewer_notes() -> None:
+    candidate = cast(
+        Any,
+        type(
+            "Candidate",
+            (),
+            {
+                "eligibility_reasons": [
+                    f"reason_{index}_{'A' * 2200}" for index in range(120)
+                ],
+                "reviewer_notes": [
+                    f"Suggested rewrite: {'B' * 2200}" for _ in range(120)
+                ],
+                "status": CandidateStatus.MANUAL_BUILD,
+            },
+        )(),
+    )
+
+    fields = cast(
+        dict[str, str],
+        __import__(
+            "jedi_devproject.model_fulfillment",
+            fromlist=["_manual_feedback_fields"],
+        )._manual_feedback_fields(
+            story_number="STRY0010108",
+            candidate=candidate,
+            candidate_artifact_ref="db://artifact_blobs/101",
+        ),
+    )
+
+    work_notes = fields["work_notes"]
+    assert "manual feedback omitted: 70 reviewer notes" in work_notes
+    assert "candidate reasons omitted: 70 reasons" in work_notes
+    assert "...[truncated]" in work_notes
+    assert len(work_notes) < 130_000
+
+
 def test_model_fulfillment_work_note_includes_cmdb_ire_analysis_feedback() -> None:
     client = FakeModelClient(
         story=Story(
@@ -2508,3 +3058,66 @@ def test_model_candidate_handler_omits_atf_plan_when_generation_fails(
         "ATF test plan generation failed for STRY0010013" in record.message
         for record in caplog.records
     )
+
+
+def test_model_candidate_handler_omits_atf_plan_when_payload_is_non_finite(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def corrupted_plan(candidate: UpdateSetCandidate) -> AtfTestPlan:
+        return AtfTestPlan.model_construct(
+            story_number=candidate.story_number,
+            candidate_name=candidate.name,
+            tests=[
+                AtfTestCandidate.model_construct(
+                    sys_id="atf-test-sys-id",
+                    name="Corrupted advisory test",
+                    description="ATF candidate with corrupted numeric evidence",
+                    steps=[
+                        AtfStepCandidate.model_construct(
+                            sys_id="atf-step-sys-id",
+                            order=1,
+                            step_config_name="Open a New Form",
+                            step_config_sys_id_assumption="step-config-sys-id",
+                            description="client_secret=do-not-echo-this",
+                            inputs={"risk_score": math.nan},
+                        )
+                    ],
+                )
+            ],
+            not_covered=[],
+            evidence_assumptions=[],
+        )
+
+    monkeypatch.setattr(
+        "jedi_devproject.model_fulfillment.generate_atf_test_plan",
+        corrupted_plan,
+    )
+    client = FakeModelClient()
+    handler = model_candidate_fulfillment_handler(
+        client=client,
+        config=ModelCandidateFulfillmentConfig(
+            policy=_policy(),
+            provider_policy=_provider_policy(),
+            rags=_rags(),
+            provider=RecordingModelProvider(),
+            instance_url="https://dev205693.service-now.com",
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="jedi_devproject.model_fulfillment"):
+        result = handler(_job())
+
+    assert result.message == "Implementation candidate generated for STRY0010013"
+    assert [artifact.artifact_kind for artifact in result.artifacts] == [
+        "instance_context_bundle",
+        "implementation_packet",
+        "implementation_candidate",
+    ]
+    assert any(
+        "ATF test plan generation failed for STRY0010013" in record.message
+        for record in caplog.records
+    )
+    assert "risk_score" not in caplog.text
+    assert "NaN" not in caplog.text
+    assert "client_secret=do-not-echo-this" not in caplog.text

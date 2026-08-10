@@ -1,10 +1,21 @@
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    pids_limit: 512
+    security_opt:
+      - no-new-privileges:true
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
     environment:
       POSTGRES_DB: jedi
       POSTGRES_USER: jedi
-      POSTGRES_PASSWORD: jedi
+      POSTGRES_PASSWORD: ${JEDI_POSTGRES_PASSWORD:?JEDI_POSTGRES_PASSWORD_required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -14,16 +25,45 @@ services:
       retries: 12
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: on-failure
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    init: true
+    pids_limit: 256
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     command: uvicorn jedi_devproject.runtime_api:build_app --factory --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     environment:
-      - DATABASE_URL=postgresql://jedi:jedi@postgres:5432/jedi
-      - SERVICENOW_INSTANCE_URL=${SERVICENOW_INSTANCE_URL}
-      - SERVICENOW_CLIENT_ID=${SERVICENOW_CLIENT_ID}
-      - SERVICENOW_CLIENT_SECRET=${SERVICENOW_CLIENT_SECRET}
+      - DATABASE_URL=postgresql://jedi:${JEDI_POSTGRES_PASSWORD:?JEDI_POSTGRES_PASSWORD_required}@postgres:5432/jedi
+      - SERVICENOW_PM_INSTANCE_URL=${SERVICENOW_PM_INSTANCE_URL:?SERVICENOW_PM_INSTANCE_URL_required}
+      - SERVICENOW_PM_CLIENT_ID=${SERVICENOW_PM_CLIENT_ID:?SERVICENOW_PM_CLIENT_ID_required}
+      - SERVICENOW_PM_CLIENT_SECRET=${SERVICENOW_PM_CLIENT_SECRET:?SERVICENOW_PM_CLIENT_SECRET_required}
+      - SERVICENOW_DEV_INSTANCE_URL=${SERVICENOW_DEV_INSTANCE_URL:?SERVICENOW_DEV_INSTANCE_URL_required}
+      - SERVICENOW_DEV_CLIENT_ID=${SERVICENOW_DEV_CLIENT_ID:?SERVICENOW_DEV_CLIENT_ID_required}
+      - SERVICENOW_DEV_CLIENT_SECRET=${SERVICENOW_DEV_CLIENT_SECRET:?SERVICENOW_DEV_CLIENT_SECRET_required}
       - JEDI_AUDIT_ROOT=/app/artifacts/audit
+      - JEDI_RUNTIME_ROLE=api
       - JEDI_WORKER_ID=jedi-devproject-api
       - JEDI_BUILD_CLAIM_APPLY=false
     volumes:
@@ -33,20 +73,45 @@ services:
         condition: service_healthy
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: on-failure
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    init: true
+    pids_limit: 256
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     command: python -m jedi_devproject.runtime_worker
     environment:
-      - DATABASE_URL=postgresql://jedi:jedi@postgres:5432/jedi
-      - SERVICENOW_INSTANCE_URL=${SERVICENOW_INSTANCE_URL}
-      - SERVICENOW_CLIENT_ID=${SERVICENOW_CLIENT_ID}
-      - SERVICENOW_CLIENT_SECRET=${SERVICENOW_CLIENT_SECRET}
+      - DATABASE_URL=postgresql://jedi:${JEDI_POSTGRES_PASSWORD:?JEDI_POSTGRES_PASSWORD_required}@postgres:5432/jedi
+      - SERVICENOW_PM_INSTANCE_URL=${SERVICENOW_PM_INSTANCE_URL:?SERVICENOW_PM_INSTANCE_URL_required}
+      - SERVICENOW_PM_CLIENT_ID=${SERVICENOW_PM_CLIENT_ID:?SERVICENOW_PM_CLIENT_ID_required}
+      - SERVICENOW_PM_CLIENT_SECRET=${SERVICENOW_PM_CLIENT_SECRET:?SERVICENOW_PM_CLIENT_SECRET_required}
+      - SERVICENOW_DEV_INSTANCE_URL=${SERVICENOW_DEV_INSTANCE_URL:?SERVICENOW_DEV_INSTANCE_URL_required}
+      - SERVICENOW_DEV_CLIENT_ID=${SERVICENOW_DEV_CLIENT_ID:?SERVICENOW_DEV_CLIENT_ID_required}
+      - SERVICENOW_DEV_CLIENT_SECRET=${SERVICENOW_DEV_CLIENT_SECRET:?SERVICENOW_DEV_CLIENT_SECRET_required}
       - JEDI_AUDIT_ROOT=/app/artifacts/audit
+      - JEDI_RUNTIME_ROLE=worker
       - JEDI_WORKER_ID=jedi-devproject-worker
       - JEDI_BUILD_CLAIM_APPLY=false
     volumes:
       - runtime-artifacts:/app/artifacts
     depends_on:
       postgres:
+        condition: service_healthy
+      api:
         condition: service_healthy
 
 volumes:

@@ -40,13 +40,17 @@ class CatalogMetadataClient(Protocol):
 
 
 class CatalogResolvedReference(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     sys_id: str
     display: str
 
 
 REFERENCE_QUALIFIER_MAX_LENGTH = 255
+CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC = (
+    "catalog item generation field contains non-JSON value"
+)
+CATALOG_ITEM_METADATA_MISSING_DIAGNOSTIC = "catalog item metadata field is missing"
 
 _QUALIFIER_SCRIPT_INDICATOR_PATTERN = re.compile(
     r"javascript:|\bgs\s*\.|\bcurrent\s*\.|[;(){}]",
@@ -126,7 +130,7 @@ def is_declarative_reference_qualifier(qualifier: str) -> bool:
 class CatalogVariableGroup(BaseModel):
     """A titled container section grouping the item's own new variables."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     title: str
     variables: list[str]
@@ -163,7 +167,7 @@ class CatalogVariableGroup(BaseModel):
 
 
 class CatalogVariableIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     label: str
@@ -195,12 +199,12 @@ class CatalogVariableIntent(BaseModel):
             except ValueError as error:
                 raise ValueError(
                     f"reference qualifier rejected for {self.name}: {error}"
-                ) from error
+                ) from None
         return self
 
 
 class CatalogItemIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     short_description: str
@@ -285,7 +289,7 @@ class CatalogItemIntent(BaseModel):
 
 
 class CatalogResolvedContext(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     catalog: CatalogResolvedReference
     category: CatalogResolvedReference
@@ -520,49 +524,62 @@ def _catalog_item_intent(changes: list[CandidateChange]) -> CatalogItemIntent:
     category_fields = _first_change_fields(changes, "sc_cat_item_category")
     topic_fields = _first_change_fields(changes, "m2m_connected_content")
     return CatalogItemIntent(
-        name=str(item_fields.get("name") or item_fields.get("artifact_name") or ""),
-        short_description=str(item_fields.get("short_description") or ""),
-        description=str(item_fields.get("description") or ""),
-        catalog=str(item_fields.get("catalog") or category_fields.get("catalog") or ""),
-        category=str(item_fields.get("category") or category_fields.get("category") or ""),
-        taxonomy=str(item_fields.get("taxonomy") or topic_fields.get("taxonomy") or ""),
-        employee_center_topic=str(
-            item_fields.get("employee_center_topic")
-            or item_fields.get("topic")
-            or topic_fields.get("topic")
-            or topic_fields.get("employee_center_topic")
-            or ""
+        name=_catalog_first_text(item_fields.get("name"), item_fields.get("artifact_name")),
+        short_description=_catalog_first_text(item_fields.get("short_description")),
+        description=_catalog_first_text(item_fields.get("description")),
+        catalog=_catalog_first_text(
+            item_fields.get("catalog"),
+            category_fields.get("catalog"),
+        ),
+        category=_catalog_first_text(
+            item_fields.get("category"),
+            category_fields.get("category"),
+        ),
+        taxonomy=_catalog_first_text(
+            item_fields.get("taxonomy"),
+            topic_fields.get("taxonomy"),
+        ),
+        employee_center_topic=_catalog_first_text(
+            item_fields.get("employee_center_topic"),
+            item_fields.get("topic"),
+            topic_fields.get("topic"),
+            topic_fields.get("employee_center_topic"),
         ),
         variables=variables,
         variable_sets=_variable_set_names(item_fields.get("variable_sets")),
         variable_groups=_variable_group_intents(item_fields.get("variable_groups")),
-        fulfillment_flow=str(item_fields.get("fulfillment_flow") or "").strip() or None,
+        fulfillment_flow=_catalog_first_text(item_fields.get("fulfillment_flow")).strip()
+        or None,
     )
 
 
 def _variable_set_names(value: Any) -> list[str]:
     if value is None:
         return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    return [part.strip() for part in re.split(r"[;,]", str(value)) if part.strip()]
+    if type(value) is list:
+        return [text for item in value if (text := _catalog_field_text(item).strip())]
+    return [
+        part.strip()
+        for part in re.split(r"[;,]", _catalog_field_text(value))
+        if part.strip()
+    ]
 
 
 def _variable_group_intents(value: Any) -> list[CatalogVariableGroup]:
     if value is None:
         return []
-    if isinstance(value, list):
+    if type(value) is list:
         groups: list[CatalogVariableGroup] = []
         for item in value:
             if isinstance(item, CatalogVariableGroup):
                 groups.append(item)
-            elif isinstance(item, dict):
+            elif type(item) is dict:
                 groups.append(CatalogVariableGroup.model_validate(item))
             else:
                 raise ValueError("catalog variable group must be an object")
         return groups
     groups = []
-    for raw_entry in str(value).split(";"):
+    for raw_entry in _catalog_field_text(value).split(";"):
         entry = raw_entry.strip()
         if not entry:
             continue
@@ -584,22 +601,31 @@ def _catalog_variable_intent(change: CandidateChange) -> CatalogVariableIntent:
     if change.operation != "insert":
         raise ValueError("Catalog Item variable handoff supports insert only")
     fields = dict(change.fields)
-    variable_type = _normalize_variable_type(str(fields.get("type") or ""))
+    variable_type = _normalize_variable_type(_catalog_first_text(fields.get("type")))
     return CatalogVariableIntent(
-        name=slug(str(fields.get("name") or fields.get("variable_name") or ""), default=""),
-        label=str(fields.get("question_text") or fields.get("label") or ""),
-        variable_type=variable_type,
-        order=optional_int(fields.get("order")) or 100,
-        mandatory=bool_value(fields.get("mandatory"), truthy=_MANDATORY_TRUTHY_TOKENS),
-        reference_table=str(fields.get("reference") or fields.get("reference_table") or ""),
-        reference_qualifier=str(
-            fields.get("reference_qualifier")
-            or fields.get("reference_qual")
-            or fields.get("reference_qual_condition")
-            or ""
+        name=slug(
+            _catalog_first_text(fields.get("name"), fields.get("variable_name")),
+            default="",
         ),
-        default_value=str(fields.get("default_value") or ""),
-        help_text=str(fields.get("help_text") or ""),
+        label=_catalog_first_text(fields.get("question_text"), fields.get("label")),
+        variable_type=variable_type,
+        order=optional_int(_catalog_first_text(fields.get("order"))) or 100,
+        mandatory=bool_value(
+            _catalog_first_text(fields.get("mandatory")),
+            truthy=_MANDATORY_TRUTHY_TOKENS,
+        ),
+        reference_table=_catalog_first_text(
+            fields.get("reference"),
+            fields.get("reference_table"),
+        ),
+        reference_qualifier=_catalog_first_text(
+            fields.get("reference_qualifier")
+            ,
+            fields.get("reference_qual"),
+            fields.get("reference_qual_condition"),
+        ),
+        default_value=_catalog_first_text(fields.get("default_value")),
+        help_text=_catalog_first_text(fields.get("help_text")),
     )
 
 
@@ -608,11 +634,13 @@ def _resolve_catalog_context(
     client: CatalogMetadataClient,
     intent: CatalogItemIntent,
 ) -> CatalogResolvedContext:
-    catalogs = client.fetch_table_records(
-        table="sc_catalog",
-        lookup={},
-        fields=["sys_id", "title", "active"],
-        limit=100,
+    catalogs = _catalog_metadata_records(
+        client.fetch_table_records(
+            table="sc_catalog",
+            lookup={},
+            fields=["sys_id", "title", "active"],
+            limit=100,
+        )
     )
     catalog = _resolve_named_record(
         records=catalogs,
@@ -620,22 +648,26 @@ def _resolve_catalog_context(
         label="catalog",
         name_fields=("title", "name"),
     )
-    categories = client.fetch_table_records(
-        table="sc_category",
-        lookup={},
-        fields=["sys_id", "title", "active", "sc_catalog"],
-        limit=250,
+    categories = _catalog_metadata_records(
+        client.fetch_table_records(
+            table="sc_category",
+            lookup={},
+            fields=["sys_id", "title", "active", "sc_catalog"],
+            limit=250,
+        )
     )
     category = _resolve_category(
         records=categories,
         display_name=intent.category,
         catalog_sys_id=catalog.sys_id,
     )
-    taxonomies = client.fetch_table_records(
-        table="taxonomy",
-        lookup={},
-        fields=["sys_id", "name", "active"],
-        limit=100,
+    taxonomies = _catalog_metadata_records(
+        client.fetch_table_records(
+            table="taxonomy",
+            lookup={},
+            fields=["sys_id", "name", "active"],
+            limit=100,
+        )
     )
     taxonomy = _resolve_named_record(
         records=taxonomies,
@@ -643,22 +675,26 @@ def _resolve_catalog_context(
         label="taxonomy",
         name_fields=("name",),
     )
-    topics = client.fetch_table_records(
-        table="topic",
-        lookup={},
-        fields=["sys_id", "name", "topic_path", "active", "taxonomy"],
-        limit=250,
+    topics = _catalog_metadata_records(
+        client.fetch_table_records(
+            table="topic",
+            lookup={},
+            fields=["sys_id", "name", "topic_path", "active", "taxonomy"],
+            limit=250,
+        )
     )
     topic = _resolve_topic(
         records=topics,
         display_name=intent.employee_center_topic,
         taxonomy_sys_id=taxonomy.sys_id,
     )
-    content_types = client.fetch_table_records(
-        table="taxonomy_content_configuration",
-        lookup={},
-        fields=["sys_id", "name", "active"],
-        limit=100,
+    content_types = _catalog_metadata_records(
+        client.fetch_table_records(
+            table="taxonomy_content_configuration",
+            lookup={},
+            fields=["sys_id", "name", "active"],
+            limit=100,
+        )
     )
     content_type = _resolve_named_record(
         records=content_types,
@@ -701,11 +737,13 @@ def _resolve_variable_sets(
 ) -> list[CatalogResolvedReference]:
     if not intent.variable_sets:
         return []
-    records = client.fetch_table_records(
-        table="item_option_new_set",
-        lookup={},
-        fields=["sys_id", "title", "internal_name", "active"],
-        limit=250,
+    records = _catalog_metadata_records(
+        client.fetch_table_records(
+            table="item_option_new_set",
+            lookup={},
+            fields=["sys_id", "title", "internal_name", "active"],
+            limit=250,
+        )
     )
     return [
         _resolve_named_record(
@@ -1145,9 +1183,18 @@ def _resolve_named_record(
     if len(matches) > 1:
         raise ValueError(f"{label} is ambiguous: {display_name}")
     return CatalogResolvedReference(
-        sys_id=_reference_value(matches[0].get("sys_id")),
+        sys_id=_required_metadata_reference_value(matches[0].get("sys_id")),
         display=_display_from_record(matches[0], name_fields),
     )
+
+
+def _catalog_metadata_records(records: object) -> list[dict[str, Any]]:
+    if type(records) is not list:
+        raise ValueError(CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC)
+    for record in records:
+        if type(record) is not dict:
+            raise ValueError(CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC)
+    return records
 
 
 def _resolve_category(
@@ -1169,7 +1216,7 @@ def _resolve_category(
     if len(matches) > 1:
         raise ValueError(f"category is ambiguous under catalog: {display_name}")
     return CatalogResolvedReference(
-        sys_id=_reference_value(matches[0].get("sys_id")),
+        sys_id=_required_metadata_reference_value(matches[0].get("sys_id")),
         display=_display_from_record(matches[0], ("title", "name")),
     )
 
@@ -1196,7 +1243,7 @@ def _resolve_topic(
     if len(matches) > 1:
         raise ValueError(f"Employee Center topic is ambiguous: {display_name}")
     return CatalogResolvedReference(
-        sys_id=_reference_value(matches[0].get("sys_id")),
+        sys_id=_required_metadata_reference_value(matches[0].get("sys_id")),
         display=_display_from_record(matches[0], ("topic_path", "name")),
     )
 
@@ -1228,22 +1275,51 @@ def _stable_sys_id(*parts: str) -> str:
 
 
 def _is_active(record: dict[str, Any]) -> bool:
-    return str(record.get("active", "true")).strip().lower() not in {"false", "0", "no"}
+    return _catalog_field_text(record.get("active", "true")).strip().lower() not in {
+        "false",
+        "0",
+        "no",
+    }
 
 
 def _display_from_record(record: dict[str, Any], fields: tuple[str, ...]) -> str:
     for field in fields:
-        value = str(record.get(field) or "").strip()
+        value = _catalog_first_text(record.get(field)).strip()
         if value:
             return value
     return _reference_value(record.get("sys_id"))
 
 
 def _normalize_display(value: Any) -> str:
-    return str(value or "").strip().casefold()
+    return _catalog_first_text(value).strip().casefold()
 
 
 def _reference_value(value: Any) -> str:
-    if isinstance(value, dict):
-        return str(value.get("value") or value.get("display_value") or "")
-    return str(value or "")
+    if type(value) is dict:
+        return _catalog_first_text(value.get("value"), value.get("display_value"))
+    return _catalog_first_text(value)
+
+
+def _required_metadata_reference_value(value: Any) -> str:
+    text = _reference_value(value)
+    if text == "":
+        raise ValueError(CATALOG_ITEM_METADATA_MISSING_DIAGNOSTIC)
+    return text
+
+
+def _catalog_first_text(*values: Any) -> str:
+    for value in values:
+        text = _catalog_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _catalog_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC)

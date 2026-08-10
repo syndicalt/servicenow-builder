@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CicdUpdateSetProbe(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     action: str
     status_code: int
     status: str | None = None
@@ -18,6 +20,8 @@ class CicdUpdateSetProbe(BaseModel):
 
 
 class CicdUpdateSetCapabilityResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     available: bool
     probes: list[CicdUpdateSetProbe] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
@@ -80,6 +84,13 @@ def _result_payload(response: dict[str, Any]) -> dict[str, Any]:
     result = response.get("result")
     if isinstance(result, dict):
         return result
+    if "result" in response:
+        return {
+            "status_label": "Failed",
+            "status_message": "malformed_result_payload",
+            "status_detail": "ServiceNow CI/CD response result was not an object",
+            "error": "malformed_result_payload",
+        }
     error = response.get("error")
     if isinstance(error, dict):
         return {

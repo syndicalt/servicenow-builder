@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ContextEscalationPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     action: Literal["retrieve_live_instance_context", "manual_review", "proceed_to_model"]
     should_retrieve: bool
@@ -15,11 +15,12 @@ class ContextEscalationPlan(BaseModel):
 
 
 def plan_context_escalation(context_sufficiency: dict[str, Any]) -> ContextEscalationPlan:
-    status = str(context_sufficiency.get("status") or "").strip()
+    status = _context_text(context_sufficiency.get("status")).strip()
     missing_context = [
-        str(item)
+        text
         for item in context_sufficiency.get("missing_context", [])
-        if str(item).strip()
+        for text in [_context_text(item).strip()]
+        if text
     ]
 
     if status == "sufficient":
@@ -45,3 +46,9 @@ def plan_context_escalation(context_sufficiency: dict[str, Any]) -> ContextEscal
         reasons=[f"context_insufficient:{item}" for item in missing_context]
         or ["context_insufficient"],
     )
+
+
+def _context_text(value: Any) -> str:
+    if type(value) is not str:
+        return ""
+    return value

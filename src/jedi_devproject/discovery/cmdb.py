@@ -9,6 +9,7 @@ from jedi_devproject.discovery.fetch import (
     _record_metadata,
     _record_name,
     _records_surface,
+    _surface_records,
     _table_surface,
 )
 from jedi_devproject.discovery.models import (
@@ -29,17 +30,21 @@ def _cmdb_ire_identification_rules_surface(
             source_table="cmdb_identifier",
             required=False,
         )
-    identifier_records = client.fetch_table_records(
-        table="cmdb_identifier",
-        lookup={},
-        fields=["sys_id", "name", "applies_to", "active"],
-        limit=250,
+    identifier_records = _surface_records(
+        client.fetch_table_records(
+            table="cmdb_identifier",
+            lookup={},
+            fields=["sys_id", "name", "applies_to", "active"],
+            limit=250,
+        )
     )
-    entry_records = client.fetch_table_records(
-        table="cmdb_identifier_entry",
-        lookup={},
-        fields=["sys_id", "identifier", "priority", "attributes", "active"],
-        limit=500,
+    entry_records = _surface_records(
+        client.fetch_table_records(
+            table="cmdb_identifier_entry",
+            lookup={},
+            fields=["sys_id", "identifier", "priority", "attributes", "active"],
+            limit=500,
+        )
     )
     records = [
         ServiceNowSurfaceRecord(
@@ -141,11 +146,13 @@ def _cmdb_class_hierarchy_surface(
             source_table="sys_db_object",
             required=False,
         )
-    records = client.fetch_table_records(
-        table="sys_db_object",
-        lookup={},
-        fields=["sys_id", "name", "label", "super_class"],
-        limit=500,
+    records = _surface_records(
+        client.fetch_table_records(
+            table="sys_db_object",
+            lookup={},
+            fields=["sys_id", "name", "label", "super_class"],
+            limit=500,
+        )
     )
     cmdb_records = [
         record

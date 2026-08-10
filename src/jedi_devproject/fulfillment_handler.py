@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from jedi_devproject.artifacts import write_json_artifact_once
+from jedi_devproject.artifacts import artifact_sha256_file, write_json_artifact_once
 from jedi_devproject.capability_analysis import analyze_story_capabilities
 from jedi_devproject.capability_assessment import (
     INTAKE_FEEDBACK_SCHEMA_VERSION,
@@ -20,6 +19,7 @@ from jedi_devproject.fulfillment_worker import (
     FulfillmentArtifactRef,
     FulfillmentExecutionResult,
 )
+from jedi_devproject.models import Story
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.writeback import ActorType, StoryWritebackPolicy
 from jedi_devproject.writeback_orchestration import (
@@ -32,10 +32,17 @@ from jedi_devproject.writeback_orchestration import (
 _LOGGER = logging.getLogger(__name__)
 
 INTAKE_FEEDBACK_ARTIFACT_KIND = "intake_feedback"
+INTAKE_STORY_FETCH_NON_JSON_DIAGNOSTIC = (
+    "intake story fetch contains non-JSON value"
+)
 
 
 class BuildClaimFulfillmentConfig(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        hide_input_in_errors=True,
+    )
 
     actor_id: str | None
     audit_root: Path | None
@@ -118,7 +125,9 @@ def _assess_intake_feedback(
     config: BuildClaimFulfillmentConfig,
     job: FulfillmentJobRecord,
 ) -> list[FulfillmentArtifactRef]:
-    stories = client.fetch_stories(sysparm_query=_intake_story_query(job), limit=1)
+    stories = _intake_stories(
+        client.fetch_stories(sysparm_query=_intake_story_query(job), limit=1)
+    )
     if not stories:
         return []
     story = enrich_story(stories[0]).enriched_story
@@ -153,6 +162,15 @@ def _intake_story_query(job: FulfillmentJobRecord) -> str:
     return f"number={job.story_number}"
 
 
+def _intake_stories(stories: object) -> list[Story]:
+    if type(stories) is not list:
+        raise ValueError(INTAKE_STORY_FETCH_NON_JSON_DIAGNOSTIC)
+    for story in stories:
+        if type(story) is not Story:
+            raise ValueError(INTAKE_STORY_FETCH_NON_JSON_DIAGNOSTIC)
+    return stories
+
+
 def _intake_note_fields(feedback: IntakeFeedback) -> dict[str, object]:
     fields: dict[str, object] = {"work_notes": intake_feedback_work_note(feedback)}
     disallowed = sorted(set(fields) - StoryWritebackPolicy().allowed_fields)
@@ -181,7 +199,7 @@ def _intake_path_artifact(path: Path) -> FulfillmentArtifactRef:
     return FulfillmentArtifactRef(
         artifact_kind=INTAKE_FEEDBACK_ARTIFACT_KIND,
         path=str(path),
-        sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        sha256=artifact_sha256_file(path),
     )
 
 

@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
-from jedi_devproject.validation_helpers import bool_value, single_insert_change, slug, string_list
+from jedi_devproject.validation_helpers import bool_value, single_insert_change, slug
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     bool_element,
@@ -15,9 +15,13 @@ from jedi_devproject.xml_builder import (
     text_element,
 )
 
+BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC = (
+    "Business Rule generation field contains non-JSON value"
+)
+
 
 class BusinessRuleIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     target_table: str
     rule_name: str
@@ -80,41 +84,46 @@ def business_rule_customer_updates(
 
 def _business_rule_intent(change: CandidateChange) -> BusinessRuleIntent:
     fields = dict(change.fields)
-    script = str(
-        fields.get("script") or fields.get("action_script") or fields.get("script_body") or ""
+    script = _business_rule_first_text(
+        fields.get("script"),
+        fields.get("action_script"),
+        fields.get("script_body"),
     )
     operation_text = (
-        f"{fields.get('action') or ''} "
-        f"{fields.get('rationale') or ''} "
+        f"{_business_rule_first_text(fields.get('action'))} "
+        f"{_business_rule_first_text(fields.get('rationale'))} "
         f"{change.rationale or ''}"
     )
     return BusinessRuleIntent(
-        target_table=str(fields.get("collection") or fields.get("table") or ""),
-        rule_name=str(fields.get("name") or ""),
-        when=str(fields.get("when") or ""),
+        target_table=_business_rule_first_text(
+            fields.get("collection"),
+            fields.get("table"),
+        ),
+        rule_name=_business_rule_first_text(fields.get("name")),
+        when=_business_rule_first_text(fields.get("when")),
         action_insert=(
-            bool_value(fields.get("action_insert"))
-            or bool_value(fields.get("insert"))
-            or bool_value(fields.get("operation_insert"))
+            bool_value(_business_rule_first_text(fields.get("action_insert")))
+            or bool_value(_business_rule_first_text(fields.get("insert")))
+            or bool_value(_business_rule_first_text(fields.get("operation_insert")))
             or _operation_mentions(operation_text, "insert")
         ),
         action_update=(
-            bool_value(fields.get("action_update"))
-            or bool_value(fields.get("update"))
-            or bool_value(fields.get("operation_update"))
+            bool_value(_business_rule_first_text(fields.get("action_update")))
+            or bool_value(_business_rule_first_text(fields.get("update")))
+            or bool_value(_business_rule_first_text(fields.get("operation_update")))
             or _operation_mentions(operation_text, "update")
         ),
-        filter_condition=str(
-            fields.get("filter_condition")
-            or fields.get("condition")
-            or fields.get("conditions")
-            or fields.get("filter")
-            or ""
+        filter_condition=_business_rule_first_text(
+            fields.get("filter_condition"),
+            fields.get("condition"),
+            fields.get("conditions"),
+            fields.get("filter"),
         ),
         script=script,
-        fields_read=string_list(fields.get("fields_read")),
+        fields_read=_business_rule_string_list(fields.get("fields_read")),
         fields_written=(
-            string_list(fields.get("fields_written")) or _written_fields_from_script(script)
+            _business_rule_string_list(fields.get("fields_written"))
+            or _written_fields_from_script(script)
         ),
     )
 
@@ -192,3 +201,30 @@ def _written_fields_from_script(script: str) -> list[str]:
 
 def _operation_mentions(text: str, operation: str) -> bool:
     return re.search(rf"\b{re.escape(operation)}\b", text, flags=re.IGNORECASE) is not None
+
+
+def _business_rule_string_list(value: Any) -> list[str]:
+    if type(value) is list:
+        return [text for item in value if (text := _business_rule_field_text(item).strip())]
+    text = _business_rule_field_text(value).strip()
+    if not text:
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _business_rule_first_text(*values: Any) -> str:
+    for value in values:
+        text = _business_rule_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _business_rule_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(BUSINESS_RULE_FIELD_NON_JSON_DIAGNOSTIC)

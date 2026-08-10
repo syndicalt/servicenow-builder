@@ -83,6 +83,33 @@ def test_disallowed_provider_task_fails_before_prompt_construction() -> None:
     assert provider.payloads == []
 
 
+def test_disallowed_provider_task_sanitizes_block_diagnostics() -> None:
+    provider = RecordingProvider(_valid_response())
+    policy = _policy(allowed_tasks={"classify_story"})
+    policy.provider_id = "approved-mock\nclient_secret=provider-secret"
+
+    with pytest.raises(ProviderBlocked) as exc:
+        generate_with_provider(
+            story=_story(),
+            policy=policy,
+            provider=provider,
+            task="generate_candidate\napi_key=task-secret",
+            allowed_tables={"sp_instance"},
+            allowed_operations={"update"},
+            allowed_sys_ids={"abc123"},
+        )
+
+    error = str(exc.value)
+    assert "provider approved-mock" in error
+    assert "task=generate_candidate" in error
+    assert "provider-secret" not in error
+    assert "task-secret" not in error
+    assert "\n" not in error
+    assert "client_secret=***REDACTED***" in error
+    assert "api_key=***REDACTED***" in error
+    assert provider.payloads == []
+
+
 def test_disallowed_data_class_fails_closed() -> None:
     provider = RecordingProvider(_valid_response())
 
@@ -166,3 +193,169 @@ def test_model_response_validation_rejects_unsafe_changes(
         )
 
     assert message in str(exc.value)
+
+
+def test_model_response_validation_rejects_too_many_changes() -> None:
+    provider = RecordingProvider(
+        {
+            "changes": [
+                {
+                    "table": "sp_instance",
+                    "operation": "update",
+                    "fields": {},
+                    "sys_id": "abc123",
+                }
+                for _ in range(101)
+            ]
+        }
+    )
+
+    with pytest.raises(ModelResponseError, match="too many changes"):
+        generate_with_provider(
+            story=_story(),
+            policy=_policy(),
+            provider=provider,
+            task="generate_candidate",
+            allowed_tables={"sp_instance"},
+            allowed_operations={"update"},
+            allowed_sys_ids={"abc123"},
+        )
+
+
+def test_model_response_validation_sanitizes_rejected_change_diagnostics() -> None:
+    provider = RecordingProvider(
+        {
+            "changes": [
+                {
+                    "table": "sys_user\nclient_secret=provider-secret",
+                    "operation": "update",
+                    "fields": {},
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ModelResponseError) as exc:
+        generate_with_provider(
+            story=_story(),
+            policy=_policy(),
+            provider=provider,
+            task="generate_candidate",
+            allowed_tables={"sp_instance"},
+            allowed_operations={"update"},
+            allowed_sys_ids={"abc123"},
+        )
+
+    error = str(exc.value)
+    assert "table not allowed" in error
+    assert "provider-secret" not in error
+    assert "\n" not in error
+    assert "client_secret=***REDACTED***" in error
+
+
+def test_model_response_validation_rejects_operation_object_without_leak() -> None:
+    class HostileOperation:
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=operation-secret")
+
+    provider = RecordingProvider(
+        {
+            "changes": [
+                {
+                    "table": "sp_instance",
+                    "operation": HostileOperation(),
+                    "fields": {},
+                    "sys_id": "abc123",
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ModelResponseError) as exc:
+        generate_with_provider(
+            story=_story(),
+            policy=_policy(),
+            provider=provider,
+            task="generate_candidate",
+            allowed_tables={"sp_instance"},
+            allowed_operations={"update"},
+            allowed_sys_ids={"abc123"},
+        )
+
+    error = str(exc.value)
+    assert error == "operation must be an exact string"
+    assert "HostileOperation" not in error
+    assert "operation-secret" not in error
+    assert "client_secret" not in error
+
+
+def test_model_response_validation_rejects_table_object_without_leak() -> None:
+    class HostileTable:
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=table-object-secret")
+
+    provider = RecordingProvider(
+        {
+            "changes": [
+                {
+                    "table": HostileTable(),
+                    "operation": "update",
+                    "fields": {},
+                    "sys_id": "abc123",
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ModelResponseError) as exc:
+        generate_with_provider(
+            story=_story(),
+            policy=_policy(),
+            provider=provider,
+            task="generate_candidate",
+            allowed_tables={"sp_instance"},
+            allowed_operations={"update"},
+            allowed_sys_ids={"abc123"},
+        )
+
+    error = str(exc.value)
+    assert error == "table must be an exact string"
+    assert "HostileTable" not in error
+    assert "table-object-secret" not in error
+    assert "client_secret" not in error
+
+
+def test_model_response_validation_rejects_sys_id_object_without_leak() -> None:
+    class HostileSysId:
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=sys-id-secret")
+
+    provider = RecordingProvider(
+        {
+            "changes": [
+                {
+                    "table": "sp_instance",
+                    "operation": "update",
+                    "fields": {},
+                    "sys_id": HostileSysId(),
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ModelResponseError) as exc:
+        generate_with_provider(
+            story=_story(),
+            policy=_policy(),
+            provider=provider,
+            task="generate_candidate",
+            allowed_tables={"sp_instance"},
+            allowed_operations={"update"},
+            allowed_sys_ids={"abc123"},
+        )
+
+    error = str(exc.value)
+    assert error == "sys_id must be an exact string"
+    assert "HostileSysId" not in error
+    assert "sys-id-secret" not in error
+    assert "client_secret" not in error

@@ -6,10 +6,24 @@
 
 | Mode | Status | Use |
 |---|---|---|
-| `disabled` | Implemented | Default fail-closed mode. Browser admin console is unavailable. |
+| `disabled` | Implemented | Default fail-closed browser mode. Browser admin console is unavailable; production API deployments must configure `JEDI_ADMIN_API_TOKEN` for bearer-protected JSON diagnostics. |
 | `dev_basic` | Implemented | Development-only Basic auth for PDI/Railway MVP testing. |
 | `oidc` | Reserved | Future customer IdP OIDC integration. Fails closed today. |
 | `servicenow_oauth` | Reserved | Future ServiceNow OAuth authorization code integration. Fails closed today. |
+
+Production can run with the browser admin console disabled while retaining authenticated operator
+diagnostics through the JSON admin and artifact APIs:
+
+```text
+JEDI_ENVIRONMENT=production
+JEDI_RUNTIME_ROLE=api
+JEDI_ADMIN_AUTH_MODE=disabled
+JEDI_ADMIN_API_TOKEN=<strong random token, at least 32 characters>
+```
+
+In this posture, `/admin` and `/admin/artifacts/{artifact_id}` return `503` because browser admin
+auth is disabled. JSON admin endpoints such as `/admin/jobs`, `/jobs/{job_id}/events`, and artifact
+APIs require `Authorization: Bearer <JEDI_ADMIN_API_TOKEN>`.
 
 `dev_basic` requires:
 

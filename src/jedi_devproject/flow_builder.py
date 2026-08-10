@@ -93,7 +93,7 @@ class FlowRetrievedNodeEvidence(BaseModel):
     referenced by the narrow subset; trigger records remain read-only.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: FlowBuilderNodeTable
     sys_id: str
@@ -114,7 +114,7 @@ class FlowRetrievedNodeEvidence(BaseModel):
 
 
 class FlowGeneratedCustomerUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     table: str
     record_sys_id: str
@@ -139,7 +139,7 @@ class FlowGeneratedCustomerUpdate(BaseModel):
 
 
 class FlowCustomerUpdateBuildResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     builder_version: Literal["flow-builder-v1"]
     flow_name: str

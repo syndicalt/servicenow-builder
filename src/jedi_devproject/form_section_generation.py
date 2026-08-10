@@ -12,6 +12,11 @@ from jedi_devproject.xml_builder import (
     text_element,
 )
 
+FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC = (
+    "form section removal field contains non-JSON value"
+)
+FORM_SECTION_FIELD_MISSING_DIAGNOSTIC = "form section removal field is missing"
+
 
 class FormSectionMetadataClient(Protocol):
     def fetch_table_records(
@@ -34,36 +39,53 @@ def form_section_customer_updates(
     fields = dict(change.fields)
     target_table = _required_text(fields, "table")
     requested_sections = _section_names(fields.get("sections"))
-    requested_view = str(fields.get("view") or "Default view")
+    requested_view = _form_section_field_text(fields.get("view") or "Default view")
     if not requested_sections:
         raise ValueError("form section removal requires at least one section")
 
-    sections = client.fetch_table_records(
-        table="sys_ui_section",
-        lookup={"name": target_table},
-        fields=["sys_id", "name", "caption", "view", "sys_user"],
-        limit=200,
+    sections = _form_section_metadata_records(
+        client.fetch_table_records(
+            table="sys_ui_section",
+            lookup={"name": target_table},
+            fields=["sys_id", "name", "caption", "view", "sys_user"],
+            limit=200,
+        )
     )
     resolved_sections = _resolve_sections(
         sections=sections,
         requested_sections=requested_sections,
         requested_view=requested_view,
     )
-    return [
-        {
-            "name": f"sys_ui_section_{reference_value(section.get('sys_id'))}",
-            "remote_update_set": remote_update_set_sys_id,
-            "action": "DELETE",
-            "type": "Form Layout",
-            "target_name": _target_name(target_table=target_table, section=section),
-            "payload": _form_section_delete_payload(
-                target_table=target_table,
-                section=section,
-            ),
-            "application": "global",
-        }
-        for section in resolved_sections
-    ]
+    updates: list[dict[str, Any]] = []
+    for section in resolved_sections:
+        section_sys_id = _required_reference_value(section.get("sys_id"))
+        updates.append(
+            {
+                "name": f"sys_ui_section_{section_sys_id}",
+                "remote_update_set": remote_update_set_sys_id,
+                "action": "DELETE",
+                "type": "Form Layout",
+                "target_name": _target_name(target_table=target_table, section=section),
+                "payload": _form_section_delete_payload(
+                    target_table=target_table,
+                    section=section,
+                    section_sys_id=section_sys_id,
+                ),
+                "application": "global",
+            }
+        )
+    return updates
+
+
+def _form_section_metadata_records(value: Any) -> list[dict[str, Any]]:
+    if type(value) is not list:
+        raise ValueError(FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC)
+    records: list[dict[str, Any]] = []
+    for record in value:
+        if type(record) is not dict:
+            raise ValueError(FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC)
+        records.append(record)
+    return records
 
 
 def _single_form_section_change(changes: list[CandidateChange]) -> CandidateChange:
@@ -102,11 +124,7 @@ def _section_matches(caption: Any, requested: str) -> bool:
     normalized_requested = _normalize_label(requested)
     if normalized_caption == "" or normalized_requested == "":
         return False
-    return (
-        normalized_caption == normalized_requested
-        or normalized_caption.startswith(normalized_requested)
-        or normalized_requested.startswith(normalized_caption)
-    )
+    return normalized_caption == normalized_requested
 
 
 def _view_matches(view: Any, requested_view: str) -> bool:
@@ -122,8 +140,8 @@ def _form_section_delete_payload(
     *,
     target_table: str,
     section: dict[str, Any],
+    section_sys_id: str,
 ) -> str:
-    section_sys_id = reference_value(section.get("sys_id"))
     caption = _reference_display_or_value(section.get("caption"))
     view = section.get("view")
     view_value = reference_value(view)
@@ -162,25 +180,38 @@ def _target_name(*, target_table: str, section: dict[str, Any]) -> str:
 
 
 def _section_names(value: Any) -> list[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value or "").strip()
+    if type(value) is list:
+        return [
+            text
+            for item in value
+            if (text := _form_section_field_text(item).strip())
+        ]
+    text = _form_section_field_text(value).strip()
     if not text:
         return []
     return [item.strip() for item in re.split(r",|\band\b", text) if item.strip()]
 
 
 def _required_text(fields: dict[str, Any], key: str) -> str:
-    value = str(fields.get(key) or "").strip()
+    value = _form_section_field_text(fields.get(key)).strip()
     if not value:
         raise ValueError(f"form section removal missing required field: {key}")
     return value
 
 
 def _reference_display_or_value(value: Any) -> str:
-    if isinstance(value, dict):
-        return str(value.get("display_value") or value.get("value") or "")
-    return str(value or "")
+    if type(value) is dict:
+        return _form_section_field_text(
+            value.get("display_value") or value.get("value") or ""
+        )
+    return _form_section_field_text(value)
+
+
+def _required_reference_value(value: Any) -> str:
+    text = reference_value(value)
+    if text == "":
+        raise ValueError(FORM_SECTION_FIELD_MISSING_DIAGNOSTIC)
+    return text
 
 
 def _payload_view_value(value: str) -> str:
@@ -196,3 +227,13 @@ def _normalize_view(value: str) -> str:
     if normalized in {"", "default view", "default"}:
         return "default"
     return normalized
+
+
+def _form_section_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(FORM_SECTION_FIELD_NON_JSON_DIAGNOSTIC)

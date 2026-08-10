@@ -4,18 +4,27 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.bootstrap_fields import BOOTSTRAP_TABLE
 
+LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC = (
+    "Lifecycle webhook lookup contains non-JSON value"
+)
+_UNSAFE_LIFECYCLE_VERIFICATION_VALUE = object()
+
 
 class LifecycleWebhookApplyResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     applied: bool
     upserted_records: list[dict[str, Any]]
     reasons: list[str]
 
 
 class LifecycleWebhookVerificationResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     verified: bool
     matched_records: list[str]
     missing_records: list[str]
@@ -24,6 +33,8 @@ class LifecycleWebhookVerificationResult(BaseModel):
 
 
 class LifecycleBusinessRuleSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     name: str
     table: str
     when: str
@@ -34,6 +45,8 @@ class LifecycleBusinessRuleSpec(BaseModel):
 
 
 class LifecycleRestMessageSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     name: str
     method_name: str
     endpoint_url: str
@@ -43,6 +56,8 @@ class LifecycleRestMessageSpec(BaseModel):
 
 
 class LifecycleWebhookBootstrapSpec(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     rest_message: LifecycleRestMessageSpec
     business_rule: LifecycleBusinessRuleSpec
     hmac_secret_property_name: str | None = None
@@ -102,8 +117,10 @@ def build_lifecycle_business_rule_spec(
         ready_for_testing_state_value is not None and complete_state_value is not None
     )
     if complete_transition_enabled:
-        assert ready_for_testing_state_value is not None
-        assert complete_state_value is not None
+        if ready_for_testing_state_value is None or complete_state_value is None:
+            raise ValueError(
+                "ready_for_testing_state_value and complete_state_value are required together"
+            )
         transition_conditions.append(
             f"(previous.state == {_js_string(ready_for_testing_state_value)} && "
             f"current.state == {_js_string(ready_state_value)})"
@@ -323,18 +340,20 @@ def apply_lifecycle_webhook_records(
 
     upserted_records: list[dict[str, Any]] = []
     for record in _servicenow_apply_records(spec, rest_message_sys_id=None):
-        result = client.upsert_table_record(
-            table=str(record["table"]),
-            lookup=record["lookup"],
-            fields=record["fields"],
+        result = _lifecycle_webhook_upsert_result(
+            client.upsert_table_record(
+                table=str(record["table"]),
+                lookup=record["lookup"],
+                fields=record["fields"],
+            )
         )
         if record["table"] == "sys_rest_message":
-            rest_message_sys_id = str(result.get("sys_id") or "")
+            rest_message_sys_id = _lifecycle_webhook_lookup_text(result.get("sys_id"))
             upserted_records.append(
                 {
                     "table": record["table"],
                     "lookup": record["lookup"],
-                    "sys_id": result.get("sys_id"),
+                    "sys_id": rest_message_sys_id,
                 }
             )
             if rest_message_sys_id:
@@ -344,26 +363,32 @@ def apply_lifecycle_webhook_records(
                 ):
                     if method_record["table"] != "sys_rest_message_fn":
                         continue
-                    method_result = client.upsert_table_record(
-                        table=str(method_record["table"]),
-                        lookup=method_record["lookup"],
-                        fields=method_record["fields"],
+                    method_result = _lifecycle_webhook_upsert_result(
+                        client.upsert_table_record(
+                            table=str(method_record["table"]),
+                            lookup=method_record["lookup"],
+                            fields=method_record["fields"],
+                        )
+                    )
+                    method_sys_id = _lifecycle_webhook_lookup_text(
+                        method_result.get("sys_id")
                     )
                     upserted_records.append(
                         {
                             "table": method_record["table"],
                             "lookup": method_record["lookup"],
-                            "sys_id": method_result.get("sys_id"),
+                            "sys_id": method_sys_id,
                         }
                     )
             continue
         if record["table"] == "sys_rest_message_fn":
             continue
+        result_sys_id = _lifecycle_webhook_lookup_text(result.get("sys_id"))
         upserted_records.append(
             {
                 "table": record["table"],
                 "lookup": record["lookup"],
-                "sys_id": result.get("sys_id"),
+                "sys_id": result_sys_id,
             }
         )
 
@@ -389,6 +414,7 @@ def verify_lifecycle_webhook_records(
             table=table,
             lookup=planned_record["lookup"],
         )
+        actual_record = _lifecycle_webhook_fetch_result(actual_record)
         if actual_record is None:
             missing_records.append(table)
             continue
@@ -402,7 +428,7 @@ def verify_lifecycle_webhook_records(
 
         if table != "sys_rest_message":
             continue
-        rest_message_sys_id = str(actual_record.get("sys_id") or "")
+        rest_message_sys_id = _lifecycle_webhook_lookup_text(actual_record.get("sys_id"))
         if not rest_message_sys_id:
             missing_records.append("sys_rest_message_fn")
             continue
@@ -414,6 +440,7 @@ def verify_lifecycle_webhook_records(
                 table=str(method_record["table"]),
                 lookup=method_record["lookup"],
             )
+            actual_method = _lifecycle_webhook_fetch_result(actual_method)
             if actual_method is None:
                 missing_records.append(str(method_record["table"]))
                 continue
@@ -496,6 +523,30 @@ def _servicenow_verification_records(
     return records
 
 
+def _lifecycle_webhook_lookup_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) in {bool, int}:
+        return str(value)
+    raise ValueError(LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC)
+
+
+def _lifecycle_webhook_upsert_result(result: object) -> dict[str, Any]:
+    if type(result) is not dict:
+        raise ValueError(LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC)
+    return result
+
+
+def _lifecycle_webhook_fetch_result(result: object) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    if type(result) is not dict:
+        raise ValueError(LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC)
+    return result
+
+
 def _mismatched_fields(
     actual_record: dict[str, Any],
     expected_fields: dict[str, Any],
@@ -509,13 +560,21 @@ def _mismatched_fields(
 
 
 def _normalise_servicenow_value(value: Any) -> Any:
-    if isinstance(value, dict) and "value" in value:
-        return value["value"]
-    if isinstance(value, bool):
+    if type(value) is dict:
+        if "value" not in value:
+            return _UNSAFE_LIFECYCLE_VERIFICATION_VALUE
+        return _normalise_servicenow_value(value["value"])
+    if value is None:
+        return None
+    if type(value) is bool:
         return "true" if value else "false"
-    if isinstance(value, str) and value.lower() in {"true", "false"}:
-        return value.lower()
-    return value
+    if type(value) is str:
+        if value.lower() in {"true", "false"}:
+            return value.lower()
+        return value
+    if type(value) is int:
+        return value
+    return _UNSAFE_LIFECYCLE_VERIFICATION_VALUE
 
 
 def _require_non_empty(field_name: str, value: str) -> None:

@@ -34,8 +34,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from jedi_devproject.models import CandidateChange
-from jedi_devproject.ui_policy_generation import _tristate, _validate_safe_text
-from jedi_devproject.validation_helpers import bool_value, optional_int, slug, stable_record_sys_id
+from jedi_devproject.ui_policy_generation import _validate_safe_text
+from jedi_devproject.validation_helpers import bool_text, bool_value, slug, stable_record_sys_id
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     bool_element,
@@ -45,6 +45,9 @@ from jedi_devproject.xml_builder import (
 )
 
 CATALOG_UI_POLICY_TABLES = frozenset({"catalog_ui_policy", "catalog_ui_policy_action"})
+CATALOG_UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC = (
+    "Catalog UI Policy generation field contains non-JSON value"
+)
 
 _CONDITION_OPERATORS = ("ISNOTEMPTY", "ISEMPTY", "!=", "=")
 _UNARY_CONDITION_OPERATORS = frozenset({"ISEMPTY", "ISNOTEMPTY"})
@@ -58,7 +61,7 @@ _CONDITION_PATTERN = re.compile(
 class CatalogUiPolicyCondition(BaseModel):
     """One declarative condition term against an item variable's value."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     join: str = "AND"
     variable: str
@@ -127,7 +130,7 @@ def catalog_ui_policy_condition_variables(conditions: str) -> list[str]:
 
 
 class CatalogUiPolicyActionIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     policy_name: str = ""
     variable: str
@@ -167,7 +170,7 @@ class CatalogUiPolicyActionIntent(BaseModel):
 
 
 class CatalogUiPolicyIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     catalog_item_name: str
     policy_name: str
@@ -326,11 +329,11 @@ def _catalog_ui_policy_intents(
         if change.operation != "insert":
             raise ValueError("Catalog UI Policy handoff supports action insert only")
         fields = dict(change.fields)
-        title = str(
+        title = _catalog_ui_policy_first_text(
             fields.get("ui_policy")
-            or fields.get("policy")
-            or fields.get("policy_name")
-            or ""
+            if fields.get("ui_policy") is not None
+            else fields.get("policy"),
+            fields.get("policy_name"),
         ).strip()
         if not title:
             if len(titles) != 1:
@@ -350,19 +353,30 @@ def _catalog_ui_policy_intents(
             CatalogUiPolicyIntent(
                 catalog_item_name=catalog_item_name,
                 policy_name=title,
-                conditions=str(
+                conditions=_catalog_ui_policy_first_text(
                     fields.get("catalog_conditions")
-                    or fields.get("conditions")
-                    or fields.get("condition")
-                    or ""
+                    if fields.get("catalog_conditions") is not None
+                    else fields.get("conditions"),
+                    fields.get("condition"),
                 ),
-                reverse_if_false=bool_value(fields.get("reverse_if_false"), default=True),
-                run_scripts=bool_value(fields.get("run_scripts")),
-                active=bool_value(fields.get("active"), default=True),
-                on_load=bool_value(fields.get("on_load"), default=True),
-                order=optional_int(fields.get("order")) or 100,
-                script_true=str(fields.get("script_true") or ""),
-                script_false=str(fields.get("script_false") or ""),
+                reverse_if_false=bool_value(
+                    _catalog_ui_policy_first_text(fields.get("reverse_if_false")),
+                    default=True,
+                ),
+                run_scripts=bool_value(
+                    _catalog_ui_policy_first_text(fields.get("run_scripts"))
+                ),
+                active=bool_value(
+                    _catalog_ui_policy_first_text(fields.get("active")),
+                    default=True,
+                ),
+                on_load=bool_value(
+                    _catalog_ui_policy_first_text(fields.get("on_load")),
+                    default=True,
+                ),
+                order=_catalog_ui_policy_optional_int(fields.get("order")) or 100,
+                script_true=_catalog_ui_policy_first_text(fields.get("script_true")),
+                script_false=_catalog_ui_policy_first_text(fields.get("script_false")),
                 actions=actions_by_title[title],
             )
         )
@@ -370,11 +384,11 @@ def _catalog_ui_policy_intents(
 
 
 def _policy_title(fields: dict[str, Any]) -> str:
-    return str(
+    return _catalog_ui_policy_first_text(
         fields.get("short_description")
-        or fields.get("policy_name")
-        or fields.get("name")
-        or ""
+        if fields.get("short_description") is not None
+        else fields.get("policy_name"),
+        fields.get("name"),
     ).strip()
 
 
@@ -384,16 +398,50 @@ def _catalog_ui_policy_action_intent(
     policy_name: str,
 ) -> CatalogUiPolicyActionIntent:
     disabled_value = fields.get("disabled")
-    if str(disabled_value if disabled_value is not None else "").strip().lower() in {"", "ignore"}:
+    if _catalog_ui_policy_first_text(disabled_value).strip().lower() in {"", "ignore"}:
         disabled_value = fields.get("read_only", disabled_value)
     return CatalogUiPolicyActionIntent(
         policy_name=policy_name,
-        variable=str(fields.get("variable") or fields.get("field") or ""),
-        mandatory=_tristate(fields.get("mandatory")),
-        visible=_tristate(fields.get("visible")),
-        disabled=_tristate(disabled_value),
-        cleared=bool_value(fields.get("cleared", fields.get("clear_value"))),
+        variable=_catalog_ui_policy_first_text(fields.get("variable"), fields.get("field")),
+        mandatory=_catalog_ui_policy_tristate(fields.get("mandatory")),
+        visible=_catalog_ui_policy_tristate(fields.get("visible")),
+        disabled=_catalog_ui_policy_tristate(disabled_value),
+        cleared=bool_value(
+            _catalog_ui_policy_first_text(fields.get("cleared", fields.get("clear_value")))
+        ),
     )
+
+
+def _catalog_ui_policy_tristate(value: Any) -> str:
+    if isinstance(value, bool):
+        return bool_text(value)
+    text = _catalog_ui_policy_first_text(value, "ignore").strip().lower()
+    if text in {"", "none", "leave alone"}:
+        return "ignore"
+    return text
+
+
+def _catalog_ui_policy_optional_int(value: Any) -> int | None:
+    text = _catalog_ui_policy_field_text(value).strip()
+    return int(text) if text.isdigit() else None
+
+
+def _catalog_ui_policy_first_text(*values: Any) -> str:
+    for value in values:
+        text = _catalog_ui_policy_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _catalog_ui_policy_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(CATALOG_UI_POLICY_FIELD_NON_JSON_DIAGNOSTIC)
 
 
 def _require_item_variable(

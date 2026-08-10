@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.context_escalation import plan_context_escalation
 from jedi_devproject.models import RetrievalCitation
@@ -19,6 +19,8 @@ AUTOMATED_HANDOFF_BUILDER_MATURITY_THRESHOLD = 0.75
 
 
 class PacketStory(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     number: str
     short_description: str
     description: str
@@ -30,6 +32,8 @@ class PacketStory(BaseModel):
 
 
 class ImplementationPacket(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     task: str
     provider_id: str
     story: PacketStory

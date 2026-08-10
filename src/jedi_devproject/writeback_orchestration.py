@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
+import math
 from pathlib import Path
 from typing import Any, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from jedi_devproject.artifacts import (
     build_claim_audit_artifact_path,
@@ -12,9 +12,12 @@ from jedi_devproject.artifacts import (
     write_writeback_audit_artifact,
     writeback_audit_artifact_path,
 )
+from jedi_devproject.cli_io import load_json_list
 from jedi_devproject.models import Story
 from jedi_devproject.servicenow import StoryDictionaryField, StoryStateChoice
+from jedi_devproject.work_note_safety import WORK_NOTE_TRUNCATION_MARKER
 from jedi_devproject.writeback import (
+    MAX_EXTERNAL_BUILD_WORK_NOTE_VALUE_CHARS,
     REQUIRED_STRUCTURED_WRITEBACK_FIELDS,
     ActorType,
     BuildClaimAuditEvent,
@@ -26,6 +29,7 @@ from jedi_devproject.writeback import (
     build_state_mapping_from_choices,
     plan_external_build_writeback,
     plan_story_build_claim_writeback,
+    structured_writeback_field_value,
     validate_writeback_fields,
 )
 
@@ -50,6 +54,8 @@ class WritebackClient(Protocol):
 
 
 class WritebackExecutionRequest(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     build_reference: str
     artifact_url: str | None = None
@@ -64,6 +70,8 @@ class WritebackExecutionRequest(BaseModel):
 
 
 class BuildClaimExecutionRequest(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     story_sys_id: str | None = None
     lifecycle_event_id: str
@@ -79,6 +87,8 @@ class BuildClaimExecutionRequest(BaseModel):
 
 
 class WritebackJobRecord(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     build_reference: str
     artifact_url: str | None = None
@@ -87,6 +97,8 @@ class WritebackJobRecord(BaseModel):
 
 
 class WritebackExecutionResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     plan: StoryWritebackPlan
     allowed: bool
     applied: bool
@@ -96,12 +108,16 @@ class WritebackExecutionResult(BaseModel):
 
 
 class WritebackBatchResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     capability: WritebackCapabilityResult
     results: list[WritebackExecutionResult] = Field(default_factory=list)
     summary: dict[str, int] = Field(default_factory=dict)
 
 
 class WritebackCapabilityResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     allowed: bool
     ready_for_testing_state: str | None = None
     missing_fields: list[str] = Field(default_factory=list)
@@ -109,6 +125,8 @@ class WritebackCapabilityResult(BaseModel):
 
 
 class WritebackVerificationResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     verified: bool
     expected_state: str | None = None
@@ -116,13 +134,26 @@ class WritebackVerificationResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+MAX_WRITEBACK_BATCH_REPORT_DIAGNOSTIC_DEPTH = 32
+WRITEBACK_BATCH_REPORT_CIRCULAR_REFERENCE_MARKER = "[circular reference]"
+WRITEBACK_BATCH_REPORT_MAX_DEPTH_MARKER = "[max depth exceeded]"
+WRITEBACK_BATCH_REPORT_NON_JSON_KEY_MARKER = "[non-json key]"
+WRITEBACK_BATCH_REPORT_NON_JSON_VALUE_MARKER = "[non-json value]"
+WRITEBACK_STATE_CHOICES_NON_JSON_DIAGNOSTIC = (
+    "writeback state choices contain non-JSON value"
+)
+WRITEBACK_DICTIONARY_FIELDS_NON_JSON_DIAGNOSTIC = (
+    "writeback dictionary fields contain non-JSON value"
+)
+WRITEBACK_STORIES_NON_JSON_DIAGNOSTIC = "writeback stories contain non-JSON value"
+
+
 def evaluate_writeback_capability(client: WritebackClient) -> WritebackCapabilityResult:
     state_mapping = build_state_mapping_from_choices(
-        [choice.model_dump() for choice in client.fetch_story_state_choices()]
+        [choice.model_dump() for choice in _writeback_state_choices(client)]
     )
-    available_fields = {
-        field.element for field in client.fetch_story_dictionary_fields()
-    }
+    dictionary_fields = _writeback_dictionary_fields(client.fetch_story_dictionary_fields())
+    available_fields = {field.element for field in dictionary_fields}
     if state_mapping is not None:
         available_fields.add("state")
     missing_fields = sorted(REQUIRED_STRUCTURED_WRITEBACK_FIELDS - available_fields)
@@ -149,7 +180,9 @@ def verify_writeback(
     build_reference: str,
     artifact_url: str | None,
 ) -> WritebackVerificationResult:
-    stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+    stories = _writeback_stories(
+        client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+    )
     if not stories:
         return WritebackVerificationResult(
             story_number=story_number,
@@ -158,7 +191,7 @@ def verify_writeback(
         )
 
     state_mapping = build_state_mapping_from_choices(
-        [choice.model_dump() for choice in client.fetch_story_state_choices()]
+        [choice.model_dump() for choice in _writeback_state_choices(client)]
     )
     if state_mapping is None:
         return WritebackVerificationResult(
@@ -168,7 +201,7 @@ def verify_writeback(
         )
 
     story = stories[0]
-    actual_fields = {
+    raw_actual_fields = {
         "state": story.state,
         "u_ai_status": story.additional_context.get("u_ai_status"),
         "u_ai_build_reference": story.additional_context.get("u_ai_build_reference"),
@@ -179,19 +212,23 @@ def verify_writeback(
     expected_fields = {
         "state": state_mapping.ready_for_testing,
         "u_ai_status": "Ready for Testing",
-        "u_ai_build_reference": build_reference,
-        "u_ai_candidate_artifact": artifact_url,
+        "u_ai_build_reference": structured_writeback_field_value(build_reference),
+        "u_ai_candidate_artifact": (
+            structured_writeback_field_value(artifact_url)
+            if artifact_url is not None
+            else None
+        ),
     }
     reasons = [
         f"{field}_mismatch"
         for field, expected_value in expected_fields.items()
-        if actual_fields.get(field) != expected_value
+        if raw_actual_fields.get(field) != expected_value
     ]
     return WritebackVerificationResult(
         story_number=story.number,
         verified=not reasons,
         expected_state=state_mapping.ready_for_testing,
-        actual_fields=actual_fields,
+        actual_fields=_diagnostic_actual_fields(raw_actual_fields),
         reasons=reasons,
     )
 
@@ -205,7 +242,7 @@ def load_writeback_requests(
     execution_id: str | None,
     audit_root: Path,
 ) -> list[WritebackExecutionRequest]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = load_json_list(path, "writeback job file")
     jobs = [WritebackJobRecord.model_validate(item) for item in payload]
     if not jobs:
         raise ValueError("writeback job file must contain at least one writeback job")
@@ -235,18 +272,24 @@ def build_writeback_batch_report(
     actor_id: str,
 ) -> dict[str, Any]:
     return {
-        "execution_id": execution_id,
-        "actor_id": actor_id,
-        "capability": batch.capability.model_dump(mode="json"),
-        "summary": batch.summary,
+        "execution_id": _diagnostic_report_value(execution_id),
+        "actor_id": _diagnostic_report_value(actor_id),
+        "capability": _diagnostic_report_value(
+            batch.capability.model_dump(mode="python", warnings=False)
+        ),
+        "summary": _diagnostic_report_value(batch.summary),
         "results": [
             {
-                "story_number": result.plan.story_number,
-                "allowed": result.allowed,
-                "applied": result.applied,
-                "idempotent": result.idempotent,
-                "audit_path": str(result.audit_path) if result.audit_path else None,
-                "reasons": result.reasons or result.plan.reasons,
+                "story_number": _diagnostic_report_value(result.plan.story_number),
+                "allowed": _diagnostic_report_value(result.allowed),
+                "applied": _diagnostic_report_value(result.applied),
+                "idempotent": _diagnostic_report_value(result.idempotent),
+                "audit_path": (
+                    _diagnostic_report_value(str(result.audit_path))
+                    if result.audit_path
+                    else None
+                ),
+                "reasons": _diagnostic_report_value(result.reasons or result.plan.reasons),
             }
             for result in batch.results
         ],
@@ -278,16 +321,18 @@ def execute_writeback(
     client: WritebackClient,
     request: WritebackExecutionRequest,
 ) -> WritebackExecutionResult:
-    stories = client.fetch_stories(
-        sysparm_query=f"number={request.story_number}",
-        limit=1,
+    stories = _writeback_stories(
+        client.fetch_stories(
+            sysparm_query=f"number={request.story_number}",
+            limit=1,
+        )
     )
     if not stories:
         return _blocked_result("story_not_found")
 
     story = stories[0].model_copy(update={"state": request.from_state})
     state_mapping = build_state_mapping_from_choices(
-        [choice.model_dump() for choice in client.fetch_story_state_choices()]
+        [choice.model_dump() for choice in _writeback_state_choices(client)]
     )
     if state_mapping is None:
         return _blocked_result("ready_for_testing_state_not_found", story=story)
@@ -397,13 +442,15 @@ def execute_build_claim(
     client: WritebackClient,
     request: BuildClaimExecutionRequest,
 ) -> WritebackExecutionResult:
-    stories = client.fetch_stories(
-        sysparm_query=(
-            f"sys_id={request.story_sys_id}"
-            if request.story_sys_id
-            else f"number={request.story_number}"
+    stories = _writeback_stories(
+        client.fetch_stories(
+            sysparm_query=(
+                f"sys_id={request.story_sys_id}"
+                if request.story_sys_id
+                else f"number={request.story_number}"
+            ),
+            limit=1,
         ),
-        limit=1,
     )
     if not stories:
         return _blocked_result("story_not_found")
@@ -491,6 +538,34 @@ def execute_build_claim(
     )
 
 
+def _writeback_state_choices(client: WritebackClient) -> list[StoryStateChoice]:
+    choices = client.fetch_story_state_choices()
+    if type(choices) is not list:
+        raise ValueError(WRITEBACK_STATE_CHOICES_NON_JSON_DIAGNOSTIC)
+    for choice in choices:
+        if type(choice) is not StoryStateChoice:
+            raise ValueError(WRITEBACK_STATE_CHOICES_NON_JSON_DIAGNOSTIC)
+    return choices
+
+
+def _writeback_dictionary_fields(fields: object) -> list[StoryDictionaryField]:
+    if type(fields) is not list:
+        raise ValueError(WRITEBACK_DICTIONARY_FIELDS_NON_JSON_DIAGNOSTIC)
+    for field in fields:
+        if type(field) is not StoryDictionaryField:
+            raise ValueError(WRITEBACK_DICTIONARY_FIELDS_NON_JSON_DIAGNOSTIC)
+    return fields
+
+
+def _writeback_stories(stories: object) -> list[Story]:
+    if type(stories) is not list:
+        raise ValueError(WRITEBACK_STORIES_NON_JSON_DIAGNOSTIC)
+    for story in stories:
+        if type(story) is not Story:
+            raise ValueError(WRITEBACK_STORIES_NON_JSON_DIAGNOSTIC)
+    return stories
+
+
 def _blocked_result(
     reason: str,
     *,
@@ -523,6 +598,129 @@ def _remote_writeback_already_applied(
     )
 
 
+def _diagnostic_actual_fields(
+    actual_fields: dict[str, str | None],
+) -> dict[str, str | None]:
+    return {
+        field: structured_writeback_field_value(value) if value is not None else None
+        for field, value in actual_fields.items()
+    }
+
+
+def _diagnostic_report_value(value: Any) -> Any:
+    return _diagnostic_report_node(value, depth=0, seen_container_ids=set())
+
+
+def _diagnostic_report_node(
+    value: Any,
+    *,
+    depth: int,
+    seen_container_ids: set[int],
+) -> Any:
+    if type(value) is str:
+        return structured_writeback_field_value(value)
+    if value is None or type(value) is bool or type(value) is int:
+        return value
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        return WRITEBACK_BATCH_REPORT_NON_JSON_VALUE_MARKER
+    if (
+        depth >= MAX_WRITEBACK_BATCH_REPORT_DIAGNOSTIC_DEPTH
+        and type(value) in (dict, list, tuple)
+    ):
+        return WRITEBACK_BATCH_REPORT_MAX_DEPTH_MARKER
+    if type(value) is list:
+        container_id = id(value)
+        if container_id in seen_container_ids:
+            return WRITEBACK_BATCH_REPORT_CIRCULAR_REFERENCE_MARKER
+        seen_container_ids.add(container_id)
+        try:
+            return [
+                _diagnostic_report_node(
+                    item,
+                    depth=depth + 1,
+                    seen_container_ids=seen_container_ids,
+                )
+                for item in value
+            ]
+        finally:
+            seen_container_ids.remove(container_id)
+    if type(value) is tuple:
+        container_id = id(value)
+        if container_id in seen_container_ids:
+            return WRITEBACK_BATCH_REPORT_CIRCULAR_REFERENCE_MARKER
+        seen_container_ids.add(container_id)
+        try:
+            return [
+                _diagnostic_report_node(
+                    item,
+                    depth=depth + 1,
+                    seen_container_ids=seen_container_ids,
+                )
+                for item in value
+            ]
+        finally:
+            seen_container_ids.remove(container_id)
+    if type(value) is dict:
+        container_id = id(value)
+        if container_id in seen_container_ids:
+            return WRITEBACK_BATCH_REPORT_CIRCULAR_REFERENCE_MARKER
+        seen_container_ids.add(container_id)
+        try:
+            projected: dict[str, Any] = {}
+            for key, item in value.items():
+                projected[
+                    _deduplicated_diagnostic_report_key(
+                        projected,
+                        _diagnostic_report_key(key),
+                    )
+                ] = _diagnostic_report_node(
+                    item,
+                    depth=depth + 1,
+                    seen_container_ids=seen_container_ids,
+                )
+            return projected
+        finally:
+            seen_container_ids.remove(container_id)
+    return WRITEBACK_BATCH_REPORT_NON_JSON_VALUE_MARKER
+
+
+def _diagnostic_report_key(key: object) -> str:
+    if type(key) is str:
+        return structured_writeback_field_value(key) or "[empty key]"
+    return WRITEBACK_BATCH_REPORT_NON_JSON_KEY_MARKER
+
+
+def _deduplicated_diagnostic_report_key(
+    existing: dict[str, Any],
+    rendered_key: str,
+) -> str:
+    if rendered_key not in existing:
+        return rendered_key
+    duplicate_count = 2
+    while True:
+        candidate = _duplicate_diagnostic_report_key(
+            rendered_key,
+            duplicate_count=duplicate_count,
+        )
+        if candidate not in existing:
+            return candidate
+        duplicate_count += 1
+
+
+def _duplicate_diagnostic_report_key(rendered_key: str, *, duplicate_count: int) -> str:
+    suffix = f" [duplicate {duplicate_count}]"
+    if len(rendered_key) + len(suffix) <= MAX_EXTERNAL_BUILD_WORK_NOTE_VALUE_CHARS:
+        return f"{rendered_key}{suffix}"
+    prefix_budget = (
+        MAX_EXTERNAL_BUILD_WORK_NOTE_VALUE_CHARS
+        - len(WORK_NOTE_TRUNCATION_MARKER)
+        - len(suffix)
+    )
+    return rendered_key[:prefix_budget].rstrip() + WORK_NOTE_TRUNCATION_MARKER + suffix
+
+
 def _blocked_batch_result(
     request: WritebackExecutionRequest,
 ) -> WritebackExecutionResult:
@@ -543,10 +741,10 @@ def _blocked_batch_result(
 
 def _available_writeback_fields(
     *,
-    dictionary_fields: list[StoryDictionaryField],
+    dictionary_fields: object,
     state_mapping_found: bool,
 ) -> set[str]:
-    available_fields = {field.element for field in dictionary_fields}
+    available_fields = {field.element for field in _writeback_dictionary_fields(dictionary_fields)}
     if state_mapping_found:
         available_fields.add("state")
     return available_fields

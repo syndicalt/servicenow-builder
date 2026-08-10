@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+from collections.abc import Mapping
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -16,13 +16,22 @@ from jedi_devproject.artifact_handoff import (
     delivery_attachment_jobs_from_report,
 )
 from jedi_devproject.artifacts import (
+    ArtifactWriteError,
+    artifact_sha256_file,
     write_delivery_attachment_audit,
     write_json_artifact_once,
     write_reviewed_delivery_lifecycle_manifest,
+    write_text_artifact_once,
 )
-from jedi_devproject.cli_io import load_json_list, load_json_object, render_summary
+from jedi_devproject.cli_io import (
+    load_json_list,
+    load_json_object,
+    render_cli_error,
+    render_summary,
+)
 from jedi_devproject.external_build import (
     ExternalBuildPipelineResult,
+    SuccessfulBuildRequiredError,
     reviewed_delivery_jobs_from_build_result,
     writeback_job_from_build_result,
 )
@@ -30,7 +39,10 @@ from jedi_devproject.lifecycle_events import (
     LifecycleStateChangeEvent,
     plan_story_ready_lifecycle_event,
 )
+from jedi_devproject.models import Story
 from jedi_devproject.servicenow import ServiceNowClient, UrllibTransport
+
+CLI_STORY_LOOKUP_RESULT_UNSAFE_REASON = "story_lookup_result_unsafe"
 
 
 def _client_from_env(env_file: Path) -> ServiceNowClient:
@@ -47,17 +59,19 @@ def process_external_build_result_command(args: argparse.Namespace) -> int:
             load_json_object(args.result_file)
         )
     except (ValidationError, ValueError) as exc:
-        print(f"external_build_results=0 reason=invalid_build_result detail={exc}")
+        print(
+            f"external_build_results=0 reason=invalid_build_result detail={render_cli_error(exc)}"
+        )
         return 1
 
     writeback_jobs = [writeback_job_from_build_result(build_result, from_state=args.from_state)]
     try:
         external_delivery_jobs = reviewed_delivery_jobs_from_build_result(build_result)
-    except ValueError as exc:
-        if str(exc) != "successful_build_required":
-            print(f"external_build_results=0 reason={exc}")
-            return 1
+    except SuccessfulBuildRequiredError:
         external_delivery_jobs = []
+    except ValueError as exc:
+        print(f"external_build_results=0 reason={render_cli_error(exc)}")
+        return 1
 
     writeback_path = write_json_artifact_once(
         args.writeback_job_root,
@@ -89,7 +103,9 @@ def process_lifecycle_event_command(args: argparse.Namespace) -> int:
             load_json_object(args.event_file)
         )
     except (ValidationError, ValueError) as exc:
-        print(f"lifecycle_event_plans=0 reason=invalid_lifecycle_event detail={exc}")
+        print(
+            f"lifecycle_event_plans=0 reason=invalid_lifecycle_event detail={render_cli_error(exc)}"
+        )
         return 1
 
     lifecycle_plan = plan_story_ready_lifecycle_event(lifecycle_event)
@@ -136,7 +152,7 @@ def review_delivery_artifact_command(args: argparse.Namespace) -> int:
             reviewer_id=args.reviewer_id,
         )
     except ValueError as exc:
-        print(f"reviewed_delivery_artifacts=0 reason={exc}")
+        print(f"reviewed_delivery_artifacts=0 reason={render_cli_error(exc)}")
         return 1
     job_path = write_json_artifact_once(
         args.job_root,
@@ -149,11 +165,15 @@ def review_delivery_artifact_command(args: argparse.Namespace) -> int:
 
 def write_artifact_handoff_summary_command(args: argparse.Namespace) -> int:
     report = load_json_object(args.report_file)
-    story_number = str(report["story_number"])
-    work_note = build_artifact_handoff_work_note(
-        report=report,
-        report_path=args.report_file,
-    )
+    try:
+        story_number = _handoff_report_story_number(report)
+        work_note = build_artifact_handoff_work_note(
+            report=report,
+            report_path=args.report_file,
+        )
+    except (KeyError, TypeError, ValueError):
+        print("handoff_summary_written=False reason=artifact_handoff_report_invalid")
+        return 1
     if not args.apply:
         print(f"handoff_summary_written=False story_number={story_number} dry_run=True")
         return 0
@@ -170,7 +190,16 @@ def write_artifact_handoff_summary_command(args: argparse.Namespace) -> int:
         )
         return 1
     client = _client_from_env(args.env_file)
-    stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+    try:
+        stories = _cli_story_lookup_results(
+            client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+        )
+    except ValueError:
+        print(
+            "handoff_summary_written=False "
+            f"story_number={story_number} reason={CLI_STORY_LOOKUP_RESULT_UNSAFE_REASON}"
+        )
+        return 1
     if not stories:
         print(f"handoff_summary_written=False story_number={story_number} reason=story_not_found")
         return 1
@@ -181,11 +210,14 @@ def write_artifact_handoff_summary_command(args: argparse.Namespace) -> int:
 
 def attach_delivery_artifacts_command(args: argparse.Namespace) -> int:
     report = load_json_object(args.report_file)
-    story_number = str(report["story_number"])
     try:
+        story_number = _handoff_report_story_number(report)
         delivery_jobs = delivery_attachment_jobs_from_report(report)
     except ValueError as exc:
-        print(f"delivery_attachments_planned=0 delivery_attachments_applied=0 reason={exc}")
+        print(
+            "delivery_attachments_planned=0 delivery_attachments_applied=0 "
+            f"reason={render_cli_error(exc)}"
+        )
         return 1
     for delivery_job in delivery_jobs:
         artifact_path = Path(delivery_job["artifact_path"])
@@ -195,7 +227,7 @@ def attach_delivery_artifacts_command(args: argparse.Namespace) -> int:
                 "delivery_attachments_applied=0 reason=artifact_missing"
             )
             return 1
-        artifact_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        artifact_hash = artifact_sha256_file(artifact_path)
         if artifact_hash != delivery_job["artifact_sha256"]:
             print(
                 f"delivery_attachments_planned={len(delivery_jobs)} "
@@ -233,7 +265,17 @@ def attach_delivery_artifacts_command(args: argparse.Namespace) -> int:
         )
         return 1
     client = _client_from_env(args.env_file)
-    stories = client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+    try:
+        stories = _cli_story_lookup_results(
+            client.fetch_stories(sysparm_query=f"number={story_number}", limit=1)
+        )
+    except ValueError:
+        print(
+            f"delivery_attachments_planned={len(delivery_jobs)} "
+            "delivery_attachments_applied=0 "
+            f"reason={CLI_STORY_LOOKUP_RESULT_UNSAFE_REASON}"
+        )
+        return 1
     if not stories:
         print(
             f"delivery_attachments_planned={len(delivery_jobs)} "
@@ -251,11 +293,11 @@ def attach_delivery_artifacts_command(args: argparse.Namespace) -> int:
         )
         attachment_results.append(
             {
-                "artifact_kind": str(delivery_job["artifact_kind"]),
-                "artifact_path": str(delivery_job["artifact_path"]),
-                "artifact_sha256": str(delivery_job["artifact_sha256"]),
-                "attachment_label": str(delivery_job["attachment_label"]),
-                "attachment_sys_id": str(attachment.get("sys_id", "")),
+                "artifact_kind": _delivery_job_text(delivery_job, "artifact_kind"),
+                "artifact_path": _delivery_job_text(delivery_job, "artifact_path"),
+                "artifact_sha256": _delivery_job_text(delivery_job, "artifact_sha256"),
+                "attachment_label": _delivery_job_text(delivery_job, "attachment_label"),
+                "attachment_sys_id": _attachment_response_sys_id(attachment),
             }
         )
     audit_path = write_delivery_attachment_audit(
@@ -274,6 +316,36 @@ def attach_delivery_artifacts_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handoff_report_story_number(report: dict[str, object]) -> str:
+    story_number = report.get("story_number")
+    if type(story_number) is not str or not story_number:
+        raise ValueError("artifact_handoff_report_invalid")
+    return story_number
+
+
+def _cli_story_lookup_results(stories: object) -> list[Story]:
+    if type(stories) is not list:
+        raise ValueError(CLI_STORY_LOOKUP_RESULT_UNSAFE_REASON)
+    for story in stories:
+        if type(story) is not Story:
+            raise ValueError(CLI_STORY_LOOKUP_RESULT_UNSAFE_REASON)
+    return stories
+
+
+def _delivery_job_text(delivery_job: Mapping[str, object], key: str) -> str:
+    value = delivery_job.get(key)
+    if type(value) is not str:
+        raise ValueError("artifact_handoff_report_invalid")
+    return value
+
+
+def _attachment_response_sys_id(attachment: dict[str, object]) -> str:
+    sys_id = attachment.get("sys_id")
+    if type(sys_id) is not str or not sys_id:
+        return "[attachment sys_id unavailable]"
+    return sys_id
+
+
 def run_delivery_artifact_smoke_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
@@ -281,17 +353,18 @@ def run_delivery_artifact_smoke_command(
     export_dir = args.artifact_root / "exports" / args.run_id
     export_dir.mkdir(parents=True, exist_ok=True)
     export_path = export_dir / f"{args.story_number}.xml"
-    if export_path.exists():
+    try:
+        write_text_artifact_once(
+            export_path,
+            (
+                f'<placeholder_update_set story_number="{args.story_number}" '
+                'artifact_kind="update_set_xml">'
+                "Attachment gate smoke only."
+                "</placeholder_update_set>"
+            ),
+        )
+    except ArtifactWriteError:
         parser.error(f"delivery smoke artifact already exists: {export_path}")
-    export_path.write_text(
-        (
-            f'<placeholder_update_set story_number="{args.story_number}" '
-            'artifact_kind="update_set_xml">'
-            "Attachment gate smoke only."
-            "</placeholder_update_set>"
-        ),
-        encoding="utf-8",
-    )
     handoff_report = build_artifact_handoff_report(
         run_id=args.run_id,
         story_number=args.story_number,
@@ -324,17 +397,18 @@ def run_reviewed_delivery_smoke_command(
     export_dir = args.artifact_root / "exports" / args.run_id
     export_dir.mkdir(parents=True, exist_ok=True)
     export_path = export_dir / f"{args.story_number}.xml"
-    if export_path.exists():
+    try:
+        write_text_artifact_once(
+            export_path,
+            (
+                f'<unload story_number="{args.story_number}" '
+                'artifact_kind="update_set_xml">'
+                '<sys_update_xml action="INSERT_OR_UPDATE" />'
+                "</unload>"
+            ),
+        )
+    except ArtifactWriteError:
         parser.error(f"reviewed delivery smoke artifact already exists: {export_path}")
-    export_path.write_text(
-        (
-            f'<unload story_number="{args.story_number}" '
-            'artifact_kind="update_set_xml">'
-            '<sys_update_xml action="INSERT_OR_UPDATE" />'
-            "</unload>"
-        ),
-        encoding="utf-8",
-    )
     reviewed_job = build_reviewed_delivery_artifact_job(
         story_number=args.story_number,
         artifact_kind=ArtifactKind.UPDATE_SET_XML,

@@ -8,6 +8,7 @@ from jedi_devproject.discovery.fetch import (
     _optional_bool,
     _record_name,
     _reference_value,
+    _surface_records,
     _table_surface,
 )
 from jedi_devproject.discovery.models import (
@@ -103,17 +104,21 @@ def _employee_center_topics_surface(
             source_table="topic",
             required=False,
         )
-    taxonomy_records = client.fetch_table_records(
-        table="taxonomy",
-        lookup={},
-        fields=["sys_id", "name", "active"],
-        limit=100,
+    taxonomy_records = _surface_records(
+        client.fetch_table_records(
+            table="taxonomy",
+            lookup={},
+            fields=["sys_id", "name", "active"],
+            limit=100,
+        )
     )
-    topic_records = client.fetch_table_records(
-        table="topic",
-        lookup={},
-        fields=["sys_id", "name", "topic_path", "active", "taxonomy", "parent_topic"],
-        limit=250,
+    topic_records = _surface_records(
+        client.fetch_table_records(
+            table="topic",
+            lookup={},
+            fields=["sys_id", "name", "topic_path", "active", "taxonomy", "parent_topic"],
+            limit=250,
+        )
     )
     records = [
         ServiceNowSurfaceRecord(
@@ -161,17 +166,21 @@ def _employee_center_connected_content_surface(
             source_table="taxonomy_content_configuration",
             required=False,
         )
-    content_types = client.fetch_table_records(
-        table="taxonomy_content_configuration",
-        lookup={},
-        fields=["sys_id", "name", "active"],
-        limit=100,
+    content_types = _surface_records(
+        client.fetch_table_records(
+            table="taxonomy_content_configuration",
+            lookup={},
+            fields=["sys_id", "name", "active"],
+            limit=100,
+        )
     )
-    connected_content = client.fetch_table_records(
-        table="m2m_connected_content",
-        lookup={},
-        fields=["sys_id", "topic", "catalog_item", "content_type"],
-        limit=100,
+    connected_content = _surface_records(
+        client.fetch_table_records(
+            table="m2m_connected_content",
+            lookup={},
+            fields=["sys_id", "topic", "catalog_item", "content_type"],
+            limit=100,
+        )
     )
     catalog_item_types = [
         record

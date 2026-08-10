@@ -15,6 +15,7 @@ from jedi_devproject.discovery.fetch import (
     _record_summary,
     _records_surface,
     _reference_value,
+    _surface_records,
     _unique_record_values,
 )
 from jedi_devproject.discovery.models import (
@@ -34,7 +35,7 @@ FULFILLMENT_FLOW_NOT_RECORD_TRIGGERED_REASON_CODE = "fulfillment_flow:not_record
 class ResolvedFulfillmentFlow(BaseModel):
     """An existing, active, record-triggered flow resolved from the live instance."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     sys_id: str
     name: str
@@ -75,11 +76,13 @@ def resolve_fulfillment_flow(
             reason_code=FULFILLMENT_FLOW_NOT_FOUND_REASON_CODE,
             message="fulfillment flow name must not be empty",
         )
-    records = client.fetch_table_records(
-        table="sys_hub_flow",
-        lookup={},
-        fields=["sys_id", "name", "internal_name", "active", "status", "type"],
-        limit=100,
+    records = _surface_records(
+        client.fetch_table_records(
+            table="sys_hub_flow",
+            lookup={},
+            fields=["sys_id", "name", "internal_name", "active", "status", "type"],
+            limit=100,
+        )
     )
     normalized = cleaned_name.casefold()
     matches = [
@@ -112,11 +115,13 @@ def resolve_fulfillment_flow(
             reason_code=FULFILLMENT_FLOW_NOT_FOUND_REASON_CODE,
             message=f"fulfillment flow record is missing sys_id: {cleaned_name}",
         )
-    trigger_records = client.fetch_table_records(
-        table="sys_hub_trigger_instance",
-        lookup={"flow": flow_sys_id},
-        fields=["sys_id", "trigger_type", "trigger_definition", "display_text"],
-        limit=25,
+    trigger_records = _surface_records(
+        client.fetch_table_records(
+            table="sys_hub_trigger_instance",
+            lookup={"flow": flow_sys_id},
+            fields=["sys_id", "trigger_type", "trigger_definition", "display_text"],
+            limit=25,
+        )
     )
     trigger_type = _record_trigger_type(trigger_records)
     if trigger_type is None:
@@ -151,11 +156,13 @@ def _flow_surfaces(
     client: InstanceDiscoveryClient,
     required_surfaces: list[SurfaceName],
 ) -> list[ServiceNowSurfaceContext]:
-    flow_records = client.fetch_table_records(
-        table="sys_hub_flow",
-        lookup={},
-        fields=["sys_id", "name", "active", "status", "type", "internal_name"],
-        limit=25,
+    flow_records = _surface_records(
+        client.fetch_table_records(
+            table="sys_hub_flow",
+            lookup={},
+            fields=["sys_id", "name", "active", "status", "type", "internal_name"],
+            limit=25,
+        )
     )
     flow_graph_required = "flow_graph" in required_surfaces
     return [
@@ -401,11 +408,13 @@ def _fetch_flow_graph_records(
     evidence: list[str],
     citations: list[dict[str, str]],
 ) -> list[dict[str, Any]]:
-    records = client.fetch_table_records(
-        table=source_table,
-        lookup=lookup,
-        fields=fields,
-        limit=200,
+    records = _surface_records(
+        client.fetch_table_records(
+            table=source_table,
+            lookup=lookup,
+            fields=fields,
+            limit=200,
+        )
     )
     evidence.append(f"{source_table}:{evidence_key}")
     citations.append(

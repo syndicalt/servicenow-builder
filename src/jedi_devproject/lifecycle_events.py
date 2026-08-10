@@ -11,7 +11,7 @@ class LifecycleEventType(StrEnum):
 
 
 class LifecycleStateChangeEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     event_id: str
     event_type: LifecycleEventType
@@ -46,6 +46,8 @@ class LifecycleStateChangeEvent(BaseModel):
 
 
 class StoryReadyLifecyclePlan(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     should_evaluate: bool
     lifecycle_action: str | None
     story_number: str

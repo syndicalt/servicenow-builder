@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import ValidationError
+
 from jedi_devproject.fulfillment_handler import (
     BuildClaimFulfillmentConfig,
     build_claim_fulfillment_handler,
@@ -30,8 +32,13 @@ from jedi_devproject.rag import (
     SpecializedRags,
 )
 from jedi_devproject.runtime_config import (
+    JEDI_MODEL_PROVIDER_CONTROL_ERROR,
+    JEDI_MODEL_PROVIDER_UNSUPPORTED_ERROR,
+    MAX_MODEL_PROVIDER_CHARS,
     RuntimeConfigError,
     RuntimeSettings,
+    _direct_optional_runtime_setting_text,
+    _runtime_setting_text,
     validate_runtime_settings,
 )
 from jedi_devproject.runtime_redaction import _redacting_handler, _runtime_secret_values
@@ -45,6 +52,7 @@ from jedi_devproject.runtime_servicenow import (
 from jedi_devproject.runtime_store import DEFAULT_STORE_FACTORY, StoreFactory
 from jedi_devproject.safety import AllowlistPolicy, StoryType
 from jedi_devproject.servicenow import HttpTransport, UrllibTransport
+from jedi_devproject.url_query_safety import has_whitespace_or_control_character
 
 
 def _runtime_handler(
@@ -54,13 +62,35 @@ def _runtime_handler(
     claim_handler: FulfillmentHandler,
     transport: HttpTransport,
 ) -> FulfillmentHandler:
-    if settings.model_provider is None:
+    model_provider = _direct_optional_runtime_setting_text(
+        settings.model_provider,
+        name="JEDI_MODEL_PROVIDER",
+    )
+    public_web_access = _runtime_setting_text(
+        settings.public_web_access,
+        name="JEDI_PUBLIC_WEB_ACCESS",
+    )
+    if model_provider is None:
         return claim_handler
-    if settings.model_provider != "openai":
-        raise RuntimeConfigError(f"Unsupported model provider: {settings.model_provider}")
-    if not settings.openai_api_key:
+    if len(model_provider) > MAX_MODEL_PROVIDER_CHARS:
+        raise RuntimeConfigError(
+            f"JEDI_MODEL_PROVIDER must be <= {MAX_MODEL_PROVIDER_CHARS} characters"
+        )
+    if has_whitespace_or_control_character(model_provider):
+        raise RuntimeConfigError(JEDI_MODEL_PROVIDER_CONTROL_ERROR)
+    if model_provider != "openai":
+        raise RuntimeConfigError(JEDI_MODEL_PROVIDER_UNSUPPORTED_ERROR)
+    openai_api_key = _direct_optional_runtime_setting_text(
+        settings.openai_api_key,
+        name="OPENAI_API_KEY",
+    )
+    openai_model = _direct_optional_runtime_setting_text(
+        settings.openai_model,
+        name="OPENAI_MODEL",
+    )
+    if not openai_api_key:
         raise RuntimeConfigError("OPENAI_API_KEY is required when JEDI_MODEL_PROVIDER=openai")
-    if not settings.openai_model:
+    if not openai_model:
         raise RuntimeConfigError("OPENAI_MODEL is required when JEDI_MODEL_PROVIDER=openai")
 
     model_handler = model_candidate_fulfillment_handler(
@@ -70,9 +100,9 @@ def _runtime_handler(
             provider_policy=_default_openai_provider_policy(),
             rags=_default_runtime_rags(),
             provider=OpenAIResponsesProvider(
-                settings=OpenAIProviderSettings(
-                    api_key=settings.openai_api_key,
-                    model=settings.openai_model,
+                settings=_openai_provider_settings_from_values(
+                    api_key=openai_api_key,
+                    model=openai_model,
                 ),
                 transport=transport,
             ),
@@ -90,7 +120,7 @@ def _runtime_handler(
                         max_results=settings.public_web_max_results,
                     )
                 )
-                if settings.public_web_access == "worker"
+                if public_web_access == "worker"
                 else None
             ),
             public_doc_urls=settings.public_web_doc_urls,
@@ -98,10 +128,74 @@ def _runtime_handler(
     )
 
     def handle(job: FulfillmentJobRecord) -> FulfillmentExecutionResult:
-        claim_handler(job)
-        return model_handler(job)
+        # Generate the candidate first; only record the build claim after the model
+        # stage succeeds. This prevents a story state transition (Ready -> Work in
+        # Progress) from being left in place when candidate generation fails.
+        model_result = model_handler(job)
+        claim_result = claim_handler(job)
+        return FulfillmentExecutionResult(
+            message=model_result.message,
+            artifacts=[*claim_result.artifacts, *model_result.artifacts],
+            after_artifacts_persisted=model_result.after_artifacts_persisted,
+        )
 
     return handle
+
+
+def _openai_provider_settings_from_runtime(
+    settings: RuntimeSettings,
+) -> OpenAIProviderSettings:
+    openai_api_key = _direct_optional_runtime_setting_text(
+        settings.openai_api_key,
+        name="OPENAI_API_KEY",
+    )
+    openai_model = _direct_optional_runtime_setting_text(
+        settings.openai_model,
+        name="OPENAI_MODEL",
+    )
+    return _openai_provider_settings_from_values(
+        api_key=openai_api_key or "",
+        model=openai_model or "",
+    )
+
+
+def _openai_provider_settings_from_values(
+    *,
+    api_key: str,
+    model: str,
+) -> OpenAIProviderSettings:
+    try:
+        return OpenAIProviderSettings(
+            api_key=api_key,
+            model=model,
+        )
+    except ValidationError as exc:
+        invalid_fields = _openai_runtime_error_fields(exc)
+        raise RuntimeConfigError(
+            "Invalid OpenAI provider runtime settings: "
+            f"{', '.join(invalid_fields)}"
+        ) from None
+
+
+def _openai_runtime_error_fields(exc: ValidationError) -> list[str]:
+    field_names: list[str] = []
+    for error in exc.errors():
+        location = error.get("loc", ())
+        if not location:
+            continue
+        field = location[0]
+        if type(field) is not str:
+            field_names.append("OPENAI_PROVIDER_SETTINGS")
+            continue
+        if field == "api_key":
+            field_names.append("OPENAI_API_KEY")
+        elif field == "model":
+            field_names.append("OPENAI_MODEL")
+        elif field == "base_url":
+            field_names.append("OPENAI_BASE_URL")
+        else:
+            field_names.append("OPENAI_PROVIDER_SETTINGS")
+    return sorted(set(field_names)) or ["OPENAI_PROVIDER_SETTINGS"]
 
 
 def process_one_runtime_fulfillment(
@@ -111,6 +205,8 @@ def process_one_runtime_fulfillment(
     transport: HttpTransport | None = None,
 ) -> FulfillmentWorkerResult:
     validate_runtime_settings(settings, require_admin_auth=False)
+    if settings.runtime_role == "api":
+        raise RuntimeConfigError("JEDI_RUNTIME_ROLE=api cannot run runtime fulfillment")
     request_transport = transport or UrllibTransport()
     story_client = _servicenow_story_client_from_settings(
         settings=settings,

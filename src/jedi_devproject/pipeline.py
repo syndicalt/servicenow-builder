@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from jedi_devproject.artifacts import write_candidate_artifact
 from jedi_devproject.candidates import generate_template_candidate
@@ -21,16 +21,18 @@ from jedi_devproject.safety import (
 
 
 class PipelineInputs(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, hide_input_in_errors=True)
+
     stories: list[Story]
     policy: AllowlistPolicy
     rags: SpecializedRags
     artifact_root: Path
     run_id: str
 
-    model_config = {"arbitrary_types_allowed": True}
-
 
 class PipelineResult(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     metrics: RunMetrics
     candidates: list[UpdateSetCandidate]
     enrichment_results: list[StoryEnrichmentResult]

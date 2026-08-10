@@ -1,6 +1,12 @@
+import pytest
+from pydantic import BaseModel, ValidationError
+
 from jedi_devproject.automation_intent import (
+    AutomationIntent,
     AutomationIntentSource,
     AutomationIntentType,
+    CatalogClientScriptActionIntent,
+    CatalogUiPolicyActionRuleIntent,
     extract_automation_intent,
 )
 from jedi_devproject.capabilities import Capability
@@ -27,6 +33,46 @@ def _story(
         state="Ready",
         data_classification=DataClassification.PUBLIC,
     )
+
+
+def test_automation_intent_validation_errors_do_not_echo_rejected_inputs() -> None:
+    cases: list[tuple[type[BaseModel], dict[str, object], tuple[str, ...]]] = [
+        (
+            AutomationIntent,
+            {
+                "source": "secret-source",
+                "intent_type": "dictionary_form",
+                "capability": "dictionary_field_create",
+            },
+            ("secret-source",),
+        ),
+        (
+            CatalogUiPolicyActionRuleIntent,
+            {
+                "variable": "impact",
+                "secret_extra": "secret-visible",
+            },
+            ("secret-visible",),
+        ),
+        (
+            CatalogClientScriptActionIntent,
+            {
+                "kind": "set_value",
+                "variable": "impact",
+                "secret_extra": "secret-action",
+            },
+            ("secret-action",),
+        ),
+    ]
+
+    for model_class, values, secret_fragments in cases:
+        with pytest.raises(ValidationError) as exc_info:
+            model_class.model_validate(values)
+
+        error_text = str(exc_info.value)
+        assert "input_value" not in error_text
+        for fragment in secret_fragments:
+            assert fragment not in error_text
 
 
 def test_extracts_structured_client_script_intent_without_cmdb_discovery_work() -> None:

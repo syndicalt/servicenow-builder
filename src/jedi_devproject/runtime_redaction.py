@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
+from jedi_devproject.diagnostic_redaction import (
+    _redact_diagnostic_text as _shared_redact_diagnostic_text,
+)
+from jedi_devproject.exception_diagnostics import exception_diagnostic_message
 from jedi_devproject.fulfillment_worker import FulfillmentExecutionResult, FulfillmentHandler
+from jedi_devproject.literal_secret_values import safe_literal_secret_values
 from jedi_devproject.operational_store import FulfillmentJobRecord
 from jedi_devproject.runtime_config import RuntimeSettings
 
@@ -20,7 +24,12 @@ def _redacting_handler(
         try:
             return handler(job)
         except Exception as exc:
-            raise RuntimeError(_redact_text(str(exc), secret_values)) from exc
+            raise RuntimeError(
+                _redact_text(
+                    exception_diagnostic_message(exc, fallback_subject="handler"),
+                    secret_values,
+                )
+            ) from None
 
     return handle
 
@@ -33,6 +42,7 @@ def _runtime_secret_values(settings: RuntimeSettings) -> tuple[str, ...]:
         settings.servicenow_pm_client_secret,
         settings.servicenow_dev_client_secret,
         settings.lifecycle_webhook_secret or "",
+        settings.lifecycle_webhook_previous_secret or "",
     ]
     return tuple(value for value in values if value)
 
@@ -45,33 +55,17 @@ def _url_password(url: str) -> str:
 
 
 def _redact_text(text: str, secret_values: Iterable[str]) -> str:
+    redacted = _redact_literal_secrets(text, secret_values)
+    redacted = _shared_redact_diagnostic_text(redacted) or ""
+    return _redact_literal_secrets(redacted, secret_values)
+
+
+def _redact_literal_secrets(text: str, secret_values: Iterable[str]) -> str:
     redacted = text
-    for secret in sorted(set(secret_values), key=len, reverse=True):
-        if secret:
-            redacted = redacted.replace(secret, "***REDACTED***")
+    for secret in safe_literal_secret_values(secret_values):
+        redacted = redacted.replace(secret, "***REDACTED***")
     return redacted
 
 
 def _redact_diagnostic_text(text: str | None) -> str | None:
-    if text is None:
-        return None
-    return re.sub(
-        r"\b(postgresql|postgres)://[^\s]+",
-        lambda match: _redact_url_password(match.group(0)),
-        text,
-    )
-
-
-def _redact_url_password(url: str) -> str:
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        return "***REDACTED***"
-    if parts.password is None:
-        return url
-    username = parts.username or ""
-    host = parts.hostname or ""
-    port = f":{parts.port}" if parts.port is not None else ""
-    userinfo = f"{username}:***REDACTED***@"
-    netloc = f"{userinfo}{host}{port}"
-    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    return _shared_redact_diagnostic_text(text)

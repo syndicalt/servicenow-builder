@@ -53,6 +53,9 @@ from jedi_devproject.xml_builder import (
 RECORD_PRODUCER_TABLE = "sc_cat_item_producer"
 
 RECORD_PRODUCER_SCRIPT_REASON_CODE = "record_producer:producer_script_manual_review"
+RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC = (
+    "record producer generation field contains non-JSON value"
+)
 
 _MAPPED_FIELD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -78,7 +81,7 @@ class RecordProducerVariableIntent(CatalogVariableIntent):
 
 
 class RecordProducerIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     name: str
     short_description: str
@@ -116,7 +119,7 @@ class RecordProducerIntent(BaseModel):
 
 
 class RecordProducerResolvedContext(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     catalog: CatalogResolvedReference
     category: CatalogResolvedReference
@@ -167,7 +170,7 @@ def _record_producer_intent(changes: list[CandidateChange]) -> RecordProducerInt
     if producer_change.operation != "insert":
         raise ValueError("Record Producer handoff supports insert only")
     producer_fields = dict(producer_change.fields)
-    if str(producer_fields.get("script") or "").strip():
+    if _record_producer_first_text(producer_fields.get("script")).strip():
         raise ValueError(
             "record producer scripts are unsupported and route to manual review "
             f"({RECORD_PRODUCER_SCRIPT_REASON_CODE})"
@@ -179,14 +182,26 @@ def _record_producer_intent(changes: list[CandidateChange]) -> RecordProducerInt
         if change.table == "item_option_new"
     ]
     return RecordProducerIntent(
-        name=str(producer_fields.get("name") or producer_fields.get("artifact_name") or ""),
-        short_description=str(producer_fields.get("short_description") or ""),
-        description=str(producer_fields.get("description") or ""),
-        table_name=str(
-            producer_fields.get("table_name") or producer_fields.get("target_table") or ""
+        name=_record_producer_first_text(
+            producer_fields.get("name"),
+            producer_fields.get("artifact_name"),
         ),
-        catalog=str(producer_fields.get("catalog") or category_fields.get("catalog") or ""),
-        category=str(producer_fields.get("category") or category_fields.get("category") or ""),
+        short_description=_record_producer_first_text(
+            producer_fields.get("short_description")
+        ),
+        description=_record_producer_first_text(producer_fields.get("description")),
+        table_name=_record_producer_first_text(
+            producer_fields.get("table_name"),
+            producer_fields.get("target_table"),
+        ),
+        catalog=_record_producer_first_text(
+            producer_fields.get("catalog"),
+            category_fields.get("catalog"),
+        ),
+        category=_record_producer_first_text(
+            producer_fields.get("category"),
+            category_fields.get("category"),
+        ),
         variables=variables,
     )
 
@@ -196,16 +211,21 @@ def _record_producer_variable_intent(change: CandidateChange) -> RecordProducerV
         raise ValueError("Record Producer variable handoff supports insert only")
     base = _catalog_variable_intent(change)
     fields = dict(change.fields)
-    mapped_field = str(fields.get("field") or fields.get("mapped_field") or "")
+    mapped_field = _record_producer_first_text(
+        fields.get("field"),
+        fields.get("mapped_field"),
+    )
     return RecordProducerVariableIntent(**base.model_dump(), mapped_field=mapped_field)
 
 
 def _require_target_table(*, client: CatalogMetadataClient, table_name: str) -> None:
-    records = client.fetch_table_records(
-        table="sys_db_object",
-        lookup={"name": table_name},
-        fields=["name", "label"],
-        limit=1,
+    records = _record_producer_metadata_records(
+        client.fetch_table_records(
+            table="sys_db_object",
+            lookup={"name": table_name},
+            fields=["name", "label"],
+            limit=1,
+        )
     )
     if not records:
         raise ValueError(f"record producer target table was not found: {table_name}")
@@ -216,17 +236,19 @@ def _require_mapped_fields(
     client: CatalogMetadataClient,
     intent: RecordProducerIntent,
 ) -> None:
-    records = client.fetch_table_records(
-        table="sys_dictionary",
-        lookup={"name": intent.table_name},
-        fields=["element", "internal_type"],
-        limit=500,
+    records = _record_producer_metadata_records(
+        client.fetch_table_records(
+            table="sys_dictionary",
+            lookup={"name": intent.table_name},
+            fields=["element", "internal_type"],
+            limit=500,
+        )
     )
-    elements = {
-        str(record.get("element") or "").strip()
-        for record in records
-        if str(record.get("element") or "").strip()
-    }
+    elements = set()
+    for record in records:
+        element = _record_producer_first_text(record.get("element")).strip()
+        if element:
+            elements.add(element)
     for variable in intent.variables:
         if variable.mapped_field not in elements:
             raise ValueError(
@@ -240,11 +262,13 @@ def _resolve_record_producer_context(
     client: CatalogMetadataClient,
     intent: RecordProducerIntent,
 ) -> RecordProducerResolvedContext:
-    catalogs = client.fetch_table_records(
-        table="sc_catalog",
-        lookup={},
-        fields=["sys_id", "title", "active"],
-        limit=100,
+    catalogs = _record_producer_metadata_records(
+        client.fetch_table_records(
+            table="sc_catalog",
+            lookup={},
+            fields=["sys_id", "title", "active"],
+            limit=100,
+        )
     )
     catalog = _resolve_named_record(
         records=catalogs,
@@ -252,11 +276,13 @@ def _resolve_record_producer_context(
         label="catalog",
         name_fields=("title", "name"),
     )
-    categories = client.fetch_table_records(
-        table="sc_category",
-        lookup={},
-        fields=["sys_id", "title", "active", "sc_catalog"],
-        limit=250,
+    categories = _record_producer_metadata_records(
+        client.fetch_table_records(
+            table="sc_category",
+            lookup={},
+            fields=["sys_id", "title", "active", "sc_catalog"],
+            limit=250,
+        )
     )
     category = _resolve_category(
         records=categories,
@@ -264,6 +290,33 @@ def _resolve_record_producer_context(
         catalog_sys_id=catalog.sys_id,
     )
     return RecordProducerResolvedContext(catalog=catalog, category=category)
+
+
+def _record_producer_first_text(*values: Any) -> str:
+    for value in values:
+        text = _record_producer_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _record_producer_metadata_records(records: object) -> list[dict[str, Any]]:
+    if type(records) is not list:
+        raise ValueError(RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC)
+    for record in records:
+        if type(record) is not dict:
+            raise ValueError(RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC)
+    return records
+
+
+def _record_producer_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(RECORD_PRODUCER_FIELD_NON_JSON_DIAGNOSTIC)
 
 
 def _record_producer_update(

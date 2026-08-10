@@ -22,7 +22,7 @@ from jedi_devproject.bootstrap import (
     verify_lifecycle_webhook_records,
     verify_update_set_importer_records,
 )
-from jedi_devproject.cli_io import load_json_object
+from jedi_devproject.cli_io import load_json_object, render_cli_error
 from jedi_devproject.servicenow import ServiceNowClient, UrllibTransport
 
 
@@ -86,7 +86,7 @@ def plan_lifecycle_business_rule_command(args: argparse.Namespace) -> int:
             hmac_secret_property_name=args.hmac_secret_property_name,
         )
     except ValueError as exc:
-        print(f"lifecycle_business_rule_specs=0 reason={exc}")
+        print(f"lifecycle_business_rule_specs=0 reason={render_cli_error(exc)}")
         return 1
     spec_path = write_json_artifact_once(
         args.spec_root,
@@ -111,7 +111,7 @@ def plan_update_set_importer_command(args: argparse.Namespace) -> int:
             integration_identity=args.integration_identity,
         )
     except ValueError as exc:
-        print(f"update_set_importer_specs=0 reason={exc}")
+        print(f"update_set_importer_specs=0 reason={render_cli_error(exc)}")
         return 1
     spec_path = write_json_artifact_once(
         args.spec_root,
@@ -134,7 +134,8 @@ def apply_lifecycle_webhook_command(args: argparse.Namespace) -> int:
         spec = LifecycleWebhookBootstrapSpec.model_validate(load_json_object(args.spec_file))
     except (ValidationError, ValueError) as exc:
         print(
-            f"lifecycle_webhook_applied=False reason=invalid_lifecycle_webhook_spec detail={exc}"
+            "lifecycle_webhook_applied=False "
+            f"reason=invalid_lifecycle_webhook_spec detail={render_cli_error(exc)}"
         )
         return 1
     client = _client_from_env(args.env_file)
@@ -167,7 +168,7 @@ def apply_update_set_importer_command(args: argparse.Namespace) -> int:
     except (ValidationError, ValueError) as exc:
         print(
             "update_set_importer_applied=False "
-            f"reason=invalid_update_set_importer_spec detail={exc}"
+            f"reason=invalid_update_set_importer_spec detail={render_cli_error(exc)}"
         )
         return 1
     client = _client_from_env(args.env_file)
@@ -197,7 +198,8 @@ def verify_lifecycle_webhook_command(args: argparse.Namespace) -> int:
         spec = LifecycleWebhookBootstrapSpec.model_validate(load_json_object(args.spec_file))
     except (ValidationError, ValueError) as exc:
         print(
-            f"lifecycle_webhook_verified=False reason=invalid_lifecycle_webhook_spec detail={exc}"
+            "lifecycle_webhook_verified=False "
+            f"reason=invalid_lifecycle_webhook_spec detail={render_cli_error(exc)}"
         )
         return 1
     client = _client_from_env(args.env_file)
@@ -229,7 +231,7 @@ def verify_update_set_importer_command(args: argparse.Namespace) -> int:
     except (ValidationError, ValueError) as exc:
         print(
             "update_set_importer_verified=False "
-            f"reason=invalid_update_set_importer_spec detail={exc}"
+            f"reason=invalid_update_set_importer_spec detail={render_cli_error(exc)}"
         )
         return 1
     client = _client_from_env(args.env_file)

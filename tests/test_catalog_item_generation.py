@@ -5,6 +5,8 @@ from typing import Any
 import pytest
 
 from jedi_devproject.catalog_item_generation import (
+    CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC,
+    CATALOG_ITEM_METADATA_MISSING_DIAGNOSTIC,
     CatalogItemIntent,
     CatalogVariableGroup,
     CatalogVariableIntent,
@@ -255,6 +257,211 @@ def test_catalog_item_customer_updates_builds_item_variables_category_and_topic_
     assert any(fetch["table"] == "taxonomy_content_configuration" for fetch in client.fetches)
 
 
+def test_catalog_item_customer_updates_rejects_non_json_item_field_without_leak() -> None:
+    class SecretBearingCatalogField:
+        def __str__(self) -> str:
+            return "leaked-catalog-item-secret"
+
+    client = FakeCatalogMetadataClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=client,
+            changes=_catalog_changes(item_fields={"name": SecretBearingCatalogField()}),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-catalog-item-secret" not in message
+    assert "SecretBearingCatalogField" not in message
+    assert client.fetches == []
+
+
+def test_catalog_item_customer_updates_rejects_string_subclass_item_field_without_leak() -> None:
+    class SecretBearingCatalogFieldText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=catalog-item-strip-secret")
+
+        def lower(self) -> str:
+            raise RuntimeError("client_secret=catalog-item-lower-secret")
+
+    client = FakeCatalogMetadataClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=client,
+            changes=_catalog_changes(
+                item_fields={"name": SecretBearingCatalogFieldText("Request Temporary Badge")}
+            ),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingCatalogFieldText" not in message
+    assert "client_secret" not in message
+    assert "catalog-item-strip-secret" not in message
+    assert "catalog-item-lower-secret" not in message
+    assert client.fetches == []
+
+
+def test_catalog_item_customer_updates_rejects_list_subclass_item_field_without_leak() -> None:
+    class SecretBearingCatalogList(list[str]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=catalog-item-list-secret")
+
+    client = FakeCatalogMetadataClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=client,
+            changes=_catalog_changes(
+                item_fields={
+                    "variable_sets": SecretBearingCatalogList(
+                        ["Common Visitor Questions"],
+                    ),
+                },
+            ),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingCatalogList" not in message
+    assert "client_secret" not in message
+    assert "catalog-item-list-secret" not in message
+    assert client.fetches == []
+
+
+def test_catalog_item_customer_updates_rejects_dict_subclass_metadata_without_leak() -> None:
+    class SecretBearingCatalogReference(dict[str, str]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise RuntimeError("client_secret=catalog-reference-secret")
+
+    class HostileCategoryClient(FakeCatalogMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sc_category" and lookup == {}:
+                return [
+                    {
+                        **records[0],
+                        "sc_catalog": SecretBearingCatalogReference(
+                            {
+                                "value": "service-catalog-sys-id",
+                                "display_value": "Service Catalog",
+                            },
+                        ),
+                    }
+                ]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=HostileCategoryClient(),
+            changes=_catalog_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingCatalogReference" not in message
+    assert "client_secret" not in message
+    assert "catalog-reference-secret" not in message
+
+
+def test_catalog_item_customer_updates_rejects_metadata_record_collection_subclass() -> None:
+    class SecretBearingCatalogRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise RuntimeError("client_secret=catalog-records-iter-secret")
+
+    class HostileCatalogClient(FakeCatalogMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sc_catalog" and lookup == {}:
+                return SecretBearingCatalogRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=HostileCatalogClient(),
+            changes=_catalog_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingCatalogRecords" not in message
+    assert "client_secret" not in message
+    assert "catalog-records-iter-secret" not in message
+
+
+def test_catalog_item_customer_updates_rejects_metadata_record_subclass() -> None:
+    class SecretBearingCatalogRecord(dict[str, Any]):
+        def get(self, key: object, default: Any = None) -> Any:
+            raise RuntimeError("client_secret=catalog-record-get-secret")
+
+    class HostileCatalogClient(FakeCatalogMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sc_catalog" and lookup == {}:
+                return [SecretBearingCatalogRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=HostileCatalogClient(),
+            changes=_catalog_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingCatalogRecord" not in message
+    assert "client_secret" not in message
+    assert "catalog-record-get-secret" not in message
+
+
 def test_catalog_item_customer_updates_rejects_ambiguous_employee_center_topic() -> None:
     client = FakeCatalogMetadataClient(duplicate_topic=True)
 
@@ -264,6 +471,75 @@ def test_catalog_item_customer_updates_rejects_ambiguous_employee_center_topic()
             changes=_catalog_changes(),
             remote_update_set_sys_id="remote-update-set-sys-id",
         )
+
+
+def test_catalog_item_customer_updates_rejects_matched_topic_missing_sys_id() -> None:
+    class MissingTopicSysIdClient(FakeCatalogMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "topic" and lookup == {}:
+                return [{key: value for key, value in records[0].items() if key != "sys_id"}]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=MissingTopicSysIdClient(),
+            changes=_catalog_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    assert str(exc_info.value) == CATALOG_ITEM_METADATA_MISSING_DIAGNOSTIC
+
+
+def test_catalog_item_customer_updates_rejects_hostile_scalar_subclass_metadata() -> None:
+    class SecretBearingActiveFlag(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-active-flag")
+
+    class HostileActiveClient(FakeCatalogMetadataClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sc_catalog" and lookup == {}:
+                return [{**records[0], "active": SecretBearingActiveFlag(1)}]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        catalog_item_customer_updates(
+            client=HostileActiveClient(),
+            changes=_catalog_changes(),
+            remote_update_set_sys_id="remote-update-set-sys-id",
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_ITEM_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "SecretBearingActiveFlag" not in message
+    assert "client_secret" not in message
+    assert "catalog-active-flag" not in message
 
 
 def test_catalog_item_customer_updates_rejects_unsupported_variable_type() -> None:
@@ -758,6 +1034,18 @@ def test_catalog_variable_intent_requires_reference_table_and_labels() -> None:
         CatalogVariableIntent(name="visitor_name", label="  ", variable_type="single_line_text")
     with pytest.raises(ValueError, match="require reference_table"):
         CatalogVariableIntent(name="sponsor", label="Sponsor", variable_type="reference")
+
+
+def test_catalog_variable_intent_reference_qualifier_error_does_not_retain_cause() -> None:
+    with pytest.raises(ValueError, match="reference qualifier rejected for sponsor") as exc:
+        CatalogVariableIntent(
+            name="sponsor",
+            label="Sponsor",
+            variable_type="reference",
+            reference_table="sys_user",
+            reference_qualifier="javascript:gs.getUser()",
+        )
+    assert exc.value.__cause__ is None
 
 
 def test_catalog_item_intent_requires_unique_named_variables() -> None:

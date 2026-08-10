@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from jedi_devproject.catalog_client_script_generation import (
+    CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC,
     CatalogClientScriptAction,
     CatalogClientScriptIntent,
     catalog_client_script_customer_updates,
@@ -113,6 +114,77 @@ def test_catalog_client_script_onchange_requires_variable() -> None:
 def test_catalog_client_script_rejects_unknown_script_type() -> None:
     with pytest.raises(ValueError, match="must be onLoad, onChange, or onSubmit"):
         _updates([_script_change(type="onCellEdit")])
+
+
+def test_catalog_client_script_rejects_non_json_field_without_leak() -> None:
+    class SecretBearingCatalogClientScriptField:
+        def __str__(self) -> str:
+            return "leaked-catalog-client-script-secret"
+
+    with pytest.raises(ValueError) as exc_info:
+        _updates([_script_change(name=SecretBearingCatalogClientScriptField())])
+
+    message = str(exc_info.value)
+    assert message == CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert "leaked-catalog-client-script-secret" not in message
+    assert "SecretBearingCatalogClientScriptField" not in message
+
+
+def test_catalog_client_script_rejects_string_subclass_field_without_leak() -> None:
+    class SecretBearingCatalogClientScriptText(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise RuntimeError("client_secret=catalog-client-script-string-subclass")
+
+    with pytest.raises(ValueError) as exc_info:
+        _updates([_script_change(type=SecretBearingCatalogClientScriptText("onLoad"))])
+
+    message = str(exc_info.value)
+    assert message == CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert "catalog-client-script-string-subclass" not in message
+    assert "SecretBearingCatalogClientScriptText" not in message
+
+
+def test_catalog_client_script_rejects_scalar_subclass_field_without_leak() -> None:
+    class SecretBearingCatalogClientScriptOrder(int):
+        def __str__(self) -> str:
+            raise RuntimeError("client_secret=catalog-client-script-scalar")
+
+    with pytest.raises(ValueError) as exc_info:
+        _updates(
+            [
+                _script_change(
+                    name=SecretBearingCatalogClientScriptOrder(1),
+                    script_name="Populate description",
+                )
+            ]
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "catalog-client-script-scalar" not in message
+    assert "SecretBearingCatalogClientScriptOrder" not in message
+
+
+def test_catalog_client_script_rejects_list_subclass_field_without_leak() -> None:
+    class SecretBearingCatalogClientScriptList(list[object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise RuntimeError("client_secret=catalog-client-script-list")
+
+    with pytest.raises(ValueError) as exc_info:
+        _updates(
+            [
+                _script_change(
+                    fields_written=SecretBearingCatalogClientScriptList(["description"])
+                )
+            ]
+        )
+
+    message = str(exc_info.value)
+    assert message == CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC
+    assert exc_info.value.__cause__ is None
+    assert "catalog-client-script-list" not in message
+    assert "SecretBearingCatalogClientScriptList" not in message
 
 
 @pytest.mark.parametrize(

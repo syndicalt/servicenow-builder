@@ -12,6 +12,12 @@ from jedi_devproject.bootstrap import (
     update_set_importer_servicenow_record_plan,
     verify_update_set_importer_records,
 )
+from jedi_devproject.bootstrap_lifecycle import (
+    LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC,
+)
+from jedi_devproject.bootstrap_update_set_importer import (
+    UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC,
+)
 from jedi_devproject.servicenow import StoryDictionaryField
 
 
@@ -55,6 +61,14 @@ class FakeBootstrapClient:
         return {"sys_id": f"{table}-sys-id"}
 
 
+class SecretBearingBootstrapResponse(dict[str, object]):
+    def __bool__(self) -> bool:
+        raise AssertionError("client_secret=bootstrap-response-bool-secret")
+
+    def __len__(self) -> int:
+        raise AssertionError("client_secret=bootstrap-response-len-secret")
+
+
 class FakeLifecycleWebhookClient:
     def __init__(self) -> None:
         self.upserts: list[dict[str, object]] = []
@@ -83,6 +97,42 @@ class FakeLifecycleWebhookClient:
         lookup: dict[str, str],
     ) -> dict[str, object] | None:
         return self.records.get(f"{table}:{lookup}")
+
+
+class SecretBearingImporterSysId:
+    def __str__(self) -> str:
+        return "client_secret=importer-secret"
+
+
+class SecretBearingImporterSysIdText(str):
+    pass
+
+
+class SecretBearingImporterResponse(dict[str, object]):
+    def get(self, key: object, default: object = None) -> object:
+        raise AssertionError("client_secret=importer-response-get-secret")
+
+
+class SecretBearingLifecycleSysId:
+    def __str__(self) -> str:
+        return "client_secret=lifecycle-secret"
+
+
+class SecretBearingLifecycleSysIdText(str):
+    pass
+
+
+class ExplodingLifecycleVerificationText(str):
+    def lower(self) -> str:
+        raise RuntimeError("client_secret=lifecycle-verification-lower-secret")
+
+    def __eq__(self, value: object) -> bool:
+        raise RuntimeError("client_secret=lifecycle-verification-eq-secret")
+
+
+class SecretBearingLifecycleResponse(dict[str, object]):
+    def get(self, key: object, default: object = None) -> object:
+        raise AssertionError("client_secret=lifecycle-response-get-secret")
 
 
 def test_bootstrap_plan_only_includes_missing_custom_writeback_fields() -> None:
@@ -161,6 +211,62 @@ def test_bootstrap_plan_is_noop_when_custom_fields_exist() -> None:
     assert plan.ready is True
 
 
+def test_bootstrap_plan_rejects_dictionary_field_collection_subclass_without_leak() -> None:
+    class SecretBearingFields(list[StoryDictionaryField]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("client_secret=bootstrap-fields-iter-secret")
+
+    fields = SecretBearingFields(
+        [
+            StoryDictionaryField(
+                element="u_ai_status",
+                column_label="AI Status",
+                internal_type="string",
+                active=True,
+            )
+        ]
+    )
+
+    try:
+        plan_bootstrap_fields(fields)
+    except ValueError as exc:
+        diagnostic = str(exc)
+    else:
+        raise AssertionError("bootstrap dictionary field collection subclass was accepted")
+
+    assert diagnostic == "bootstrap dictionary fields contain non-JSON value"
+    assert "SecretBearingFields" not in diagnostic
+    assert "bootstrap-fields-iter-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_bootstrap_plan_rejects_dictionary_field_item_subclass_without_leak() -> None:
+    class SecretBearingField(StoryDictionaryField):
+        def secret_marker(self) -> str:
+            return "client_secret=bootstrap-field-model-secret"
+
+    fields: list[StoryDictionaryField] = [
+        SecretBearingField(
+            element="u_ai_status",
+            column_label="AI Status",
+            internal_type="string",
+            active=True,
+        )
+    ]
+
+    try:
+        plan_bootstrap_fields(fields)
+    except ValueError as exc:
+        diagnostic = str(exc)
+    else:
+        raise AssertionError("bootstrap dictionary field item subclass was accepted")
+
+    assert diagnostic == "bootstrap dictionary fields contain non-JSON value"
+    assert "SecretBearingField" not in diagnostic
+    assert "bootstrap-field-model-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
 def test_apply_bootstrap_fields_requires_explicit_confirmation() -> None:
     client = FakeBootstrapClient([])
 
@@ -228,6 +334,101 @@ def test_apply_bootstrap_fields_creates_only_missing_custom_fields() -> None:
     assert result.form_layout_changes == []
 
 
+def test_apply_bootstrap_fields_rejects_create_field_response_subclass_without_leak() -> None:
+    class UnsafeCreateResponseClient(FakeBootstrapClient):
+        def create_story_dictionary_field(
+            self,
+            *,
+            element: str,
+            column_label: str,
+            internal_type: str,
+            max_length: int | None,
+            read_only: bool,
+        ) -> dict[str, object]:
+            super().create_story_dictionary_field(
+                element=element,
+                column_label=column_label,
+                internal_type=internal_type,
+                max_length=max_length,
+                read_only=read_only,
+            )
+            return SecretBearingBootstrapResponse({"element": element})
+
+    client = UnsafeCreateResponseClient([])
+
+    try:
+        apply_bootstrap_fields(client, confirm_table="rm_story", confirm_fields=True)
+    except ValueError as exc:
+        diagnostic = str(exc)
+    else:
+        raise AssertionError("bootstrap create field response subclass was accepted")
+
+    assert diagnostic == "bootstrap create field result is unsafe"
+    assert "SecretBearingBootstrapResponse" not in diagnostic
+    assert "bootstrap-response-bool-secret" not in diagnostic
+    assert "bootstrap-response-len-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
+def test_apply_bootstrap_fields_rejects_dictionary_upsert_response_subclass_without_leak() -> None:
+    class UnsafeDictionaryUpsertResponseClient(FakeBootstrapClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            super().upsert_table_record(table=table, lookup=lookup, fields=fields)
+            return SecretBearingBootstrapResponse({"sys_id": f"{table}-sys-id"})
+
+    client = UnsafeDictionaryUpsertResponseClient(
+        [
+            StoryDictionaryField(
+                element="u_ai_status",
+                column_label="AI Status",
+                internal_type="string",
+                active=True,
+                read_only=True,
+            ),
+            StoryDictionaryField(
+                element="u_ai_handoff_type",
+                column_label="AI Handoff Type",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+            StoryDictionaryField(
+                element="u_ai_handoff_reference",
+                column_label="AI Handoff Reference",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+            StoryDictionaryField(
+                element="u_ai_artifact_reference",
+                column_label="AI Artifact Reference",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+        ]
+    )
+
+    try:
+        apply_bootstrap_fields(client, confirm_table="rm_story", confirm_fields=True)
+    except ValueError as exc:
+        diagnostic = str(exc)
+    else:
+        raise AssertionError("bootstrap dictionary upsert response subclass was accepted")
+
+    assert diagnostic == "bootstrap table upsert result is unsafe"
+    assert "SecretBearingBootstrapResponse" not in diagnostic
+    assert "bootstrap-response-bool-secret" not in diagnostic
+    assert "bootstrap-response-len-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
 def test_apply_bootstrap_fields_adds_platform_readonly_policy() -> None:
     client = FakeBootstrapClient(
         [
@@ -276,6 +477,65 @@ def test_apply_bootstrap_fields_adds_platform_readonly_policy() -> None:
         "sys_ui_policy:Jedi DevProject read-only automation metadata",
     ]
     assert [record["table"] for record in client.upserted_records] == ["sys_ui_policy"]
+
+
+def test_apply_bootstrap_fields_rejects_platform_policy_response_subclass_without_leak() -> None:
+    class UnsafePlatformPolicyResponseClient(FakeBootstrapClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            super().upsert_table_record(table=table, lookup=lookup, fields=fields)
+            return SecretBearingBootstrapResponse({"sys_id": f"{table}-sys-id"})
+
+    client = UnsafePlatformPolicyResponseClient(
+        [
+            StoryDictionaryField(
+                element="u_ai_status",
+                column_label="AI Status",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+            StoryDictionaryField(
+                element="u_ai_handoff_type",
+                column_label="AI Handoff Type",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+            StoryDictionaryField(
+                element="u_ai_handoff_reference",
+                column_label="AI Handoff Reference",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+            StoryDictionaryField(
+                element="u_ai_artifact_reference",
+                column_label="AI Artifact Reference",
+                internal_type="string",
+                active=True,
+                read_only=False,
+            ),
+        ]
+    )
+
+    try:
+        apply_bootstrap_fields(client, confirm_table="rm_story", confirm_fields=True)
+    except ValueError as exc:
+        diagnostic = str(exc)
+    else:
+        raise AssertionError("bootstrap platform policy response subclass was accepted")
+
+    assert diagnostic == "bootstrap table upsert result is unsafe"
+    assert "SecretBearingBootstrapResponse" not in diagnostic
+    assert "bootstrap-response-bool-secret" not in diagnostic
+    assert "bootstrap-response-len-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
 
 
 def test_lifecycle_business_rule_spec_emits_ready_and_complete_events() -> None:
@@ -464,6 +724,225 @@ def test_apply_lifecycle_webhook_records_upserts_planned_records() -> None:
     assert method_fields["rest_endpoint"] == ("https://sidecar.example.gov/lifecycle/events")
 
 
+def test_apply_lifecycle_webhook_records_rejects_non_json_rest_message_lookup() -> None:
+    import pytest
+
+    class CorruptRestMessageLookupClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_rest_message":
+                return {"sys_id": SecretBearingLifecycleSysId()}
+            msg = "REST method upsert must not run after corrupt REST message lookup"
+            raise AssertionError(msg)
+
+    client = CorruptRestMessageLookupClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_lifecycle_webhook_records(
+            client,
+            spec=spec,
+            confirm_table="rm_story",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleSysId" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "lifecycle-secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == ["sys_rest_message"]
+
+
+def test_apply_lifecycle_webhook_records_rejects_rest_message_response_subclass() -> None:
+    import pytest
+
+    class CorruptRestMessageResponseClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_rest_message":
+                return SecretBearingLifecycleResponse({"sys_id": "rest-message-sys-id"})
+            msg = "REST method upsert must not run after corrupt REST message response"
+            raise AssertionError(msg)
+
+    client = CorruptRestMessageResponseClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_lifecycle_webhook_records(
+            client,
+            spec=spec,
+            confirm_table="rm_story",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleResponse" not in diagnostic
+    assert "lifecycle-response-get-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == ["sys_rest_message"]
+
+
+def test_apply_lifecycle_webhook_records_rejects_string_subclass_rest_message_lookup() -> None:
+    import pytest
+
+    class CorruptRestMessageLookupClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_rest_message":
+                return {
+                    "sys_id": SecretBearingLifecycleSysIdText(
+                        "client_secret=lifecycle-subclass-secret"
+                    )
+                }
+            msg = "REST method upsert must not run after corrupt REST message lookup"
+            raise AssertionError(msg)
+
+    client = CorruptRestMessageLookupClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_lifecycle_webhook_records(
+            client,
+            spec=spec,
+            confirm_table="rm_story",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleSysIdText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "lifecycle-subclass-secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == ["sys_rest_message"]
+
+
+def test_apply_lifecycle_webhook_records_rejects_non_json_method_result() -> None:
+    import pytest
+
+    class CorruptMethodResultClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_rest_message":
+                return {"sys_id": "sys_rest_message-sys-id"}
+            if table == "sys_rest_message_fn":
+                return {"sys_id": SecretBearingLifecycleSysId()}
+            msg = "Business Rule upsert must not run after corrupt REST method result"
+            raise AssertionError(msg)
+
+    client = CorruptMethodResultClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_lifecycle_webhook_records(
+            client,
+            spec=spec,
+            confirm_table="rm_story",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleSysId" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "lifecycle-secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+    ]
+
+
+def test_apply_lifecycle_webhook_records_rejects_method_response_subclass_without_leak() -> None:
+    import pytest
+
+    class CorruptMethodResponseClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_rest_message":
+                return {"sys_id": "rest-message-sys-id"}
+            if table == "sys_rest_message_fn":
+                return SecretBearingLifecycleResponse({"sys_id": "method-sys-id"})
+            msg = "Business Rule upsert must not run after corrupt REST method response"
+            raise AssertionError(msg)
+
+    client = CorruptMethodResponseClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_lifecycle_webhook_records(
+            client,
+            spec=spec,
+            confirm_table="rm_story",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleResponse" not in diagnostic
+    assert "lifecycle-response-get-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_rest_message",
+        "sys_rest_message_fn",
+    ]
+
+
 def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
     from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
 
@@ -507,6 +986,68 @@ def test_verify_lifecycle_webhook_records_confirms_matching_records() -> None:
     assert result.reasons == []
 
 
+def test_verify_lifecycle_webhook_records_rejects_string_subclass_rest_message_lookup() -> None:
+    import pytest
+
+    from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
+
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+    plan = lifecycle_webhook_servicenow_record_plan(spec)
+    client.records[f"{plan[0]['table']}:{plan[0]['lookup']}"] = {
+        **plan[0]["fields"],
+        "sys_id": SecretBearingLifecycleSysIdText("client_secret=lifecycle-subclass-secret"),
+    }
+
+    with pytest.raises(ValueError) as error:
+        verify_lifecycle_webhook_records(client, spec=spec)
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleSysIdText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "lifecycle-subclass-secret" not in diagnostic
+
+
+def test_verify_lifecycle_webhook_records_rejects_rest_message_record_subclass() -> None:
+    import pytest
+
+    from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
+
+    class CorruptRestMessageRecordClient(FakeLifecycleWebhookClient):
+        def fetch_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+        ) -> dict[str, object] | None:
+            if table == "sys_rest_message":
+                return SecretBearingLifecycleResponse({"sys_id": "rest-message-sys-id"})
+            return super().fetch_table_record(table=table, lookup=lookup)
+
+    client = CorruptRestMessageRecordClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+
+    with pytest.raises(ValueError) as error:
+        verify_lifecycle_webhook_records(client, spec=spec)
+
+    diagnostic = str(error.value)
+    assert diagnostic == LIFECYCLE_WEBHOOK_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingLifecycleResponse" not in diagnostic
+    assert "lifecycle-response-get-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+
+
 def test_verify_lifecycle_webhook_records_reports_missing_and_mismatched_records() -> None:
     from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
 
@@ -532,6 +1073,71 @@ def test_verify_lifecycle_webhook_records_reports_missing_and_mismatched_records
         "sys_rest_message": ["rest_endpoint"],
     }
     assert "record_missing" in result.reasons
+    assert "field_mismatch" in result.reasons
+
+
+def test_verify_lifecycle_webhook_records_rejects_string_subclass_boolean_metadata() -> None:
+    from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
+
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+    apply_lifecycle_webhook_records(
+        client,
+        spec=spec,
+        confirm_table="rm_story",
+        confirm_records=True,
+    )
+    script_key = (
+        "sys_script:{'name': 'Jedi DevProject lifecycle event emitter', 'collection': 'rm_story'}"
+    )
+    client.records[script_key]["action_update"] = ExplodingLifecycleVerificationText("true")
+    client.records[script_key]["active"] = "true"
+
+    result = verify_lifecycle_webhook_records(client, spec=spec)
+
+    assert result.verified is False
+    assert result.mismatched_fields == {"sys_script": ["action_update"]}
+    assert "field_mismatch" in result.reasons
+
+
+def test_verify_lifecycle_webhook_records_rejects_string_subclass_reference_metadata() -> None:
+    from jedi_devproject.bootstrap import verify_lifecycle_webhook_records
+
+    client = FakeLifecycleWebhookClient()
+    spec = build_lifecycle_webhook_bootstrap_spec(
+        endpoint_url="https://sidecar.example.gov/lifecycle/events",
+        integration_identity="jedi-devproject-lifecycle-integration",
+        draft_state_value="-6",
+        ready_state_value="1",
+    )
+    apply_lifecycle_webhook_records(
+        client,
+        spec=spec,
+        confirm_table="rm_story",
+        confirm_records=True,
+    )
+    script_key = (
+        "sys_script:{'name': 'Jedi DevProject lifecycle event emitter', 'collection': 'rm_story'}"
+    )
+    client.records[script_key]["action_update"] = "true"
+    client.records[script_key]["active"] = "true"
+    method_key = (
+        "sys_rest_message_fn:{'rest_message': 'sys_rest_message-sys-id', "
+        "'function_name': 'post_event'}"
+    )
+    client.records[method_key]["rest_message"] = {
+        "value": ExplodingLifecycleVerificationText("sys_rest_message-sys-id"),
+    }
+
+    result = verify_lifecycle_webhook_records(client, spec=spec)
+
+    assert result.verified is False
+    assert result.mismatched_fields == {"sys_rest_message_fn": ["rest_message"]}
     assert "field_mismatch" in result.reasons
 
 
@@ -627,6 +1233,261 @@ def test_apply_update_set_importer_records_upserts_definition_then_operation() -
     operation_fields = client.upserts[1]["fields"]
     assert isinstance(operation_fields, dict)
     assert operation_fields["web_service_definition"] == "sys_ws_definition-sys-id"
+
+
+def test_apply_update_set_importer_records_rejects_non_json_definition_lookup() -> None:
+    import pytest
+
+    class CorruptDefinitionLookupClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_ws_definition":
+                return {"sys_id": SecretBearingImporterSysId()}
+            msg = "operation upsert must not run after corrupt definition lookup"
+            raise AssertionError(msg)
+
+    client = CorruptDefinitionLookupClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_update_set_importer_records(
+            client,
+            spec=spec,
+            confirm_service_id="jedi_update_set_import",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterSysId" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "importer-secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == ["sys_ws_definition"]
+
+
+def test_apply_update_set_importer_records_rejects_definition_response_subclass() -> None:
+    import pytest
+
+    class CorruptDefinitionResponseClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_ws_definition":
+                return SecretBearingImporterResponse({"sys_id": "definition-sys-id"})
+            msg = "operation upsert must not run after corrupt definition response"
+            raise AssertionError(msg)
+
+    client = CorruptDefinitionResponseClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_update_set_importer_records(
+            client,
+            spec=spec,
+            confirm_service_id="jedi_update_set_import",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterResponse" not in diagnostic
+    assert "importer-response-get-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == ["sys_ws_definition"]
+
+
+def test_apply_update_set_importer_records_rejects_non_json_operation_result() -> None:
+    import pytest
+
+    class CorruptOperationResultClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_ws_definition":
+                return {"sys_id": "sys_ws_definition-sys-id"}
+            return {"sys_id": SecretBearingImporterSysId()}
+
+    client = CorruptOperationResultClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_update_set_importer_records(
+            client,
+            spec=spec,
+            confirm_service_id="jedi_update_set_import",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterSysId" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "importer-secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+
+
+def test_apply_update_set_importer_records_rejects_operation_response_subclass() -> None:
+    import pytest
+
+    class CorruptOperationResponseClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_ws_definition":
+                return {"sys_id": "sys_ws_definition-sys-id"}
+            return SecretBearingImporterResponse({"sys_id": "operation-sys-id"})
+
+    client = CorruptOperationResponseClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_update_set_importer_records(
+            client,
+            spec=spec,
+            confirm_service_id="jedi_update_set_import",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterResponse" not in diagnostic
+    assert "importer-response-get-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == [
+        "sys_ws_definition",
+        "sys_ws_operation",
+    ]
+
+
+def test_apply_update_set_importer_records_rejects_string_subclass_definition_lookup() -> None:
+    import pytest
+
+    class CorruptDefinitionLookupClient(FakeLifecycleWebhookClient):
+        def upsert_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: dict[str, object],
+        ) -> dict[str, object]:
+            self.upserts.append({"table": table, "lookup": lookup, "fields": fields})
+            if table == "sys_ws_definition":
+                return {
+                    "sys_id": SecretBearingImporterSysIdText(
+                        "client_secret=importer-subclass-secret"
+                    )
+                }
+            msg = "operation upsert must not run after corrupt definition lookup"
+            raise AssertionError(msg)
+
+    client = CorruptDefinitionLookupClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    with pytest.raises(ValueError) as error:
+        apply_update_set_importer_records(
+            client,
+            spec=spec,
+            confirm_service_id="jedi_update_set_import",
+            confirm_records=True,
+        )
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterSysIdText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "importer-subclass-secret" not in diagnostic
+    assert [upsert["table"] for upsert in client.upserts] == ["sys_ws_definition"]
+
+
+def test_verify_update_set_importer_records_rejects_string_subclass_definition_lookup() -> None:
+    import pytest
+
+    client = FakeLifecycleWebhookClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+    definition_key = "sys_ws_definition:{'service_id': 'jedi_update_set_import'}"
+    client.records[definition_key] = {
+        "sys_id": SecretBearingImporterSysIdText("client_secret=verify-importer-subclass"),
+        "name": spec.definition.name,
+        "service_id": spec.definition.service_id,
+        "active": spec.definition.active,
+        "consumes": spec.definition.consumes,
+        "produces": spec.definition.produces,
+        "short_description": spec.definition.short_description,
+    }
+
+    with pytest.raises(ValueError) as error:
+        verify_update_set_importer_records(client, spec=spec)
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterSysIdText" not in diagnostic
+    assert "client_secret" not in diagnostic
+    assert "verify-importer-subclass" not in diagnostic
+
+
+def test_verify_update_set_importer_records_rejects_definition_record_subclass() -> None:
+    import pytest
+
+    class CorruptDefinitionRecordClient(FakeLifecycleWebhookClient):
+        def fetch_table_record(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+        ) -> dict[str, object] | None:
+            if table == "sys_ws_definition":
+                return SecretBearingImporterResponse({"sys_id": "definition-sys-id"})
+            return super().fetch_table_record(table=table, lookup=lookup)
+
+    client = CorruptDefinitionRecordClient()
+    spec = build_update_set_importer_bootstrap_spec(
+        integration_identity="jedi-devproject-update-set-importer"
+    )
+
+    with pytest.raises(ValueError) as error:
+        verify_update_set_importer_records(client, spec=spec)
+
+    diagnostic = str(error.value)
+    assert diagnostic == UPDATE_SET_IMPORTER_LOOKUP_NON_JSON_DIAGNOSTIC
+    assert "SecretBearingImporterResponse" not in diagnostic
+    assert "importer-response-get-secret" not in diagnostic
+    assert "client_secret" not in diagnostic
 
 
 def test_verify_update_set_importer_records_confirms_matching_records() -> None:

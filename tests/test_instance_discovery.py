@@ -401,6 +401,169 @@ def test_discover_dictionary_form_context_fetches_target_instance_state() -> Non
     ]
 
 
+def test_discover_dictionary_form_context_rejects_table_label_object_without_leak() -> None:
+    class HostileTableLabel:
+        def __str__(self) -> str:
+            return "client_secret=table-label-secret"
+
+    class HostileLabelClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_db_object" and lookup == {"name": "incident"}:
+                return [
+                    {
+                        "name": "incident",
+                        "label": HostileTableLabel(),
+                        "is_extendable": "true",
+                    }
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_dictionary_form_context(
+            client=HostileLabelClient(),
+            target_table="incident",
+        )
+
+    message = str(exc_info.value)
+    assert message == "dictionary/form discovery metadata contains non-JSON value"
+    assert "HostileTableLabel" not in message
+    assert "table-label-secret" not in message
+    assert "client_secret" not in message
+
+
+def test_discover_dictionary_form_context_rejects_position_object_without_leak() -> None:
+    class HostilePosition:
+        def __int__(self) -> int:
+            raise AssertionError("api_key=position-secret")
+
+    class HostilePositionClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_ui_element" and lookup == {
+                "name": "incident",
+                "sys_ui_section": "incident-main-section",
+            }:
+                return [
+                    {
+                        "sys_id": "description-element",
+                        "element": "description",
+                        "position": HostilePosition(),
+                    }
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_dictionary_form_context(
+            client=HostilePositionClient(),
+            target_table="incident",
+        )
+
+    message = str(exc_info.value)
+    assert message == "dictionary/form discovery numeric metadata is unsafe"
+    assert "HostilePosition" not in message
+    assert "position-secret" not in message
+    assert "api_key" not in message
+
+
+def test_discover_dictionary_form_context_rejects_record_collection_subclass_without_leak() -> (
+    None
+):
+    class HostileDictionaryRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=discovery-record-collection")
+
+    class HostileCollectionClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_dictionary" and lookup == {"name": "incident"}:
+                return HostileDictionaryRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_dictionary_form_context(
+            client=HostileCollectionClient(),
+            target_table="incident",
+        )
+
+    message = str(exc_info.value)
+    assert message == "dictionary/form discovery metadata contains non-JSON value"
+    assert "HostileDictionaryRecords" not in message
+    assert "discovery-record-collection" not in message
+    assert "client_secret" not in message
+
+
+def test_discover_dictionary_form_context_rejects_record_subclass_without_leak() -> None:
+    class HostileSectionRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise AssertionError("client_secret=discovery-record")
+
+    class HostileRecordClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_ui_section" and lookup == {"name": "incident"}:
+                return [HostileSectionRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_dictionary_form_context(
+            client=HostileRecordClient(),
+            target_table="incident",
+        )
+
+    message = str(exc_info.value)
+    assert message == "dictionary/form discovery metadata contains non-JSON value"
+    assert "HostileSectionRecord" not in message
+    assert "discovery-record" not in message
+    assert "client_secret" not in message
+
+
 def test_discover_servicenow_surface_context_collects_related_platform_surfaces() -> None:
     client = FakeDiscoveryClient()
     public_doc_result = RetrievalResult(
@@ -469,6 +632,339 @@ def test_discover_servicenow_surface_context_collects_related_platform_surfaces(
     )
 
 
+def test_discover_surface_context_rejects_active_object_without_leak() -> None:
+    class HostileActive:
+        def __str__(self) -> str:
+            raise AssertionError("client_secret=active-secret")
+
+    class HostileActiveClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_script" and lookup == {"collection": "incident"}:
+                return [
+                    {
+                        "sys_id": "business-rule-sys-id",
+                        "name": "Incident State Guard",
+                        "active": HostileActive(),
+                        "when": "before",
+                        "script": "gs.info('safe');",
+                    }
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileActiveClient(),
+            target_table="incident",
+            story_text="Check related business rules.",
+            public_doc_queries=[],
+            required_surfaces_override=["business_rules"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery active metadata is unsafe"
+    assert "HostileActive" not in message
+    assert "active-secret" not in message
+    assert "client_secret" not in message
+
+
+def test_discover_surface_context_rejects_name_object_without_leak() -> None:
+    class HostileName:
+        def __str__(self) -> str:
+            raise AssertionError("api_key=name-secret")
+
+    class HostileNameClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            if table == "sys_script" and lookup == {"collection": "incident"}:
+                return [
+                    {
+                        "sys_id": "business-rule-sys-id",
+                        "name": HostileName(),
+                        "active": "true",
+                        "when": "before",
+                        "script": "gs.info('safe');",
+                    }
+                ]
+            return super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileNameClient(),
+            target_table="incident",
+            story_text="Check related business rules.",
+            public_doc_queries=[],
+            required_surfaces_override=["business_rules"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileName" not in message
+    assert "name-secret" not in message
+    assert "api_key" not in message
+
+
+def test_discover_surface_context_rejects_record_collection_subclass_without_leak() -> None:
+    class HostileSurfaceRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=surface-record-collection")
+
+    class HostileSurfaceCollectionClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_script" and lookup == {"collection": "incident"}:
+                return HostileSurfaceRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileSurfaceCollectionClient(),
+            target_table="incident",
+            story_text="Check related business rules.",
+            public_doc_queries=[],
+            required_surfaces_override=["business_rules"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileSurfaceRecords" not in message
+    assert "surface-record-collection" not in message
+    assert "client_secret" not in message
+
+
+def test_discover_surface_context_rejects_record_subclass_without_leak() -> None:
+    class HostileSurfaceRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise AssertionError("client_secret=surface-record")
+
+    class HostileSurfaceRecordClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_script" and lookup == {"collection": "incident"}:
+                return [HostileSurfaceRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileSurfaceRecordClient(),
+            target_table="incident",
+            story_text="Check related business rules.",
+            public_doc_queries=[],
+            required_surfaces_override=["business_rules"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileSurfaceRecord" not in message
+    assert "surface-record" not in message
+    assert "client_secret" not in message
+
+
+def test_public_doc_surface_skips_version_string_subclass_without_leak() -> None:
+    class HostileCitationVersion(str):
+        def __str__(self) -> str:
+            return "client_secret=public-doc-bundle-secret"
+
+    client = FakeDiscoveryClient()
+    public_doc_result = RetrievalResult.model_construct(
+        content="UI Policies set fields mandatory.",
+        citation=RetrievalCitation.model_construct(
+            source="public_web:https://docs.servicenow.com/ui-policy",
+            content_hash="public-doc-hash",
+            confidence=0.75,
+            version=HostileCitationVersion("live-public-web"),
+        ),
+    )
+
+    bundle = discover_servicenow_surface_context(
+        client=client,
+        target_table="incident",
+        story_text="Create a UI Policy using public documentation.",
+        public_doc_queries=["ServiceNow UI Policy documentation"],
+        public_doc_results=[public_doc_result],
+        required_surfaces_override=["public_docs"],
+    )
+
+    public_docs = bundle.surface("public_docs")
+    assert public_docs.records[0].metadata["version"] == ""
+    assert public_docs.citations[0]["version"] == ""
+    dumped = bundle.model_dump_json()
+    assert "HostileCitationVersion" not in dumped
+    assert "public-doc-bundle-secret" not in dumped
+    assert "client_secret" not in dumped
+
+
+def test_public_doc_surface_rejects_content_hash_string_subclass_without_leak() -> None:
+    class HostileContentHash(str):
+        def __str__(self) -> str:
+            return "api_key=public-doc-hash-secret"
+
+    client = FakeDiscoveryClient()
+    public_doc_result = RetrievalResult.model_construct(
+        content="UI Policies set fields mandatory.",
+        citation=RetrievalCitation.model_construct(
+            source="public_web:https://docs.servicenow.com/ui-policy",
+            content_hash=HostileContentHash("public-doc-hash"),
+            confidence=0.75,
+            version="live-public-web",
+        ),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=client,
+            target_table="incident",
+            story_text="Create a UI Policy using public documentation.",
+            public_doc_queries=["ServiceNow UI Policy documentation"],
+            public_doc_results=[public_doc_result],
+            required_surfaces_override=["public_docs"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "public documentation citation contains non-JSON value"
+    assert "HostileContentHash" not in message
+    assert "public-doc-hash-secret" not in message
+    assert "api_key" not in message
+
+
+def test_public_doc_surface_rejects_content_string_subclass_without_leak() -> None:
+    class HostilePublicDocContent(str):
+        def __str__(self) -> str:
+            return "client_secret=public-doc-content-secret"
+
+    client = FakeDiscoveryClient()
+    public_doc_result = RetrievalResult.model_construct(
+        content=HostilePublicDocContent("UI Policies set fields mandatory."),
+        citation=RetrievalCitation.model_construct(
+            source="public_web:https://docs.servicenow.com/ui-policy",
+            content_hash="public-doc-hash",
+            confidence=0.75,
+            version="live-public-web",
+        ),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=client,
+            target_table="incident",
+            story_text="Create a UI Policy using public documentation.",
+            public_doc_queries=["ServiceNow UI Policy documentation"],
+            public_doc_results=[public_doc_result],
+            required_surfaces_override=["public_docs"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "public documentation content contains non-JSON value"
+    assert "HostilePublicDocContent" not in message
+    assert "public-doc-content-secret" not in message
+    assert "client_secret" not in message
+
+
+def test_public_doc_surface_rejects_query_string_subclass_without_leak() -> None:
+    class HostilePublicDocQuery(str):
+        def __str__(self) -> str:
+            return "api_key=public-doc-query-secret"
+
+    client = FakeDiscoveryClient()
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=client,
+            target_table="incident",
+            story_text="Create a UI Policy using public documentation.",
+            public_doc_queries=[
+                HostilePublicDocQuery("ServiceNow UI Policy documentation")
+            ],
+            public_doc_results=[],
+            required_surfaces_override=["public_docs"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "public documentation query contains non-JSON value"
+    assert "HostilePublicDocQuery" not in message
+    assert "public-doc-query-secret" not in message
+    assert "api_key" not in message
+
+
+def test_public_doc_surface_rejects_confidence_object_without_leak() -> None:
+    class HostileConfidence:
+        def __format__(self, format_spec: str) -> str:
+            return f"client_secret=public-doc-confidence-secret:{format_spec}"
+
+    client = FakeDiscoveryClient()
+    public_doc_result = RetrievalResult.model_construct(
+        content="UI Policies set fields mandatory.",
+        citation=RetrievalCitation.model_construct(
+            source="public_web:https://docs.servicenow.com/ui-policy",
+            content_hash="public-doc-hash",
+            confidence=HostileConfidence(),
+            version="live-public-web",
+        ),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=client,
+            target_table="incident",
+            story_text="Create a UI Policy using public documentation.",
+            public_doc_queries=["ServiceNow UI Policy documentation"],
+            public_doc_results=[public_doc_result],
+            required_surfaces_override=["public_docs"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "public documentation citation confidence is unsafe"
+    assert "HostileConfidence" not in message
+    assert "public-doc-confidence-secret" not in message
+    assert "client_secret" not in message
+
+
 def test_required_public_docs_without_results_are_insufficient() -> None:
     client = FakeDiscoveryClient()
 
@@ -524,6 +1020,86 @@ def test_discover_servicenow_surface_context_collects_catalog_employee_center_su
     assert connected_content.records[0].name == "Catalog Item"
     assert connected_content.records[0].metadata["sys_id"] == "catalog-item-content-type-sys-id"
     assert any(call["table"] == "taxonomy" for call in client.calls)
+
+
+def test_employee_center_topics_rejects_record_collection_subclass_without_leak() -> None:
+    class HostileTopicRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=employee-center-topic-records")
+
+    class HostileTopicCollectionClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "topic" and lookup == {}:
+                return HostileTopicRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileTopicCollectionClient(),
+            target_table="sc_cat_item",
+            story_text="Add a Catalog Item to an Employee Center topic.",
+            public_doc_queries=[],
+            required_surfaces_override=["employee_center_topics"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileTopicRecords" not in message
+    assert "employee-center-topic-records" not in message
+    assert "client_secret" not in message
+
+
+def test_employee_center_topics_rejects_record_subclass_without_leak() -> None:
+    class HostileTopicRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise AssertionError("client_secret=employee-center-topic-record")
+
+    class HostileTopicRecordClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "topic" and lookup == {}:
+                return [HostileTopicRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileTopicRecordClient(),
+            target_table="sc_cat_item",
+            story_text="Add a Catalog Item to an Employee Center topic.",
+            public_doc_queries=[],
+            required_surfaces_override=["employee_center_topics"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileTopicRecord" not in message
+    assert "employee-center-topic-record" not in message
+    assert "client_secret" not in message
 
 
 def test_discover_servicenow_surface_context_collects_catalog_variable_sets_surface() -> None:
@@ -621,6 +1197,86 @@ def test_discover_servicenow_surface_context_collects_cmdb_ire_surfaces() -> Non
     )
     assert "cmdb_identifier" in bundle.evidence
     assert "cmdb_reconciliation_definition" in bundle.evidence
+
+
+def test_cmdb_ire_identification_rejects_record_collection_subclass_without_leak() -> None:
+    class HostileIdentifierRecords(list[dict[str, Any]]):
+        def __iter__(self) -> Any:
+            raise AssertionError("client_secret=cmdb-ire-identifier-records")
+
+    class HostileIdentifierCollectionClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "cmdb_identifier" and lookup == {}:
+                return HostileIdentifierRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileIdentifierCollectionClient(),
+            target_table="cmdb_ci_computer",
+            story_text="Configure serial number as the primary identifier in CMDB IRE.",
+            public_doc_queries=[],
+            required_surfaces_override=["cmdb_ire_identification_rules"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileIdentifierRecords" not in message
+    assert "cmdb-ire-identifier-records" not in message
+    assert "client_secret" not in message
+
+
+def test_cmdb_ire_identification_rejects_record_subclass_without_leak() -> None:
+    class HostileIdentifierRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise AssertionError("client_secret=cmdb-ire-identifier-record")
+
+    class HostileIdentifierRecordClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "cmdb_identifier" and lookup == {}:
+                return [HostileIdentifierRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileIdentifierRecordClient(),
+            target_table="cmdb_ci_computer",
+            story_text="Configure serial number as the primary identifier in CMDB IRE.",
+            public_doc_queries=[],
+            required_surfaces_override=["cmdb_ire_identification_rules"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileIdentifierRecord" not in message
+    assert "cmdb-ire-identifier-record" not in message
+    assert "client_secret" not in message
 
 
 def test_surface_context_ignores_forbidden_boundaries_as_requested_surfaces() -> None:
@@ -787,6 +1443,86 @@ def test_required_flow_graph_context_fails_closed_when_graph_is_incomplete() -> 
     assert bundle.context_sufficient is False
     assert "flow_graph" in bundle.missing_required_surfaces
     assert bundle.surface("flow_graph").confidence == 0.0
+
+
+def test_required_flow_graph_context_rejects_record_collection_subclass_without_leak() -> None:
+    class HostileFlowGraphRecords(list[dict[str, Any]]):
+        def __len__(self) -> int:
+            raise AssertionError("client_secret=flow-graph-record-collection")
+
+    class HostileFlowGraphCollectionClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_hub_trigger_instance" and lookup == {"flow": "flow-sys-id"}:
+                return HostileFlowGraphRecords(records)
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileFlowGraphCollectionClient(),
+            target_table="incident",
+            story_text="Update the Incident Flow Designer flow for triage.",
+            public_doc_queries=[],
+            required_surfaces_override=["table_schema", "form_layout", "flows", "flow_graph"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileFlowGraphRecords" not in message
+    assert "flow-graph-record-collection" not in message
+    assert "client_secret" not in message
+
+
+def test_required_flow_graph_context_rejects_record_subclass_without_leak() -> None:
+    class HostileFlowGraphRecord(dict[str, Any]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise AssertionError("client_secret=flow-graph-record")
+
+    class HostileFlowGraphRecordClient(FakeDiscoveryClient):
+        def fetch_table_records(
+            self,
+            *,
+            table: str,
+            lookup: dict[str, str],
+            fields: list[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, Any]]:
+            records = super().fetch_table_records(
+                table=table,
+                lookup=lookup,
+                fields=fields,
+                limit=limit,
+            )
+            if table == "sys_hub_trigger_instance" and lookup == {"flow": "flow-sys-id"}:
+                return [HostileFlowGraphRecord(records[0])]
+            return records
+
+    with pytest.raises(ValueError) as exc_info:
+        discover_servicenow_surface_context(
+            client=HostileFlowGraphRecordClient(),
+            target_table="incident",
+            story_text="Update the Incident Flow Designer flow for triage.",
+            public_doc_queries=[],
+            required_surfaces_override=["table_schema", "form_layout", "flows", "flow_graph"],
+        )
+
+    message = str(exc_info.value)
+    assert message == "discovery text metadata contains non-JSON value"
+    assert "HostileFlowGraphRecord" not in message
+    assert "flow-graph-record" not in message
+    assert "client_secret" not in message
 
 
 def test_discover_servicenow_surface_context_marks_required_missing_surface() -> None:

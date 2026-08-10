@@ -43,7 +43,7 @@ from jedi_devproject.client_script_generation import (
     _validate_script_safety,
 )
 from jedi_devproject.models import CandidateChange
-from jedi_devproject.validation_helpers import slug, stable_record_sys_id, string_list
+from jedi_devproject.validation_helpers import slug, stable_record_sys_id
 from jedi_devproject.xml_builder import (
     SYS_SCOPE_GLOBAL,
     container_element,
@@ -52,12 +52,15 @@ from jedi_devproject.xml_builder import (
 )
 
 CATALOG_CLIENT_SCRIPT_TABLE = "catalog_script_client"
+CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC = (
+    "Catalog Client Script generation field contains non-JSON value"
+)
 
 
 class CatalogClientScriptAction(BaseModel):
     """One declarative g_form effect: set a variable's value or clear it."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     kind: Literal["set_value", "clear_value"]
     variable: str
@@ -139,7 +142,7 @@ def _script_literal(value: str) -> str:
 
 
 class CatalogClientScriptIntent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     catalog_item_name: str
     script_name: str
@@ -241,15 +244,56 @@ def _catalog_client_script_intent(
     fields = dict(change.fields)
     return CatalogClientScriptIntent(
         catalog_item_name=catalog_item_name,
-        script_name=str(fields.get("name") or fields.get("script_name") or ""),
-        script_type=str(fields.get("type") or fields.get("client_script_type") or ""),
-        variable_name=str(
-            fields.get("field") or fields.get("variable") or fields.get("field_name") or ""
+        script_name=_catalog_client_script_first_text(
+            fields.get("name"), fields.get("script_name")
         ),
-        script=str(fields.get("script") or fields.get("script_body") or ""),
-        fields_read=string_list(fields.get("fields_read"), ignore_none_token=True),
-        fields_written=string_list(fields.get("fields_written"), ignore_none_token=True),
+        script_type=_catalog_client_script_first_text(
+            fields.get("type"), fields.get("client_script_type")
+        ),
+        variable_name=_catalog_client_script_first_text(
+            fields.get("field"), fields.get("variable"), fields.get("field_name")
+        ),
+        script=_catalog_client_script_first_text(
+            fields.get("script"), fields.get("script_body")
+        ),
+        fields_read=_catalog_client_script_string_list(
+            fields.get("fields_read"), ignore_none_token=True
+        ),
+        fields_written=_catalog_client_script_string_list(
+            fields.get("fields_written"), ignore_none_token=True
+        ),
     )
+
+
+def _catalog_client_script_string_list(
+    value: Any,
+    *,
+    ignore_none_token: bool = False,
+) -> list[str]:
+    if type(value) is list:
+        return [text for item in value if (text := _catalog_client_script_field_text(item).strip())]
+    text = _catalog_client_script_field_text(value).strip()
+    if not text or (ignore_none_token and text.lower() == "none"):
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _catalog_client_script_first_text(*values: Any) -> str:
+    for value in values:
+        text = _catalog_client_script_field_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _catalog_client_script_field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if type(value) is str:
+        return value
+    if type(value) is bool or type(value) is int:
+        return str(value)
+    raise ValueError(CATALOG_CLIENT_SCRIPT_FIELD_NON_JSON_DIAGNOSTIC)
 
 
 def _validate_item_variables(

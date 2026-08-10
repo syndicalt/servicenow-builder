@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RiskInput(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_type: str
     affected_tables: list[str] = Field(default_factory=list)
     target_table: str | None = None

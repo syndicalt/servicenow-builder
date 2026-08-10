@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+
 from jedi_devproject.anthropic_provider import (
     AnthropicHttpResponse,
     AnthropicMessagesProvider,
@@ -13,6 +15,8 @@ from jedi_devproject.openai_provider import OpenAIProviderSettings, OpenAIRespon
 from jedi_devproject.provider_contract import (
     IMPLEMENTATION_SYSTEM_PROMPT,
     implementation_candidate_schema,
+    implementation_payload_json,
+    loads_strict_json_object,
 )
 from jedi_devproject.servicenow import HttpRequest, HttpResponse
 
@@ -81,7 +85,7 @@ def _anthropic_response(text: str) -> AnthropicHttpResponse:
         json_body={
             "content": [{"type": "text", "text": text}],
             "stop_reason": "end_turn",
-            "model": "claude-opus-4-8",
+            "model": "claude-3-opus-20240229",
             "usage": {"input_tokens": 10, "output_tokens": 20},
         },
     )
@@ -120,6 +124,116 @@ def test_both_adapters_send_the_shared_system_prompt() -> None:
     assert anthropic_prompt == IMPLEMENTATION_SYSTEM_PROMPT
     assert openai_prompt == IMPLEMENTATION_SYSTEM_PROMPT
     assert anthropic_prompt == openai_prompt
+
+
+def test_implementation_system_prompt_has_sentence_boundary_before_catalog_guidance() -> None:
+    assert "script.For standard Catalog" not in IMPLEMENTATION_SYSTEM_PROMPT
+    assert "script. For standard Catalog Item builds" in IMPLEMENTATION_SYSTEM_PROMPT
+
+
+def test_implementation_payload_rejects_mapping_subclass_without_leak() -> None:
+    class HostilePayload(dict[str, Any]):
+        def items(self) -> Any:  # pragma: no cover - must not run
+            raise AssertionError("client_secret=prompt-mapping-secret")
+
+    with pytest.raises(ValueError) as exc:
+        implementation_payload_json(
+            HostilePayload({"story": {"number": "STRY0010013"}}),
+            error_factory=ValueError,
+        )
+
+    error = str(exc.value)
+    assert error == "Model provider prompt payload contains unsupported JSON value types"
+    assert "prompt-mapping-secret" not in error
+    assert "client_secret" not in error
+    assert exc.value.__cause__ is None
+
+
+def test_implementation_payload_rejects_key_subclass_without_normalization() -> None:
+    class SneakyKey(str):
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        implementation_payload_json(
+            {"story": {SneakyKey("number"): "STRY0010013"}},
+            error_factory=ValueError,
+        )
+
+    assert str(exc.value) == (
+        "Model provider prompt payload contains unsupported JSON value types"
+    )
+    assert exc.value.__cause__ is None
+
+
+def test_implementation_payload_rejects_list_subclass_without_leak() -> None:
+    class HostileList(list[str]):
+        def __iter__(self) -> Any:  # pragma: no cover - must not run
+            raise AssertionError("client_secret=prompt-list-secret")
+
+    with pytest.raises(ValueError) as exc:
+        implementation_payload_json(
+            {"controls": {"allowed_tables": HostileList(["sys_dictionary"])}},
+            error_factory=ValueError,
+        )
+
+    error = str(exc.value)
+    assert error == "Model provider prompt payload contains unsupported JSON value types"
+    assert "prompt-list-secret" not in error
+    assert "client_secret" not in error
+    assert exc.value.__cause__ is None
+
+
+def test_implementation_payload_rejects_string_subclass_without_normalization() -> None:
+    class SneakyString(str):
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        implementation_payload_json(
+            {"story": {"number": SneakyString("STRY0010013")}},
+            error_factory=ValueError,
+        )
+
+    assert str(exc.value) == (
+        "Model provider prompt payload contains unsupported JSON value types"
+    )
+    assert exc.value.__cause__ is None
+
+
+def test_implementation_payload_rejects_non_finite_number_without_cause() -> None:
+    with pytest.raises(ValueError) as exc:
+        implementation_payload_json(
+            {"story": {"number": "STRY0010013"}, "score": float("nan")},
+            error_factory=ValueError,
+        )
+
+    assert str(exc.value) == "Model provider prompt payload contains non-finite numeric values"
+    assert exc.value.__cause__ is None
+
+
+def test_loads_strict_json_object_invalid_json_does_not_retain_parser_cause() -> None:
+    with pytest.raises(ValueError) as exc:
+        loads_strict_json_object(
+            '{"client_secret":"provider-response-secret"',
+            error_factory=ValueError,
+            invalid_json_message="provider response invalid JSON",
+            non_object_message="provider response must be object",
+        )
+
+    assert str(exc.value) == "provider response invalid JSON"
+    assert exc.value.__cause__ is None
+
+
+def test_loads_strict_json_object_non_finite_json_does_not_retain_parser_cause() -> None:
+    with pytest.raises(ValueError) as exc:
+        loads_strict_json_object(
+            '{"score": NaN, "client_secret": "provider-response-secret"}',
+            error_factory=ValueError,
+            invalid_json_message="provider response invalid JSON",
+            non_object_message="provider response must be object",
+        )
+
+    assert str(exc.value) == "provider response invalid JSON"
+    assert exc.value.__cause__ is None
 
 
 def test_openai_request_schema_is_the_shared_schema_unmodified() -> None:

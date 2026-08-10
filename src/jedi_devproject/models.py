@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DataClassification(StrEnum):
@@ -30,6 +31,8 @@ class CandidateStatus(StrEnum):
 
 
 class Story(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     sys_id: str
     number: str
     short_description: str
@@ -56,6 +59,8 @@ class Story(BaseModel):
 
 
 class ProjectContext(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     name: str
     objectives: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
@@ -74,6 +79,8 @@ class ProjectContext(BaseModel):
 
 
 class ProviderPolicy(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     provider_id: str
     deployment_boundary: str
     authorization_level: str
@@ -92,6 +99,8 @@ class ProviderPolicy(BaseModel):
 
 
 class RetrievalCitation(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     source: str
     content_hash: str
     confidence: float = Field(ge=0, le=1)
@@ -99,6 +108,8 @@ class RetrievalCitation(BaseModel):
 
 
 class CandidateChange(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     table: str
     operation: Literal["insert", "update", "delete"]
     fields: dict[str, Any] = Field(default_factory=dict)
@@ -107,6 +118,8 @@ class CandidateChange(BaseModel):
 
 
 class CandidateScript(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     type: str
     name: str
     content: str
@@ -115,6 +128,8 @@ class CandidateScript(BaseModel):
 
 
 class UpdateSetCandidate(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     story_number: str
     name: str
     eligibility_decision: Literal["eligible", "manual_review", "rejected"]
@@ -156,6 +171,8 @@ class UpdateSetCandidate(BaseModel):
 
 
 class RunManifest(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     run_id: str
     artifact_hashes: list[str] = Field(default_factory=list)
 
@@ -167,6 +184,47 @@ class RunManifest(BaseModel):
         return value
 
 
+def _ensure_artifact_hash_payload_json_safe(value: Any) -> None:
+    if (
+        value is None
+        or type(value) is str
+        or type(value) is bool
+        or type(value) is int
+    ):
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise ValueError("non-finite artifact hash payload value")
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError("non-JSON artifact hash payload key")
+            _ensure_artifact_hash_payload_json_safe(item)
+        return
+    if type(value) is list:
+        for item in value:
+            _ensure_artifact_hash_payload_json_safe(item)
+        return
+    raise TypeError("non-JSON artifact hash payload value")
+
+
 def stable_artifact_hash(value: Any) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    try:
+        _ensure_artifact_hash_payload_json_safe(value)
+    except ValueError:
+        raise ValueError("artifact hash payload contains non-finite numeric values") from None
+    except TypeError:
+        raise ValueError("artifact hash payload contains non-JSON values") from None
+    try:
+        payload = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except ValueError:
+        raise ValueError("artifact hash payload contains non-finite numeric values") from None
+    except TypeError:
+        raise ValueError("artifact hash payload contains non-JSON values") from None
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
