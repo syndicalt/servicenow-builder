@@ -3,6 +3,20 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+_OPERATOR_GUIDE_FILES = (
+    "docs/operator-guide.md",
+    "docs/installation.md",
+    "docs/local-development.md",
+    "docs/runtime-operations.md",
+    "docs/security-hardening.md",
+)
+
+
+def _read_operator_guide() -> str:
+    return "\n".join(
+        Path(path).read_text(encoding="utf-8") for path in _OPERATOR_GUIDE_FILES
+    )
+
 
 def _runtime_environment_variable_names() -> set[str]:
     runtime_config = Path("src/jedi_devproject/runtime_config.py").read_text(
@@ -247,7 +261,7 @@ def test_env_example_documents_compose_postgres_password_without_default() -> No
 
 def test_env_example_uses_neutral_servicenow_instance_placeholders() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "dev205693.service-now.com" not in env_example
     assert "dev205693.service-now.com" not in operator_guide
@@ -444,7 +458,7 @@ def test_compose_defines_postgres_graceful_shutdown_window() -> None:
 
 
 def test_operator_guide_documents_container_runtime() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Container Runtime" in guide
     assert "docker compose up" in guide

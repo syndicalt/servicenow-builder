@@ -1,5 +1,19 @@
 from pathlib import Path
 
+_OPERATOR_GUIDE_FILES = (
+    "docs/operator-guide.md",
+    "docs/installation.md",
+    "docs/local-development.md",
+    "docs/runtime-operations.md",
+    "docs/security-hardening.md",
+)
+
+
+def _read_operator_guide() -> str:
+    return "\n".join(
+        Path(path).read_text(encoding="utf-8") for path in _OPERATOR_GUIDE_FILES
+    )
+
 
 def test_development_guide_documents_one_verify_command() -> None:
     guide = Path("docs/development.md").read_text(encoding="utf-8")
@@ -11,7 +25,7 @@ def test_development_guide_documents_one_verify_command() -> None:
 
 
 def test_operator_guide_documents_plan_writeback_dry_run() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "plan-writeback" in guide
     assert "verify-writeback" in guide
@@ -33,7 +47,7 @@ def test_operator_guide_documents_plan_writeback_dry_run() -> None:
 
 
 def test_operator_guide_documents_implementation_packet_artifact() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "build-implementation-packet" in guide
     assert "--story-number" in guide
@@ -44,7 +58,7 @@ def test_operator_guide_documents_implementation_packet_artifact() -> None:
 
 
 def test_operator_guide_documents_implementation_candidate_artifact() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "build-implementation-candidate" in guide
     assert "--provider-response-file" in guide
@@ -53,7 +67,7 @@ def test_operator_guide_documents_implementation_candidate_artifact() -> None:
 
 
 def test_operator_guide_documents_artifact_handoff_contract() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Artifact Handoff Contract" in guide
     assert "implementation packet" in guide
@@ -84,7 +98,7 @@ def test_operator_guide_documents_artifact_handoff_contract() -> None:
 
 
 def test_operator_guide_documents_external_build_pipeline_contract() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "External Build Pipeline Contract" in guide
     assert "ExternalBuildPipelineResult" in guide
@@ -109,7 +123,7 @@ def test_readme_documents_llm_implementation_packet_architecture() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 
     assert "LLM implementation packet" in readme
-    assert "rules are gates" in readme
+    assert "Rules are gates" in readme
     assert "Now Assist" in readme
     assert "generate_implementation_candidate" in readme
 
@@ -122,7 +136,7 @@ def test_readme_documents_postgres_operational_store() -> None:
 
 
 def test_operator_guide_documents_postgres_operational_store() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Operational Store" in guide
     assert "durable operational state" in guide
@@ -139,7 +153,7 @@ def test_operator_guide_documents_postgres_operational_store() -> None:
 def test_system_architecture_doc_includes_workflow_and_data_flow_diagrams() -> None:
     architecture = Path("docs/system-architecture.md").read_text(encoding="utf-8")
     readme = Path("README.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     security_flow = Path("docs/security/data-flow.md").read_text(encoding="utf-8")
 
     assert "## Runtime Components" in architecture
@@ -167,7 +181,7 @@ def test_system_architecture_doc_includes_workflow_and_data_flow_diagrams() -> N
 
 
 def test_operator_guide_documents_lifecycle_webhook_api() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Lifecycle Webhook API" in guide
     assert "POST /lifecycle/events" in guide
@@ -177,7 +191,7 @@ def test_operator_guide_documents_lifecycle_webhook_api() -> None:
 
 
 def test_operator_guide_documents_authenticated_lifecycle_webhook() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Lifecycle Webhook Authentication" in guide
     assert "JEDI_LIFECYCLE_WEBHOOK_AUTH_MODE" in guide
@@ -191,7 +205,7 @@ def test_operator_guide_documents_authenticated_lifecycle_webhook() -> None:
 
 
 def test_operator_guide_documents_artifact_retrieval_api() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Artifact Retrieval API" in guide
     assert "JEDI_ADMIN_API_TOKEN" in guide
@@ -202,7 +216,7 @@ def test_operator_guide_documents_artifact_retrieval_api() -> None:
 
 
 def test_operator_guide_documents_fulfillment_worker() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Fulfillment Worker" in guide
     assert "process_one_fulfillment_job" in guide
@@ -213,7 +227,7 @@ def test_operator_guide_documents_fulfillment_worker() -> None:
 
 
 def test_operator_guide_documents_runtime_wiring() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Runtime Wiring" in guide
     assert "load_runtime_settings" in guide
@@ -225,7 +239,7 @@ def test_operator_guide_documents_runtime_wiring() -> None:
 
 
 def test_operator_guide_documents_chatgpt_implementation_adapter() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "ChatGPT Implementation Adapter" in guide
     assert "OpenAIResponsesProvider" in guide
@@ -547,7 +561,7 @@ def test_sprint_one_hundred_five_change_log_documents_hmac_cutover() -> None:
 
 
 def test_operator_guide_documents_health_and_readiness_probes() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "GET /health" in guide
     assert "GET /ready" in guide
@@ -558,7 +572,7 @@ def test_operator_guide_documents_health_and_readiness_probes() -> None:
 
 
 def test_operator_guide_documents_surface_investigation_before_model_calls() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "instance_context_bundle" in guide
     assert "Business Rules" in guide
@@ -582,7 +596,7 @@ def test_sprint_one_hundred_six_change_log_documents_surface_investigator() -> N
 
 
 def test_operator_guide_documents_surface_evidence_quality_controls() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "confidence score" in guide
     assert "source table, query, and retrieved record count" in guide
@@ -602,7 +616,7 @@ def test_sprint_one_hundred_seven_change_log_documents_evidence_quality() -> Non
 
 
 def test_operator_guide_documents_production_runtime_secret_posture() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Production Runtime Fail-Closed Checklist" in guide
     assert "validate_runtime_settings()" in guide
@@ -639,7 +653,7 @@ def test_sprint_one_hundred_eight_change_log_documents_secret_posture() -> None:
 
 
 def test_operator_guide_documents_audit_correlation_shape() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Audit Correlation" in guide
     assert "correlation_id" in guide
@@ -659,7 +673,7 @@ def test_sprint_one_hundred_nine_change_log_documents_audit_correlation() -> Non
 
 
 def test_operator_guide_documents_rate_limit_and_payload_bounds() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Rate Limits and Payload Bounds" in guide
     assert "JEDI_LIFECYCLE_WEBHOOK_MAX_BODY_BYTES" in guide
@@ -703,7 +717,7 @@ def test_capability_extension_adr_documents_registry_contract() -> None:
 
 
 def test_operator_guide_documents_capability_extension_model() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Capability Extension Model" in guide
     assert "Capability Extension Contract" in guide
@@ -748,7 +762,7 @@ def test_sprint_one_hundred_eleven_change_log_documents_capability_design() -> N
 
 
 def test_operator_guide_documents_code_surface_analysis_capability() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Code Surface Analysis Capability" in guide
     assert "business_rule_analyze" in guide
@@ -804,7 +818,7 @@ def test_business_rule_generation_profile_adr_documents_mutation_boundary() -> N
 
 
 def test_operator_guide_documents_business_rule_generation_profile_boundary() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Business Rule Generation Capability" in guide
     assert "business_rule_generate" in guide
@@ -839,7 +853,7 @@ def test_production_backlog_moves_business_rule_generation_after_foundation() ->
 
 
 def test_operator_guide_documents_capability_maturity_target() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Capability Maturity Model" in guide
     assert "current_max_story_points" in guide
@@ -872,7 +886,7 @@ def test_production_backlog_documents_maturity_foundation_before_surface_generat
 
 
 def test_operator_guide_documents_enabled_business_rule_generation_boundary() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Business Rule Generation Capability" in guide
     assert "business_rule_generate" in guide
@@ -913,7 +927,7 @@ def test_client_script_generation_profile_adr_documents_mutation_boundary() -> N
 
 
 def test_operator_guide_documents_client_script_generation_profile_design() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Client Script Generation Capability" in guide
     assert "client_script_generate" in guide
@@ -945,7 +959,7 @@ def test_production_backlog_moves_client_script_generation_after_design() -> Non
 
 
 def test_operator_guide_documents_enabled_client_script_generation_boundary() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Client Script Generation Capability" in guide
     assert "client_script_generate" in guide
@@ -982,7 +996,7 @@ def test_script_include_generation_profile_adr_documents_mutation_boundary() -> 
 
 
 def test_operator_guide_documents_script_include_generation_profile_design() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Script Include Generation Capability" in guide
     assert "script_include_generate" in guide
@@ -1013,7 +1027,7 @@ def test_production_backlog_moves_script_include_generation_after_design() -> No
 
 
 def test_operator_guide_documents_enabled_script_include_generation_boundary() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Script Include Generation Capability" in guide
     assert "script_include_generate" in guide
@@ -1060,7 +1074,7 @@ def test_ui_policy_generation_profile_adr_documents_mutation_boundary() -> None:
 
 
 def test_operator_guide_documents_ui_policy_generation_profile_design() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "UI Policy Generation Capability" in guide
     assert "ui_policy_generate" in guide
@@ -1122,7 +1136,7 @@ def test_flow_designer_generation_profile_adr_documents_graph_boundary() -> None
 
 
 def test_operator_guide_documents_flow_designer_generation_profile_design() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Flow Designer Generation Capability" in guide
     assert "flow_modify" in guide
@@ -1146,7 +1160,7 @@ def test_sprint_124_change_log_documents_flow_designer_generation_design() -> No
 
 def test_flow_designer_docs_document_read_only_flow_graph_retrieval() -> None:
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     for text in [adr, guide]:
         assert "flow_graph" in text
@@ -1176,7 +1190,7 @@ def test_sprint_1006_documents_flow_graph_discovery_record_collection_guard() ->
     change_log = Path("docs/sprints/sprint-1006-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph discovery record collection guard" in change_log
     assert "`resolve_fulfillment_flow()`" in change_log
@@ -1199,7 +1213,7 @@ def test_sprint_1006_documents_flow_graph_discovery_record_collection_guard() ->
 
 def test_flow_designer_docs_document_graph_diff_validation_only() -> None:
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     for text in [adr, guide]:
         assert "sys_hub_flow_graph_diff" in text
@@ -1224,7 +1238,7 @@ def test_sprint_126_change_log_documents_flow_graph_diff_contract() -> None:
 
 
 def test_flow_designer_docs_document_builder_preflight_design_only() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1247,7 +1261,7 @@ def test_sprint_127_change_log_documents_flow_builder_design() -> None:
 
 
 def test_flow_designer_docs_document_xml_shape_repository() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1272,7 +1286,7 @@ def test_sprint_128_change_log_documents_flow_xml_shape_repository() -> None:
 
 
 def test_flow_designer_docs_document_xml_shape_evidence_validation() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1295,7 +1309,7 @@ def test_sprint_129_change_log_documents_flow_xml_shape_evidence_validation() ->
 
 
 def test_flow_designer_docs_document_customer_update_strategy() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1318,7 +1332,7 @@ def test_sprint_130_change_log_documents_flow_customer_update_strategy() -> None
 
 
 def test_flow_designer_docs_document_snapshot_update_strategy() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1341,7 +1355,7 @@ def test_sprint_131_change_log_documents_flow_snapshot_update_strategy() -> None
 
 
 def test_flow_designer_docs_document_preview_commit_review_strategy() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1364,7 +1378,7 @@ def test_sprint_132_change_log_documents_flow_preview_commit_review_strategy() -
 
 
 def test_flow_designer_docs_document_builder_readiness_contract() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1387,7 +1401,7 @@ def test_sprint_133_change_log_documents_flow_builder_readiness_contract() -> No
 
 
 def test_flow_designer_docs_document_builder_plan_readiness_wiring() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1410,7 +1424,7 @@ def test_sprint_134_change_log_documents_flow_builder_plan_readiness_wiring() ->
 
 
 def test_flow_designer_docs_document_unsupported_reason_codes() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1432,7 +1446,7 @@ def test_sprint_135_change_log_documents_flow_unsupported_reason_codes() -> None
 
 
 def test_flow_designer_docs_document_unsupported_reason_guidance() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1454,7 +1468,7 @@ def test_sprint_136_change_log_documents_flow_unsupported_reason_guidance() -> N
 
 
 def test_flow_designer_docs_document_preflight_guidance_artifact() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     adr = Path("docs/adr/0011-flow-designer-generation-profile.md").read_text(encoding="utf-8")
 
     for text in [guide, adr]:
@@ -1476,7 +1490,7 @@ def test_sprint_137_change_log_documents_flow_preflight_guidance_artifact() -> N
 
 
 def test_flow_designer_docs_document_preflight_guidance_work_note() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Flow preflight guidance work note" in guide
     assert "Flow preflight guidance artifact" in guide
@@ -2038,7 +2052,7 @@ def test_sprint_fifty_eight_change_log_documents_external_build_contract() -> No
 
 
 def test_operator_guide_documents_lifecycle_event_contract() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Lifecycle Event Contract" in guide
     assert "LifecycleStateChangeEvent" in guide
@@ -2072,7 +2086,7 @@ def test_sprint_fifty_nine_change_log_documents_lifecycle_event_contract() -> No
 
 
 def test_operator_guide_documents_lifecycle_event_processor_cli() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "process-lifecycle-event" in guide
     assert "--event-file" in guide
@@ -2093,7 +2107,7 @@ def test_sprint_sixty_change_log_documents_lifecycle_event_processor() -> None:
 
 
 def test_operator_guide_documents_build_claim_writeback_planner() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Build Claim Writeback" in guide
     assert "plan_story_build_claim_writeback" in guide
@@ -2114,7 +2128,7 @@ def test_sprint_sixty_one_change_log_documents_build_claim_planner() -> None:
 
 
 def test_operator_guide_documents_build_claim_execution_boundary() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "execute_build_claim" in guide
     assert "BuildClaimExecutionRequest" in guide
@@ -2135,7 +2149,7 @@ def test_sprint_sixty_two_change_log_documents_build_claim_execution() -> None:
 
 
 def test_operator_guide_documents_lifecycle_business_rule_bootstrap() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "plan-lifecycle-business-rule" in guide
     assert "Business Rule first" in guide
@@ -2158,7 +2172,7 @@ def test_sprint_sixty_three_change_log_documents_business_rule_bootstrap() -> No
 
 
 def test_operator_guide_documents_lifecycle_rest_message_bootstrap() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Outbound REST Message" in guide
     assert "rest_message" in guide
@@ -2180,7 +2194,7 @@ def test_sprint_sixty_four_change_log_documents_lifecycle_rest_message_bundle() 
 
 
 def test_operator_guide_documents_lifecycle_servicenow_record_plan() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "servicenow_records" in guide
     assert "sys_rest_message" in guide
@@ -2202,7 +2216,7 @@ def test_sprint_sixty_five_change_log_documents_lifecycle_record_plan() -> None:
 
 
 def test_operator_guide_documents_lifecycle_webhook_apply() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "apply-lifecycle-webhook" in guide
     assert "--confirm-records" in guide
@@ -2223,7 +2237,7 @@ def test_sprint_sixty_six_change_log_documents_lifecycle_apply() -> None:
 
 
 def test_operator_guide_documents_lifecycle_webhook_verification() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "verify-lifecycle-webhook" in guide
     assert "read-only" in guide
@@ -2243,7 +2257,7 @@ def test_sprint_sixty_seven_change_log_documents_lifecycle_verification() -> Non
 
 
 def test_operator_guide_documents_cicd_update_set_capability_probe() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "check-cicd-update-set-capability" in guide
     assert "/api/sn_cicd/update_set/create" in guide
@@ -2265,7 +2279,7 @@ def test_sprint_eighty_seven_change_log_documents_cicd_capability_probe() -> Non
 
 
 def test_operator_guide_documents_cicd_update_set_lifecycle_methods() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "retrieve_cicd_update_set()" in guide
     assert "preview_cicd_update_set()" in guide
@@ -2288,7 +2302,7 @@ def test_sprint_eighty_eight_change_log_documents_cicd_lifecycle_methods() -> No
 
 
 def test_operator_guide_documents_update_set_importer_bootstrap() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "plan-update-set-importer" in guide
     assert "apply-update-set-importer" in guide
@@ -2329,7 +2343,7 @@ def test_sprint_eighty_nine_change_log_documents_update_set_importer() -> None:
 
 
 def test_operator_guide_documents_importer_backed_model_handoff() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "posts it to the ServiceNow-side importer `jedi_update_set_import`" in guide
     assert "looks up the retrieved update set by `remote_sys_id`" in guide
@@ -2353,7 +2367,7 @@ def test_sprint_ninety_change_log_documents_importer_backed_handoff() -> None:
 
 
 def test_operator_guide_documents_ready_for_testing_after_handoff() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "discovers the active `Ready for Testing` state choice" in guide
     assert "`u_ai_status=Ready for Testing`" in guide
@@ -2374,7 +2388,7 @@ def test_sprint_ninety_one_change_log_documents_ready_for_testing_handoff() -> N
 
 
 def test_operator_guide_documents_manual_build_and_failure_state_handling() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "`u_ai_status=Human Review Required`" in guide
     assert "does not create a retrieved Update Set" in guide
@@ -2419,7 +2433,7 @@ def test_capability_gate_plan_sequences_instance_discovery_before_build() -> Non
 
 
 def test_operator_guide_documents_capability_based_gate() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "capability-based automation gate" in guide
     assert "table names are metadata" in guide
@@ -2442,7 +2456,7 @@ def test_sprint_one_fifty_three_change_log_documents_form_section_context() -> N
 
 def test_sprint_one_fifty_four_change_log_documents_form_section_gate_hardening() -> None:
     change_log = Path("docs/sprints/sprint-154-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "`Form Section`" in change_log
     assert "`Form Section Removal`" in change_log
@@ -2452,7 +2466,7 @@ def test_sprint_one_fifty_four_change_log_documents_form_section_gate_hardening(
 
 def test_sprint_one_fifty_five_change_log_documents_surface_operation_planner() -> None:
     change_log = Path("docs/sprints/sprint-155-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "`surface_planning`" in change_log
     assert "`form_layout.section.remove`" in change_log
@@ -2463,7 +2477,7 @@ def test_sprint_one_fifty_five_change_log_documents_surface_operation_planner() 
 
 def test_sprint_one_fifty_six_change_log_documents_context_dossier_boundary() -> None:
     change_log = Path("docs/sprints/sprint-156-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "`context_dossier`" in change_log
     assert "`structured_candidate_change_only`" in change_log
@@ -2474,7 +2488,7 @@ def test_sprint_one_fifty_six_change_log_documents_context_dossier_boundary() ->
 
 def test_sprint_one_fifty_seven_change_log_documents_general_rewrite_feedback() -> None:
     change_log = Path("docs/sprints/sprint-157-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "general automation feedback" in change_log
     assert "`suggested_story`" in change_log
@@ -2485,7 +2499,7 @@ def test_sprint_one_fifty_seven_change_log_documents_general_rewrite_feedback() 
 
 def test_sprint_one_fifty_eight_change_log_documents_classifier_gate_control() -> None:
     change_log = Path("docs/sprints/sprint-158-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "`JEDI_CLASSIFIER_GATE=<true|false>`" in change_log
     assert "defaults to `true`" in guide
@@ -2496,7 +2510,7 @@ def test_sprint_one_fifty_eight_change_log_documents_classifier_gate_control() -
 
 def test_sprint_one_fifty_nine_change_log_documents_cmdb_ire_analysis() -> None:
     change_log = Path("docs/sprints/sprint-159-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "`cmdb_ire_analyze`" in change_log
     assert "`cmdb_ire_identification_rules`" in change_log
@@ -2511,7 +2525,7 @@ def test_sprint_one_fifty_nine_change_log_documents_cmdb_ire_analysis() -> None:
 
 def test_sprint_one_sixty_change_log_documents_split_servicenow_runtime() -> None:
     change_log = Path("docs/sprints/sprint-160-change-log.md").read_text(encoding="utf-8")
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
     architecture = Path("docs/system-architecture.md").read_text(encoding="utf-8")
 
     assert "separate story/source and development/target instances" in change_log
@@ -2565,9 +2579,7 @@ def test_sprint_one_forty_one_change_log_documents_parser_hardening() -> None:
     assert "supported-artifact UAT matrix" in change_log
     assert "dictionary `read_only=true` prevents the worker" in change_log
     assert "`current.<field>`" in change_log
-    assert "dictionary-writable by design" in Path("docs/operator-guide.md").read_text(
-        encoding="utf-8"
-    )
+    assert "dictionary-writable by design" in _read_operator_guide()
     assert "Sprint 141: Supported artifact UAT parser hardening" in backlog
 
 
@@ -2671,7 +2683,7 @@ def test_sprint_1007_documents_employee_center_discovery_record_collection_guard
     change_log = Path("docs/sprints/sprint-1007-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Employee Center discovery record collection guard" in change_log
     assert "`_employee_center_topics_surface()`" in change_log
@@ -2716,7 +2728,7 @@ def test_sprint_one_sixty_four_change_log_documents_architecture_hardening() -> 
 
 def test_sprint_one_sixty_five_change_log_documents_runtime_hardening() -> None:
     change_log = Path("docs/sprints/sprint-165-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "JEDI_LIFECYCLE_WEBHOOK_SECRET" in change_log
     assert "JEDI_PUBLIC_WEB_DOC_URLS" in change_log
@@ -2728,7 +2740,7 @@ def test_sprint_one_sixty_five_change_log_documents_runtime_hardening() -> None:
 
 def test_sprint_one_sixty_six_change_log_documents_audit_endpoint_hardening() -> None:
     change_log = Path("docs/sprints/sprint-166-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "GET /jobs/{job_id}/events" in change_log
     assert "correlation_id" in change_log
@@ -2742,7 +2754,7 @@ def test_sprint_one_sixty_six_change_log_documents_audit_endpoint_hardening() ->
 
 def test_sprint_one_sixty_seven_change_log_documents_admin_body_bounds() -> None:
     change_log = Path("docs/sprints/sprint-167-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "JEDI_ADMIN_MAX_BODY_BYTES" in change_log
     assert "admin request payload is too large" in change_log
@@ -2756,7 +2768,7 @@ def test_sprint_one_sixty_seven_change_log_documents_admin_body_bounds() -> None
 
 def test_sprint_one_sixty_eight_change_log_documents_readiness_probe() -> None:
     change_log = Path("docs/sprints/sprint-168-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "GET /ready" in change_log
     assert "operational-store readiness" in change_log
@@ -2768,7 +2780,7 @@ def test_sprint_one_sixty_eight_change_log_documents_readiness_probe() -> None:
 
 
 def test_operator_guide_documents_operational_alert_projection() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "GET /admin/alerts" in guide
     assert "Operational Alerts" in guide
@@ -2781,7 +2793,7 @@ def test_operator_guide_documents_operational_alert_projection() -> None:
 
 def test_sprint_one_sixty_nine_change_log_documents_operational_alerts() -> None:
     change_log = Path("docs/sprints/sprint-169-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "GET /admin/alerts" in change_log
     assert "Operational Alerts" in change_log
@@ -2793,7 +2805,7 @@ def test_sprint_one_sixty_nine_change_log_documents_operational_alerts() -> None
 
 
 def test_operator_guide_documents_stale_running_job_alerts() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "stale running jobs" in guide
     assert "JEDI_RUNNING_JOB_STALE_AFTER_SECONDS" in guide
@@ -2805,7 +2817,7 @@ def test_operator_guide_documents_stale_running_job_alerts() -> None:
 
 def test_sprint_one_seventy_change_log_documents_stale_job_alerts() -> None:
     change_log = Path("docs/sprints/sprint-170-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "JEDI_RUNNING_JOB_STALE_AFTER_SECONDS" in change_log
     assert "stale running jobs" in change_log
@@ -2816,7 +2828,7 @@ def test_sprint_one_seventy_change_log_documents_stale_job_alerts() -> None:
 
 
 def test_operator_guide_documents_worker_side_stale_recovery() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "Worker-side stale recovery is separate and disabled by default" in guide
     assert "requeue_stale_running_jobs()" in guide
@@ -2832,7 +2844,7 @@ def test_operator_guide_documents_worker_side_stale_recovery() -> None:
 
 def test_sprint_one_seventy_one_change_log_documents_stale_recovery() -> None:
     change_log = Path("docs/sprints/sprint-171-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "requeue_stale_running_jobs" in change_log
     assert "FOR UPDATE SKIP LOCKED" in change_log
@@ -2845,7 +2857,7 @@ def test_sprint_one_seventy_one_change_log_documents_stale_recovery() -> None:
 
 def test_sprint_one_seventy_two_change_log_documents_recovery_setting_validation() -> None:
     change_log = Path("docs/sprints/sprint-172-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "JEDI_STALE_JOB_REQUEUE_BATCH_SIZE" in change_log
     assert "JEDI_STALE_JOB_REQUEUE_INTERVAL_SECONDS" in change_log
@@ -2856,7 +2868,7 @@ def test_sprint_one_seventy_two_change_log_documents_recovery_setting_validation
 
 
 def test_operator_guide_documents_external_alert_delivery_posture() -> None:
-    guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    guide = _read_operator_guide()
 
     assert "External Alert Delivery" in guide
     assert "External alert delivery is disabled by default" in guide
@@ -2888,7 +2900,7 @@ def test_operator_guide_documents_external_alert_delivery_posture() -> None:
 
 def test_sprint_one_seventy_three_change_log_documents_alert_delivery_foundation() -> None:
     change_log = Path("docs/sprints/sprint-173-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert_delivery.py" in change_log
     assert "JEDI_ALERT_WEBHOOK_ENABLED" in change_log
@@ -2901,7 +2913,7 @@ def test_sprint_one_seventy_three_change_log_documents_alert_delivery_foundation
 
 def test_sprint_one_seventy_four_change_log_documents_worker_alert_emission() -> None:
     change_log = Path("docs/sprints/sprint-174-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "worker_failure_alert" in change_log
     assert "alert_emitter" in change_log
@@ -2915,7 +2927,7 @@ def test_sprint_one_seventy_four_change_log_documents_worker_alert_emission() ->
 
 def test_sprint_one_seventy_five_change_log_documents_stale_requeue_alerts() -> None:
     change_log = Path("docs/sprints/sprint-175-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "stale_requeue_alert" in change_log
     assert "stale_job_requeue_alert_emitter" in change_log
@@ -2929,7 +2941,7 @@ def test_sprint_one_seventy_five_change_log_documents_stale_requeue_alerts() -> 
 
 def test_sprint_one_seventy_six_change_log_documents_rejected_job_alerts() -> None:
     change_log = Path("docs/sprints/sprint-176-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "rejected_job_alert" in change_log
     assert "rejected_job_notifier" in change_log
@@ -2943,7 +2955,7 @@ def test_sprint_one_seventy_six_change_log_documents_rejected_job_alerts() -> No
 
 def test_sprint_one_seventy_seven_change_log_documents_alert_idempotency_headers() -> None:
     change_log = Path("docs/sprints/sprint-177-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Idempotency-Key" in change_log
     assert "X-JEDI-Alert-ID" in change_log
@@ -2956,7 +2968,7 @@ def test_sprint_one_seventy_seven_change_log_documents_alert_idempotency_headers
 
 def test_sprint_one_seventy_eight_change_log_documents_alert_header_safety() -> None:
     change_log = Path("docs/sprints/sprint-178-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "header injection defense" in change_log
     assert "ASCII control characters" in change_log
@@ -2968,7 +2980,7 @@ def test_sprint_one_seventy_eight_change_log_documents_alert_header_safety() -> 
 
 def test_sprint_one_seventy_nine_change_log_documents_worker_alert_failure_logs() -> None:
     change_log = Path("docs/sprints/sprint-179-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "worker alert failure observability" in change_log
     assert "worker-failure alert delivery" in change_log
@@ -2981,7 +2993,7 @@ def test_sprint_one_seventy_nine_change_log_documents_worker_alert_failure_logs(
 
 def test_sprint_one_eighty_change_log_documents_maintenance_failure_isolation() -> None:
     change_log = Path("docs/sprints/sprint-180-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "worker maintenance failure isolation" in change_log
     assert "prune_failures" in change_log
@@ -2995,7 +3007,7 @@ def test_sprint_one_eighty_change_log_documents_maintenance_failure_isolation() 
 
 def test_sprint_one_eighty_one_change_log_documents_alert_response_redaction() -> None:
     change_log = Path("docs/sprints/sprint-181-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook response diagnostic redaction" in change_log
     assert "recursively redacted" in change_log
@@ -3008,7 +3020,7 @@ def test_sprint_one_eighty_one_change_log_documents_alert_response_redaction() -
 
 def test_sprint_one_eighty_two_change_log_documents_shared_alert_response_redaction() -> None:
     change_log = Path("docs/sprints/sprint-182-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "shared sensitive-key alert response redaction" in change_log
     assert "shared runtime sensitive-key vocabulary" in change_log
@@ -3025,7 +3037,7 @@ def test_sprint_one_eighty_two_change_log_documents_shared_alert_response_redact
 
 def test_sprint_one_eighty_three_change_log_documents_alert_url_credential_rejection() -> None:
     change_log = Path("docs/sprints/sprint-183-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook URL credential rejection" in change_log
     assert "embedded URL credentials" in change_log
@@ -3038,7 +3050,7 @@ def test_sprint_one_eighty_three_change_log_documents_alert_url_credential_rejec
 
 def test_sprint_one_eighty_four_change_log_documents_alert_url_startup_validation() -> None:
     change_log = Path("docs/sprints/sprint-184-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "startup validation for alert webhook URL credentials" in change_log
     assert "JEDI_ALERT_WEBHOOK_URL" in change_log
@@ -3063,7 +3075,7 @@ def test_sprint_one_eighty_five_change_log_documents_shared_alert_url_validator(
 
 def test_sprint_one_eighty_six_change_log_documents_alert_url_sensitive_query_rejection() -> None:
     change_log = Path("docs/sprints/sprint-186-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook URL sensitive-query rejection" in change_log
     assert "SENSITIVE_QUERY_KEYS" in change_log
@@ -3077,7 +3089,7 @@ def test_sprint_one_eighty_six_change_log_documents_alert_url_sensitive_query_re
 
 def test_sprint_one_eighty_seven_change_log_documents_alert_url_fragment_rejection() -> None:
     change_log = Path("docs/sprints/sprint-187-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook URL fragment rejection" in change_log
     assert "validate_alert_webhook_url()" in change_log
@@ -3091,7 +3103,7 @@ def test_sprint_one_eighty_seven_change_log_documents_alert_url_fragment_rejecti
 
 def test_sprint_one_eighty_eight_change_log_documents_servicenow_shared_redaction() -> None:
     change_log = Path("docs/sprints/sprint-188-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow structured redaction vocabulary" in change_log
     assert "servicenow.redact_secrets()" in change_log
@@ -3109,7 +3121,7 @@ def test_sprint_one_eighty_eight_change_log_documents_servicenow_shared_redactio
 
 def test_sprint_one_eighty_nine_change_log_documents_servicenow_string_redaction() -> None:
     change_log = Path("docs/sprints/sprint-189-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "shared diagnostic string redaction for ServiceNow API errors" in change_log
     assert "diagnostic_redaction" in change_log
@@ -3124,7 +3136,7 @@ def test_sprint_one_eighty_nine_change_log_documents_servicenow_string_redaction
 
 def test_sprint_one_ninety_change_log_documents_sanitized_body_bytes_redaction() -> None:
     change_log = Path("docs/sprints/sprint-190-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "sanitized ServiceNow request body byte redaction" in change_log
     assert "HttpRequest.sanitized()" in change_log
@@ -3139,7 +3151,7 @@ def test_sprint_one_ninety_change_log_documents_sanitized_body_bytes_redaction()
 
 def test_sprint_one_ninety_one_change_log_documents_sanitized_url_redaction() -> None:
     change_log = Path("docs/sprints/sprint-191-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "sanitized ServiceNow request URL redaction" in change_log
     assert "HttpRequest.sanitized()" in change_log
@@ -3154,7 +3166,7 @@ def test_sprint_one_ninety_one_change_log_documents_sanitized_url_redaction() ->
 
 def test_sprint_one_ninety_two_change_log_documents_authorization_scheme_redaction() -> None:
     change_log = Path("docs/sprints/sprint-192-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "authorization scheme diagnostic redaction" in change_log
     assert "Authorization: Bearer <token>" in change_log
@@ -3168,7 +3180,7 @@ def test_sprint_one_ninety_two_change_log_documents_authorization_scheme_redacti
 
 def test_sprint_one_ninety_three_change_log_documents_malformed_url_redaction() -> None:
     change_log = Path("docs/sprints/sprint-193-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "malformed diagnostic URL fail-closed redaction" in change_log
     assert "quote-wrapped sensitive assignments" in change_log
@@ -3182,7 +3194,7 @@ def test_sprint_one_ninety_three_change_log_documents_malformed_url_redaction() 
 
 def test_sprint_one_ninety_four_change_log_documents_all_userinfo_url_redaction() -> None:
     change_log = Path("docs/sprints/sprint-194-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "all-userinfo diagnostic URL redaction" in change_log
     assert "entire URL userinfo component" in change_log
@@ -3196,7 +3208,7 @@ def test_sprint_one_ninety_four_change_log_documents_all_userinfo_url_redaction(
 
 def test_sprint_one_ninety_five_change_log_documents_encoded_query_key_redaction() -> None:
     change_log = Path("docs/sprints/sprint-195-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "encoded sensitive query-key diagnostic redaction" in change_log
     assert "decode query key names" in change_log
@@ -3210,7 +3222,7 @@ def test_sprint_one_ninety_five_change_log_documents_encoded_query_key_redaction
 
 def test_sprint_one_ninety_six_change_log_documents_semicolon_query_redaction() -> None:
     change_log = Path("docs/sprints/sprint-196-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "semicolon-separated sensitive query redaction" in change_log
     assert "`&` and `;` query separators" in change_log
@@ -3224,7 +3236,7 @@ def test_sprint_one_ninety_six_change_log_documents_semicolon_query_redaction() 
 
 def test_sprint_one_ninety_seven_change_log_documents_hyphenated_sensitive_keys() -> None:
     change_log = Path("docs/sprints/sprint-197-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "hyphenated sensitive-key redaction" in change_log
     assert "shared sensitive-key normalization helper" in change_log
@@ -3238,7 +3250,7 @@ def test_sprint_one_ninety_seven_change_log_documents_hyphenated_sensitive_keys(
 
 def test_sprint_one_ninety_eight_change_log_documents_quote_aware_assignments() -> None:
     change_log = Path("docs/sprints/sprint-198-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "quote-aware sensitive assignment redaction" in change_log
     assert "quoted with embedded spaces" in change_log
@@ -3250,7 +3262,7 @@ def test_sprint_one_ninety_eight_change_log_documents_quote_aware_assignments() 
 
 def test_sprint_one_ninety_nine_change_log_documents_x_prefixed_sensitive_keys() -> None:
     change_log = Path("docs/sprints/sprint-199-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "vendor-style `x-*` sensitive-key redaction" in change_log
     assert "`x-api-key` and `x-client-secret`" in change_log
@@ -3263,7 +3275,7 @@ def test_sprint_one_ninety_nine_change_log_documents_x_prefixed_sensitive_keys()
 
 def test_sprint_two_hundred_change_log_documents_camel_case_sensitive_keys() -> None:
     change_log = Path("docs/sprints/sprint-200-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "camelCase sensitive-key redaction aliases" in change_log
     assert "`clientSecret=value` and `accessToken=value`" in change_log
@@ -3276,7 +3288,7 @@ def test_sprint_two_hundred_change_log_documents_camel_case_sensitive_keys() -> 
 
 def test_sprint_two_hundred_one_change_log_documents_cookie_redaction() -> None:
     change_log = Path("docs/sprints/sprint-201-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "cookie and Set-Cookie redaction" in change_log
     assert "`Cookie:` and `Set-Cookie:`" in change_log
@@ -3290,7 +3302,7 @@ def test_sprint_two_hundred_one_change_log_documents_cookie_redaction() -> None:
 
 def test_sprint_two_hundred_two_change_log_documents_private_key_redaction() -> None:
     change_log = Path("docs/sprints/sprint-202-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "PEM and private-key redaction" in change_log
     assert "multiline PEM private-key blocks" in change_log
@@ -3303,7 +3315,7 @@ def test_sprint_two_hundred_two_change_log_documents_private_key_redaction() -> 
 
 def test_sprint_two_hundred_three_change_log_documents_cloud_credential_redaction() -> None:
     change_log = Path("docs/sprints/sprint-203-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "cloud credential redaction aliases" in change_log
     assert "`aws_secret_access_key`, `awsSessionToken`, and `azureClientSecret`" in change_log
@@ -3316,7 +3328,7 @@ def test_sprint_two_hundred_three_change_log_documents_cloud_credential_redactio
 
 def test_sprint_two_hundred_four_change_log_documents_alert_webhook_ssrf_guard() -> None:
     change_log = Path("docs/sprints/sprint-204-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook local-target SSRF guard" in change_log
     assert "`localhost`" in change_log
@@ -3330,7 +3342,7 @@ def test_sprint_two_hundred_four_change_log_documents_alert_webhook_ssrf_guard()
 
 def test_sprint_two_hundred_five_change_log_documents_localhost_subdomain_guard() -> None:
     change_log = Path("docs/sprints/sprint-205-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "delegated `.localhost` alert webhook target guard" in change_log
     assert "`alerts.localhost`" in change_log
@@ -3342,7 +3354,7 @@ def test_sprint_two_hundred_five_change_log_documents_localhost_subdomain_guard(
 
 def test_sprint_two_hundred_six_change_log_documents_unspecified_webhook_address_guard() -> None:
     change_log = Path("docs/sprints/sprint-206-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "unspecified alert webhook address guard" in change_log
     assert "`0.0.0.0`" in change_log
@@ -3355,7 +3367,7 @@ def test_sprint_two_hundred_six_change_log_documents_unspecified_webhook_address
 
 def test_sprint_two_hundred_seven_change_log_documents_webhook_control_character_guard() -> None:
     change_log = Path("docs/sprints/sprint-207-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook URL whitespace/control-character guard" in change_log
     assert "raw newline/control characters" in change_log
@@ -3368,7 +3380,7 @@ def test_sprint_two_hundred_seven_change_log_documents_webhook_control_character
 
 def test_sprint_two_hundred_eight_change_log_documents_webhook_encoded_control_guard() -> None:
     change_log = Path("docs/sprints/sprint-208-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook URL encoded-control-character guard" in change_log
     assert "percent-encoded CR/LF" in change_log
@@ -3382,7 +3394,7 @@ def test_sprint_two_hundred_eight_change_log_documents_webhook_encoded_control_g
 
 def test_sprint_two_hundred_nine_change_log_documents_legacy_numeric_ipv4_guard() -> None:
     change_log = Path("docs/sprints/sprint-209-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook legacy numeric IPv4 SSRF guard" in change_log
     assert "`127.1`" in change_log
@@ -3399,7 +3411,7 @@ def test_sprint_two_hundred_nine_change_log_documents_legacy_numeric_ipv4_guard(
 
 def test_sprint_two_hundred_ten_change_log_documents_semicolon_query_guard() -> None:
     change_log = Path("docs/sprints/sprint-210-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook semicolon query separator sensitive-key guard" in change_log
     assert "team=platform;token=secret" in change_log
@@ -3413,7 +3425,7 @@ def test_sprint_two_hundred_ten_change_log_documents_semicolon_query_guard() -> 
 
 def test_sprint_two_hundred_eleven_change_log_documents_encoded_query_separator_guard() -> None:
     change_log = Path("docs/sprints/sprint-211-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook encoded query separator sensitive-key guard" in change_log
     assert "team=platform%26token=secret" in change_log
@@ -3428,7 +3440,7 @@ def test_sprint_two_hundred_eleven_change_log_documents_encoded_query_separator_
 
 def test_sprint_two_hundred_twelve_documents_double_encoded_query_separator_guard() -> None:
     change_log = Path("docs/sprints/sprint-212-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook double-encoded query separator sensitive-key guard" in change_log
     assert "team=platform%2526token=secret" in change_log
@@ -3444,7 +3456,7 @@ def test_sprint_two_hundred_twelve_documents_double_encoded_query_separator_guar
 
 def test_sprint_two_hundred_thirteen_change_log_documents_unicode_dot_host_guard() -> None:
     change_log = Path("docs/sprints/sprint-213-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "alert webhook Unicode-dot local-target guard" in change_log
     assert "localhost。" in change_log
@@ -3459,7 +3471,7 @@ def test_sprint_two_hundred_thirteen_change_log_documents_unicode_dot_host_guard
 
 def test_sprint_two_hundred_fourteen_change_log_documents_public_web_url_guard() -> None:
     change_log = Path("docs/sprints/sprint-214-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "public documentation outbound URL guard" in change_log
     assert "https://doc-user:doc-secret@docs.servicenow.com/docs" in change_log
@@ -3477,7 +3489,7 @@ def test_sprint_two_hundred_fourteen_change_log_documents_public_web_url_guard()
 
 def test_sprint_two_hundred_fifteen_change_log_documents_public_doc_url_content_guard() -> None:
     change_log = Path("docs/sprints/sprint-215-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "public documentation URL content guard" in change_log
     assert "token=doc-secret" in change_log
@@ -3495,7 +3507,7 @@ def test_sprint_two_hundred_fifteen_change_log_documents_public_doc_url_content_
 
 def test_sprint_two_hundred_sixteen_documents_public_doc_private_host_guard() -> None:
     change_log = Path("docs/sprints/sprint-216-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "public documentation private-host startup guard" in change_log
     assert "`127.0.0.1`" in change_log
@@ -3514,7 +3526,7 @@ def test_sprint_two_hundred_sixteen_documents_public_doc_private_host_guard() ->
 
 def test_sprint_two_hundred_seventeen_documents_admin_console_rate_limit() -> None:
     change_log = Path("docs/sprints/sprint-217-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "admin console rate-limit coverage" in change_log
     assert "repeated `/admin` HTML console requests" in change_log
@@ -3530,7 +3542,7 @@ def test_sprint_two_hundred_seventeen_documents_admin_console_rate_limit() -> No
 
 def test_sprint_two_hundred_eighteen_documents_admin_artifact_payload_redaction() -> None:
     change_log = Path("docs/sprints/sprint-218-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "admin artifact payload redaction" in change_log
     assert "URL passwords" in change_log
@@ -3547,7 +3559,7 @@ def test_sprint_two_hundred_eighteen_documents_admin_artifact_payload_redaction(
 
 def test_sprint_two_hundred_nineteen_documents_artifact_reference_path_redaction() -> None:
     change_log = Path("docs/sprints/sprint-219-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "admin artifact reference path redaction" in change_log
     assert "`GET /jobs/{job_id}/artifacts`" in change_log
@@ -3563,7 +3575,7 @@ def test_sprint_two_hundred_nineteen_documents_artifact_reference_path_redaction
 
 def test_sprint_two_hundred_twenty_documents_admin_response_headers() -> None:
     change_log = Path("docs/sprints/sprint-220-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "admin diagnostic response headers" in change_log
     assert "`Cache-Control: no-store`" in change_log
@@ -3581,7 +3593,7 @@ def test_sprint_two_hundred_twenty_documents_admin_response_headers() -> None:
 
 def test_sprint_two_hundred_twenty_one_documents_html_admin_browser_isolation() -> None:
     change_log = Path("docs/sprints/sprint-221-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "HTML admin console browser isolation headers" in change_log
     assert "`Content-Security-Policy`" in change_log
@@ -3598,7 +3610,7 @@ def test_sprint_two_hundred_twenty_one_documents_html_admin_browser_isolation() 
 
 def test_sprint_two_hundred_twenty_two_documents_strict_transport_security() -> None:
     change_log = Path("docs/sprints/sprint-222-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "explicit Strict Transport Security response policy" in change_log
     assert "`JEDI_STRICT_TRANSPORT_SECURITY_ENABLED`" in change_log
@@ -3614,7 +3626,7 @@ def test_sprint_two_hundred_twenty_two_documents_strict_transport_security() -> 
 
 def test_sprint_two_hundred_twenty_three_documents_admin_vary_authorization() -> None:
     change_log = Path("docs/sprints/sprint-223-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "authenticated admin diagnostic cache variation" in change_log
     assert "`/admin/jobs` return `Vary: Authorization`" in change_log
@@ -3631,7 +3643,7 @@ def test_sprint_two_hundred_twenty_three_documents_admin_vary_authorization() ->
 
 def test_sprint_two_hundred_twenty_four_documents_admin_auth_failure_cache_controls() -> None:
     change_log = Path("docs/sprints/sprint-224-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "failed admin authentication cache controls" in change_log
     assert "failed Bearer-token admin API authentication" in change_log
@@ -3646,7 +3658,7 @@ def test_sprint_two_hundred_twenty_four_documents_admin_auth_failure_cache_contr
 
 def test_sprint_two_hundred_twenty_five_documents_admin_robot_indexing_controls() -> None:
     change_log = Path("docs/sprints/sprint-225-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "admin diagnostic indexing controls" in change_log
     assert "`/admin/jobs` return `X-Robots-Tag: noindex, nofollow, noarchive`" in (change_log)
@@ -3661,7 +3673,7 @@ def test_sprint_two_hundred_twenty_five_documents_admin_robot_indexing_controls(
 
 def test_sprint_two_hundred_twenty_six_documents_html_admin_permissions_policy() -> None:
     change_log = Path("docs/sprints/sprint-226-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "HTML admin console Permissions Policy" in change_log
     assert "`Permissions-Policy` disabling camera" in change_log
@@ -3681,7 +3693,7 @@ def test_sprint_two_hundred_twenty_six_documents_html_admin_permissions_policy()
 
 def test_sprint_two_hundred_twenty_seven_documents_runtime_request_id() -> None:
     change_log = Path("docs/sprints/sprint-227-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "bounded runtime request-id propagation" in change_log
     assert "runtime responses generate `X-JEDI-Request-ID`" in change_log
@@ -3697,7 +3709,7 @@ def test_sprint_two_hundred_twenty_seven_documents_runtime_request_id() -> None:
 
 def test_sprint_two_hundred_twenty_eight_documents_basic_auth_decode_bound() -> None:
     change_log = Path("docs/sprints/sprint-228-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "bounded Basic auth credential decoding" in change_log
     assert "rejected before base64 decoding" in change_log
@@ -3712,7 +3724,7 @@ def test_sprint_two_hundred_twenty_eight_documents_basic_auth_decode_bound() -> 
 
 def test_sprint_two_hundred_twenty_nine_documents_bearer_token_compare_bound() -> None:
     change_log = Path("docs/sprints/sprint-229-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "bounded Bearer admin token comparison" in change_log
     assert "rejected before `secrets.compare_digest()` is called" in change_log
@@ -3727,7 +3739,7 @@ def test_sprint_two_hundred_twenty_nine_documents_bearer_token_compare_bound() -
 
 def test_sprint_two_hundred_thirty_documents_admin_job_id_bounds() -> None:
     change_log = Path("docs/sprints/sprint-230-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "bounded admin job diagnostic identifiers" in change_log
     assert "rejected before operational-store lookup" in change_log
@@ -3742,7 +3754,7 @@ def test_sprint_two_hundred_thirty_documents_admin_job_id_bounds() -> None:
 
 def test_sprint_two_hundred_thirty_one_documents_admin_api_token_strength() -> None:
     change_log = Path("docs/sprints/sprint-231-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "configured admin API token startup strength" in change_log
     assert "`JEDI_ADMIN_API_TOKEN` shorter than 32 characters" in change_log
@@ -3760,7 +3772,7 @@ def test_sprint_two_hundred_thirty_one_documents_admin_api_token_strength() -> N
 
 def test_sprint_two_hundred_thirty_two_documents_admin_api_token_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-232-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "admin API token character hygiene" in change_log
     assert "`JEDI_ADMIN_API_TOKEN` values containing control characters" in change_log
@@ -3776,7 +3788,7 @@ def test_sprint_two_hundred_thirty_two_documents_admin_api_token_hygiene() -> No
 
 def test_sprint_two_hundred_thirty_three_documents_webhook_secret_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-233-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "HMAC lifecycle webhook secret character hygiene" in change_log
     assert "`JEDI_LIFECYCLE_WEBHOOK_SECRET` values containing control characters" in (change_log)
@@ -3794,7 +3806,7 @@ def test_sprint_two_hundred_thirty_three_documents_webhook_secret_hygiene() -> N
 
 def test_sprint_two_hundred_thirty_four_documents_openai_key_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-234-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI provider credential character hygiene" in change_log
     assert "`OPENAI_API_KEY` values containing control characters" in change_log
@@ -3815,7 +3827,7 @@ def test_sprint_two_hundred_thirty_four_documents_openai_key_hygiene() -> None:
 
 def test_sprint_two_hundred_thirty_five_documents_openai_model_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-235-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI model identifier character hygiene" in change_log
     assert "`OPENAI_MODEL` values containing control characters" in change_log
@@ -3833,7 +3845,7 @@ def test_sprint_two_hundred_thirty_five_documents_openai_model_hygiene() -> None
 
 def test_sprint_two_hundred_thirty_six_documents_servicenow_url_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-236-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow instance URL transport hygiene" in change_log
     assert "non-HTTPS `SERVICENOW_DEV_INSTANCE_URL` values" in change_log
@@ -3851,7 +3863,7 @@ def test_sprint_two_hundred_thirty_six_documents_servicenow_url_hygiene() -> Non
 
 def test_sprint_two_hundred_thirty_seven_documents_servicenow_oauth_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-237-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth credential character hygiene" in change_log
     assert "`SERVICENOW_DEV_CLIENT_SECRET` values containing control characters" in (change_log)
@@ -3869,7 +3881,7 @@ def test_sprint_two_hundred_thirty_seven_documents_servicenow_oauth_hygiene() ->
 
 def test_sprint_two_hundred_thirty_eight_documents_database_url_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-238-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "PostgreSQL operational store URL enforcement" in change_log
     assert "non-PostgreSQL `DATABASE_URL` values" in change_log
@@ -3887,7 +3899,7 @@ def test_sprint_two_hundred_thirty_eight_documents_database_url_hygiene() -> Non
 
 def test_sprint_two_hundred_thirty_nine_documents_database_url_fragments() -> None:
     change_log = Path("docs/sprints/sprint-239-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "PostgreSQL operational store URL fragment hygiene" in change_log
     assert "URL fragments" in change_log
@@ -3902,7 +3914,7 @@ def test_sprint_two_hundred_thirty_nine_documents_database_url_fragments() -> No
 
 def test_sprint_two_hundred_forty_documents_classifier_gate_production_guard() -> None:
     change_log = Path("docs/sprints/sprint-240-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Classifier gate production guard" in change_log
     assert "`JEDI_CLASSIFIER_GATE=false`" in change_log
@@ -3915,7 +3927,7 @@ def test_sprint_two_hundred_forty_documents_classifier_gate_production_guard() -
 
 def test_sprint_two_hundred_forty_one_documents_update_set_user_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-241-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Legacy Update Set operator identity hygiene" in change_log
     assert "`JEDI_UPDATE_SET_USER_NAME`" in change_log
@@ -3928,7 +3940,7 @@ def test_sprint_two_hundred_forty_one_documents_update_set_user_hygiene() -> Non
 
 def test_sprint_two_hundred_forty_two_documents_build_claim_state_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-242-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Build claim state value hygiene" in change_log
     assert "`JEDI_BUILD_CLAIM_FROM_STATE`" in change_log
@@ -3943,7 +3955,7 @@ def test_sprint_two_hundred_forty_two_documents_build_claim_state_hygiene() -> N
 
 def test_sprint_two_hundred_forty_three_documents_worker_id_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-243-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker identity audit hygiene" in change_log
     assert "`JEDI_WORKER_ID`" in change_log
@@ -3959,7 +3971,7 @@ def test_sprint_two_hundred_forty_three_documents_worker_id_hygiene() -> None:
 
 def test_sprint_two_hundred_forty_four_documents_public_web_allowlist_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-244-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public web allowlist domain hygiene" in change_log
     assert "`JEDI_PUBLIC_WEB_ALLOWED_DOMAINS`" in change_log
@@ -3971,7 +3983,7 @@ def test_sprint_two_hundred_forty_four_documents_public_web_allowlist_hygiene() 
 
 def test_sprint_two_hundred_forty_five_documents_audit_root_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-245-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Audit root path hygiene" in change_log
     assert "`JEDI_AUDIT_ROOT`" in change_log
@@ -3985,7 +3997,7 @@ def test_sprint_two_hundred_forty_five_documents_audit_root_hygiene() -> None:
 
 def test_sprint_two_hundred_forty_six_documents_retention_interval_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-246-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retention prune interval hygiene" in change_log
     assert "`JEDI_RETENTION_PRUNE_INTERVAL_SECONDS`" in change_log
@@ -3998,7 +4010,7 @@ def test_sprint_two_hundred_forty_six_documents_retention_interval_hygiene() -> 
 
 def test_sprint_two_hundred_forty_seven_documents_worker_idle_sleep_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-247-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker idle sleep loop hygiene" in change_log
     assert "`JEDI_WORKER_IDLE_SLEEP_SECONDS=0`" in change_log
@@ -4014,7 +4026,7 @@ def test_sprint_two_hundred_forty_seven_documents_worker_idle_sleep_hygiene() ->
 
 def test_sprint_two_hundred_forty_eight_documents_worker_max_iteration_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-248-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker max iteration hygiene" in change_log
     assert "`JEDI_WORKER_MAX_ITERATIONS=0`" in change_log
@@ -4033,7 +4045,7 @@ def test_sprint_two_hundred_forty_eight_documents_worker_max_iteration_hygiene()
 
 def test_sprint_two_hundred_forty_nine_documents_public_web_worker_limit_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-249-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public web worker limit hygiene" in change_log
     assert "`JEDI_PUBLIC_WEB_ACCESS=worker`" in change_log
@@ -4056,7 +4068,7 @@ def test_sprint_two_hundred_forty_nine_documents_public_web_worker_limit_hygiene
 
 def test_sprint_two_hundred_fifty_documents_runtime_boolean_parsing_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-250-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime boolean parsing hygiene" in change_log
     assert "`JEDI_BUILD_CLAIM_APPLY`" in change_log
@@ -4079,7 +4091,7 @@ def test_sprint_two_hundred_fifty_documents_runtime_boolean_parsing_hygiene() ->
 
 def test_sprint_two_hundred_fifty_one_documents_worker_boolean_parsing_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-251-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker boolean parsing hygiene" in change_log
     assert "`JEDI_WORKER_STOP_ON_FAILURE`" in change_log
@@ -4101,7 +4113,7 @@ def test_sprint_two_hundred_fifty_one_documents_worker_boolean_parsing_hygiene()
 
 def test_sprint_two_hundred_fifty_two_documents_runtime_numeric_parsing_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-252-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime numeric parsing hygiene" in change_log
     assert "malformed integer values" in change_log
@@ -4123,7 +4135,7 @@ def test_sprint_two_hundred_fifty_two_documents_runtime_numeric_parsing_hygiene(
 
 def test_sprint_two_hundred_fifty_three_documents_worker_numeric_parsing_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-253-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker numeric parsing hygiene" in change_log
     assert "`JEDI_WORKER_MAX_ITERATIONS`" in change_log
@@ -4150,7 +4162,7 @@ def test_sprint_two_hundred_fifty_three_documents_worker_numeric_parsing_hygiene
 
 def test_sprint_two_hundred_fifty_four_documents_runtime_enum_parsing_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-254-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime enum parsing hygiene" in change_log
     assert "`JEDI_ADMIN_AUTH_MODE`" in change_log
@@ -4169,7 +4181,7 @@ def test_sprint_two_hundred_fifty_four_documents_runtime_enum_parsing_hygiene() 
 
 def test_sprint_two_hundred_fifty_five_documents_runtime_environment_mode_guard() -> None:
     change_log = Path("docs/sprints/sprint-255-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Environment Mode Guard" in change_log
     assert "`JEDI_ENVIRONMENT`" in change_log
@@ -4189,7 +4201,7 @@ def test_sprint_two_hundred_fifty_five_documents_runtime_environment_mode_guard(
 
 def test_sprint_two_hundred_fifty_six_documents_non_finite_float_settings_guard() -> None:
     change_log = Path("docs/sprints/sprint-256-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Non-Finite Float Settings Guard" in change_log
     assert "`nan`, `inf`, and `-inf`" in change_log
@@ -4210,7 +4222,7 @@ def test_sprint_two_hundred_fifty_six_documents_non_finite_float_settings_guard(
 
 def test_sprint_two_hundred_fifty_seven_documents_public_web_csv_padding_guard() -> None:
     change_log = Path("docs/sprints/sprint-257-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public Web CSV Padding Guard" in change_log
     assert "`JEDI_PUBLIC_WEB_ALLOWED_DOMAINS`" in change_log
@@ -4230,7 +4242,7 @@ def test_sprint_two_hundred_fifty_seven_documents_public_web_csv_padding_guard()
 
 def test_sprint_two_hundred_fifty_eight_documents_servicenow_http_error_bounds() -> None:
     change_log = Path("docs/sprints/sprint-258-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP Error Diagnostic Bounds" in change_log
     assert "large non-JSON HTTP error bodies" in change_log
@@ -4249,7 +4261,7 @@ def test_sprint_two_hundred_fifty_eight_documents_servicenow_http_error_bounds()
 
 def test_sprint_two_hundred_fifty_nine_documents_servicenow_success_body_bound() -> None:
     change_log = Path("docs/sprints/sprint-259-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Successful Response Body Bound" in change_log
     assert "large upstream success payloads" in change_log
@@ -4269,7 +4281,7 @@ def test_sprint_two_hundred_fifty_nine_documents_servicenow_success_body_bound()
 
 def test_sprint_two_hundred_sixty_documents_servicenow_http_error_body_read_bound() -> None:
     change_log = Path("docs/sprints/sprint-260-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP Error Body Read Bound" in change_log
     assert "10 MiB plus one sentinel byte cap" in change_log
@@ -4291,7 +4303,7 @@ def test_sprint_two_hundred_sixty_documents_servicenow_http_error_body_read_boun
 
 def test_sprint_two_hundred_sixty_one_documents_lifecycle_streaming_body_bound() -> None:
     change_log = Path("docs/sprints/sprint-261-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle Webhook Streaming Body Bound" in change_log
     assert "bounded streaming helper instead of `request.body()`" in change_log
@@ -4313,7 +4325,7 @@ def test_sprint_two_hundred_sixty_one_documents_lifecycle_streaming_body_bound()
 
 def test_sprint_two_hundred_sixty_two_documents_admin_streaming_body_bound() -> None:
     change_log = Path("docs/sprints/sprint-262-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin Diagnostic Streaming Body Bound" in change_log
     assert "actual streamed request body" in change_log
@@ -4336,7 +4348,7 @@ def test_sprint_two_hundred_sixty_two_documents_admin_streaming_body_bound() -> 
 
 def test_sprint_two_hundred_sixty_three_documents_attachment_upload_size_guard() -> None:
     change_log = Path("docs/sprints/sprint-263-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Attachment Upload Size Guard" in change_log
     assert "10 MiB file-size cap" in change_log
@@ -4361,7 +4373,7 @@ def test_sprint_two_hundred_sixty_three_documents_attachment_upload_size_guard()
 
 def test_sprint_two_hundred_sixty_four_documents_delivery_handoff_streaming_hashes() -> None:
     change_log = Path("docs/sprints/sprint-264-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Delivery Handoff Streaming Hashes" in change_log
     assert "streams files in bounded chunks" in change_log
@@ -4386,7 +4398,7 @@ def test_sprint_two_hundred_sixty_four_documents_delivery_handoff_streaming_hash
 
 def test_sprint_two_hundred_sixty_five_documents_xml_validation() -> None:
     change_log = Path("docs/sprints/sprint-265-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Reviewed Update Set XML Bounded Validation" in change_log
     assert "bounded binary scans instead of `Path.read_text()`" in change_log
@@ -4409,7 +4421,7 @@ def test_sprint_two_hundred_sixty_five_documents_xml_validation() -> None:
 
 def test_sprint_two_hundred_sixty_six_documents_shared_streaming_hashes() -> None:
     change_log = Path("docs/sprints/sprint-266-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shared Streaming Artifact Hashes" in change_log
     assert "shared artifact SHA-256 helper" in change_log
@@ -4435,7 +4447,7 @@ def test_sprint_two_hundred_sixty_six_documents_shared_streaming_hashes() -> Non
 
 def test_sprint_two_hundred_sixty_seven_documents_bounded_cli_json_input() -> None:
     change_log = Path("docs/sprints/sprint-267-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded CLI JSON Input" in change_log
     assert "shared CLI JSON input limit of 10 MiB" in change_log
@@ -4461,7 +4473,7 @@ def test_sprint_two_hundred_sixty_seven_documents_bounded_cli_json_input() -> No
 
 def test_sprint_two_hundred_sixty_eight_documents_bounded_env_file_input() -> None:
     change_log = Path("docs/sprints/sprint-268-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded Env File Input" in change_log
     assert "shared `.env` input limit of 1 MiB" in change_log
@@ -4487,7 +4499,7 @@ def test_sprint_two_hundred_sixty_eight_documents_bounded_env_file_input() -> No
 
 def test_sprint_two_hundred_sixty_nine_documents_bounded_project_config_toml() -> None:
     change_log = Path("docs/sprints/sprint-269-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded Project Config TOML Input" in change_log
     assert "1 MiB project config TOML input cap" in change_log
@@ -4513,7 +4525,7 @@ def test_sprint_two_hundred_sixty_nine_documents_bounded_project_config_toml() -
 
 def test_sprint_two_hundred_seventy_documents_openai_diagnostic_bounds() -> None:
     change_log = Path("docs/sprints/sprint-270-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI Provider Diagnostic Redaction Bounds" in change_log
     assert "shared diagnostic redactor" in change_log
@@ -4539,7 +4551,7 @@ def test_sprint_two_hundred_seventy_documents_openai_diagnostic_bounds() -> None
 
 def test_sprint_two_hundred_seventy_one_documents_anthropic_diagnostic_bounds() -> None:
     change_log = Path("docs/sprints/sprint-271-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic Provider Diagnostic Redaction Bounds" in change_log
     assert "shared diagnostic redactor" in change_log
@@ -4567,7 +4579,7 @@ def test_sprint_two_hundred_seventy_one_documents_anthropic_diagnostic_bounds() 
 
 def test_sprint_two_hundred_seventy_two_documents_anthropic_request_id_safety() -> None:
     change_log = Path("docs/sprints/sprint-272-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic Request ID Diagnostic Sanitization" in change_log
     assert "untrusted diagnostic data" in change_log
@@ -4592,7 +4604,7 @@ def test_sprint_two_hundred_seventy_two_documents_anthropic_request_id_safety() 
 
 def test_sprint_two_hundred_seventy_three_documents_anthropic_stop_reason_safety() -> None:
     change_log = Path("docs/sprints/sprint-273-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic Stop Reason Diagnostic Sanitization" in change_log
     assert "untrusted successful-response metadata" in change_log
@@ -4618,7 +4630,7 @@ def test_sprint_two_hundred_seventy_three_documents_anthropic_stop_reason_safety
 
 def test_sprint_two_hundred_seventy_four_documents_anthropic_retry_count_bound() -> None:
     change_log = Path("docs/sprints/sprint-274-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic Retry Count Bound" in change_log
     assert "bounded at construction time" in change_log
@@ -4644,7 +4656,7 @@ def test_sprint_two_hundred_seventy_four_documents_anthropic_retry_count_bound()
 
 def test_sprint_two_hundred_seventy_five_documents_provider_base_url_guard() -> None:
     change_log = Path("docs/sprints/sprint-275-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Base URL Control Character Guard" in change_log
     assert "OpenAI provider settings now reject `base_url` values" in change_log
@@ -4678,7 +4690,7 @@ def test_sprint_two_hundred_seventy_five_documents_provider_base_url_guard() -> 
 
 def test_sprint_two_hundred_seventy_six_documents_provider_credential_guard() -> None:
     change_log = Path("docs/sprints/sprint-276-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Credential Control Character Guard" in change_log
     assert "OpenAI provider settings now reject `api_key` and `model`" in change_log
@@ -4712,7 +4724,7 @@ def test_sprint_two_hundred_seventy_six_documents_provider_credential_guard() ->
 
 def test_sprint_two_hundred_seventy_seven_documents_provider_empty_value_guard() -> None:
     change_log = Path("docs/sprints/sprint-277-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Empty Credential Guard" in change_log
     assert "OpenAI provider settings now reject empty `api_key` and `model`" in (change_log)
@@ -4743,7 +4755,7 @@ def test_sprint_two_hundred_seventy_seven_documents_provider_empty_value_guard()
 
 def test_sprint_two_hundred_seventy_eight_documents_provider_empty_base_url_guard() -> None:
     change_log = Path("docs/sprints/sprint-278-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Empty Base URL Guard" in change_log
     assert "OpenAI provider settings now reject empty `base_url` values" in (change_log)
@@ -4778,7 +4790,7 @@ def test_sprint_two_hundred_seventy_eight_documents_provider_empty_base_url_guar
 
 def test_sprint_two_hundred_seventy_nine_documents_provider_base_url_shape_guard() -> None:
     change_log = Path("docs/sprints/sprint-279-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Base URL Shape Guard" in change_log
     assert "shared model-provider base URL validator" in change_log
@@ -4809,7 +4821,7 @@ def test_sprint_two_hundred_seventy_nine_documents_provider_base_url_shape_guard
 
 def test_sprint_two_hundred_eighty_documents_provider_encoded_url_control_guard() -> None:
     change_log = Path("docs/sprints/sprint-280-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Encoded URL Control Guard" in change_log
     assert "percent-encoded whitespace and control characters" in change_log
@@ -4838,7 +4850,7 @@ def test_sprint_two_hundred_eighty_documents_provider_encoded_url_control_guard(
 
 def test_sprint_two_hundred_eighty_one_documents_provider_double_encoded_guard() -> None:
     change_log = Path("docs/sprints/sprint-281-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Double-Encoded URL Control Guard" in change_log
     assert "bounded multi-pass decoding" in change_log
@@ -4870,7 +4882,7 @@ def test_sprint_two_hundred_eighty_one_documents_provider_double_encoded_guard()
 
 def test_sprint_two_hundred_eighty_two_documents_provider_base_url_length_bound() -> None:
     change_log = Path("docs/sprints/sprint-282-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Base URL Length Bound" in change_log
     assert "`MAX_PROVIDER_BASE_URL_CHARS` bound of 2048 characters" in change_log
@@ -4898,7 +4910,7 @@ def test_sprint_two_hundred_eighty_two_documents_provider_base_url_length_bound(
 
 def test_sprint_two_hundred_eighty_three_documents_provider_setting_length_bounds() -> None:
     change_log = Path("docs/sprints/sprint-283-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Credential and Model Length Bounds" in change_log
     assert "shared provider setting validators" in change_log
@@ -4930,7 +4942,7 @@ def test_sprint_two_hundred_eighty_three_documents_provider_setting_length_bound
 
 def test_sprint_two_hundred_eighty_four_documents_anthropic_max_tokens_bound() -> None:
     change_log = Path("docs/sprints/sprint-284-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic Max Tokens Bound" in change_log
     assert "`MAX_ANTHROPIC_MAX_TOKENS` ceiling of 128000" in change_log
@@ -4957,7 +4969,7 @@ def test_sprint_two_hundred_eighty_four_documents_anthropic_max_tokens_bound() -
 
 def test_sprint_two_hundred_eighty_five_documents_anthropic_env_whitespace() -> None:
     change_log = Path("docs/sprints/sprint-285-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic Env Whitespace Fail-Closed" in change_log
     assert "rejects non-empty values with leading or trailing whitespace" in (change_log)
@@ -4985,7 +4997,7 @@ def test_sprint_two_hundred_eighty_five_documents_anthropic_env_whitespace() -> 
 
 def test_sprint_two_hundred_eighty_six_documents_openai_env_whitespace() -> None:
     change_log = Path("docs/sprints/sprint-286-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI Env Whitespace Fail-Closed" in change_log
     assert "rejects non-empty values with leading or trailing whitespace" in (change_log)
@@ -5011,7 +5023,7 @@ def test_sprint_two_hundred_eighty_six_documents_openai_env_whitespace() -> None
 
 def test_sprint_two_hundred_eighty_seven_documents_openai_runtime_config_errors() -> None:
     change_log = Path("docs/sprints/sprint-287-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI Runtime Provider Config Errors" in change_log
     assert "wraps direct `OpenAIProviderSettings` validation failures" in (change_log)
@@ -5037,7 +5049,7 @@ def test_sprint_two_hundred_eighty_seven_documents_openai_runtime_config_errors(
 
 def test_sprint_two_hundred_eighty_eight_documents_model_provider_selector_whitespace() -> None:
     change_log = Path("docs/sprints/sprint-288-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Selector Whitespace Fail-Closed" in change_log
     assert "`JEDI_MODEL_PROVIDER` env parsing now rejects" in change_log
@@ -5061,7 +5073,7 @@ def test_sprint_two_hundred_eighty_eight_documents_model_provider_selector_white
 
 def test_sprint_two_hundred_eighty_nine_documents_direct_model_provider_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-289-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct Model Provider Selector Diagnostics" in change_log
     assert "direct `RuntimeSettings.model_provider` values" in change_log
@@ -5087,7 +5099,7 @@ def test_sprint_two_hundred_eighty_nine_documents_direct_model_provider_diagnost
 
 def test_sprint_two_hundred_ninety_documents_model_provider_selector_bounds() -> None:
     change_log = Path("docs/sprints/sprint-290-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model Provider Selector Bounds" in change_log
     assert "`MAX_MODEL_PROVIDER_CHARS` bound of 256 characters" in change_log
@@ -5111,7 +5123,7 @@ def test_sprint_two_hundred_ninety_documents_model_provider_selector_bounds() ->
 
 def test_sprint_two_hundred_ninety_one_documents_runtime_enum_auth_mode_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-291-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Enum Auth Mode Diagnostics" in change_log
     assert "Runtime enum env parsing now rejects non-empty values" in change_log
@@ -5138,7 +5150,7 @@ def test_sprint_two_hundred_ninety_one_documents_runtime_enum_auth_mode_diagnost
 
 def test_sprint_two_hundred_ninety_two_documents_runtime_environment_switch() -> None:
     change_log = Path("docs/sprints/sprint-292-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Environment Switch Fail-Closed" in change_log
     assert "`JEDI_ENVIRONMENT` env parsing now rejects non-empty values" in (change_log)
@@ -5163,7 +5175,7 @@ def test_sprint_two_hundred_ninety_two_documents_runtime_environment_switch() ->
 
 def test_sprint_two_hundred_ninety_three_documents_build_claim_state_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-293-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Build Claim State Settings Load Guard" in change_log
     assert "`JEDI_BUILD_CLAIM_FROM_STATE`" in change_log
@@ -5191,7 +5203,7 @@ def test_sprint_two_hundred_ninety_three_documents_build_claim_state_load_guard(
 
 def test_sprint_two_hundred_ninety_four_documents_worker_id_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-294-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker ID Settings Load Guard" in change_log
     assert "`JEDI_WORKER_ID`" in change_log
@@ -5215,7 +5227,7 @@ def test_sprint_two_hundred_ninety_four_documents_worker_id_load_guard() -> None
 
 def test_sprint_two_hundred_ninety_five_documents_public_web_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-295-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public Web Settings Load Guard" in change_log
     assert "`JEDI_PUBLIC_WEB_ACCESS=worker`" in change_log
@@ -5241,7 +5253,7 @@ def test_sprint_two_hundred_ninety_five_documents_public_web_load_guard() -> Non
 
 def test_sprint_two_hundred_ninety_six_documents_admin_console_credential_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-296-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin Console Credential Settings Load Guard" in change_log
     assert "`JEDI_ADMIN_CONSOLE_USERNAME`" in change_log
@@ -5274,7 +5286,7 @@ def test_sprint_two_hundred_ninety_six_documents_admin_console_credential_load_g
 
 def test_sprint_two_hundred_ninety_seven_documents_admin_api_token_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-297-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin API Token Settings Load Guard" in change_log
     assert "`JEDI_ADMIN_API_TOKEN`" in change_log
@@ -5301,7 +5313,7 @@ def test_sprint_two_hundred_ninety_seven_documents_admin_api_token_load_guard() 
 
 def test_sprint_two_hundred_ninety_eight_documents_lifecycle_secret_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-298-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle Webhook Secret Settings Load Guard" in change_log
     assert "`JEDI_LIFECYCLE_WEBHOOK_SECRET`" in change_log
@@ -5331,7 +5343,7 @@ def test_sprint_two_hundred_ninety_eight_documents_lifecycle_secret_load_guard()
 
 def test_sprint_two_hundred_ninety_nine_documents_servicenow_oauth_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-299-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth Credential Settings Load Guard" in change_log
     assert "`SERVICENOW_PM_CLIENT_ID`" in change_log
@@ -5360,7 +5372,7 @@ def test_sprint_two_hundred_ninety_nine_documents_servicenow_oauth_load_guard() 
 
 def test_sprint_three_hundred_documents_servicenow_instance_url_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-300-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Instance URL Settings Load Guard" in change_log
     assert "`SERVICENOW_PM_INSTANCE_URL`" in change_log
@@ -5389,7 +5401,7 @@ def test_sprint_three_hundred_documents_servicenow_instance_url_load_guard() -> 
 
 def test_sprint_three_hundred_one_documents_runtime_numeric_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-301-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Numeric Settings Load Guard" in change_log
     assert "rejects padded or control-character env values" in change_log
@@ -5418,7 +5430,7 @@ def test_sprint_three_hundred_one_documents_runtime_numeric_load_guard() -> None
 
 def test_sprint_three_hundred_two_documents_worker_numeric_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-302-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker Numeric Settings Load Guard" in change_log
     assert "rejects padded or control-character env values" in change_log
@@ -5452,7 +5464,7 @@ def test_sprint_three_hundred_two_documents_worker_numeric_load_guard() -> None:
 
 def test_sprint_three_hundred_three_documents_retention_numeric_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-303-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retention Numeric Settings Load Guard" in change_log
     assert "reject padded or control-character env values" in change_log
@@ -5481,7 +5493,7 @@ def test_sprint_three_hundred_three_documents_retention_numeric_load_guard() -> 
 
 def test_sprint_three_hundred_four_documents_runtime_boolean_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-304-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Boolean Settings Load Guard" in change_log
     assert "rejects padded or control-character env values" in change_log
@@ -5512,7 +5524,7 @@ def test_sprint_three_hundred_four_documents_runtime_boolean_load_guard() -> Non
 
 def test_sprint_three_hundred_five_documents_worker_boolean_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-305-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker Boolean Settings Load Guard" in change_log
     assert "rejects padded or control-character env values" in change_log
@@ -5541,7 +5553,7 @@ def test_sprint_three_hundred_five_documents_worker_boolean_load_guard() -> None
 
 def test_sprint_three_hundred_six_documents_update_set_username_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-306-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set Username Settings Load Guard" in change_log
     assert "`JEDI_UPDATE_SET_USER_NAME`" in change_log
@@ -5567,7 +5579,7 @@ def test_sprint_three_hundred_six_documents_update_set_username_load_guard() -> 
 
 def test_sprint_three_hundred_seven_documents_alert_webhook_url_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-307-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert Webhook URL Settings Load Guard" in change_log
     assert "`JEDI_ALERT_WEBHOOK_URL`" in change_log
@@ -5596,7 +5608,7 @@ def test_sprint_three_hundred_seven_documents_alert_webhook_url_load_guard() -> 
 
 def test_sprint_three_hundred_eight_documents_split_servicenow_blank_override_guard() -> None:
     change_log = Path("docs/sprints/sprint-308-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Split ServiceNow Blank Override Guard" in change_log
     assert "`SERVICENOW_PM_INSTANCE_URL`" in change_log
@@ -5626,7 +5638,7 @@ def test_sprint_three_hundred_eight_documents_split_servicenow_blank_override_gu
 
 def test_sprint_three_hundred_nine_documents_dotenv_key_ambiguity_guard() -> None:
     change_log = Path("docs/sprints/sprint-309-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dotenv Key Ambiguity Guard" in change_log
     assert "rejects duplicate assignment keys" in change_log
@@ -5653,7 +5665,7 @@ def test_sprint_three_hundred_nine_documents_dotenv_key_ambiguity_guard() -> Non
 
 def test_sprint_three_hundred_ten_documents_dotenv_value_quote_guard() -> None:
     change_log = Path("docs/sprints/sprint-310-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dotenv Value Quote Guard" in change_log
     assert "rejects unmatched or mixed boundary quotes" in change_log
@@ -5680,7 +5692,7 @@ def test_sprint_three_hundred_ten_documents_dotenv_value_quote_guard() -> None:
 
 def test_sprint_three_hundred_eleven_documents_dotenv_key_syntax_guard() -> None:
     change_log = Path("docs/sprints/sprint-311-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dotenv Key Syntax Guard" in change_log
     assert "shell-compatible uppercase environment variable names" in change_log
@@ -5706,7 +5718,7 @@ def test_sprint_three_hundred_eleven_documents_dotenv_key_syntax_guard() -> None
 
 def test_sprint_three_hundred_twelve_documents_project_config_value_hygiene() -> None:
     change_log = Path("docs/sprints/sprint-312-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Project Config Value Hygiene" in change_log
     assert "validates required values before returning `AppConfig`" in change_log
@@ -5731,7 +5743,7 @@ def test_sprint_three_hundred_twelve_documents_project_config_value_hygiene() ->
 
 def test_sprint_three_hundred_thirteen_documents_runtime_store_audit_load_guard() -> None:
     change_log = Path("docs/sprints/sprint-313-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Store and Audit Load Guard" in change_log
     assert "validates required `DATABASE_URL` and `JEDI_AUDIT_ROOT` values" in change_log
@@ -5758,7 +5770,7 @@ def test_sprint_three_hundred_thirteen_documents_runtime_store_audit_load_guard(
 
 def test_sprint_three_hundred_fourteen_documents_dormant_public_web_config_guard() -> None:
     change_log = Path("docs/sprints/sprint-314-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dormant Public Web Config Guard" in change_log
     assert "validates configured public-web allowlist and documentation URL values" in (change_log)
@@ -5786,7 +5798,7 @@ def test_sprint_three_hundred_fourteen_documents_dormant_public_web_config_guard
 
 def test_sprint_three_hundred_fifteen_documents_base10_integer_token_guard() -> None:
     change_log = Path("docs/sprints/sprint-315-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Base-10 Integer Token Guard" in change_log
     assert "one shared strict parser" in change_log
@@ -5812,7 +5824,7 @@ def test_sprint_three_hundred_fifteen_documents_base10_integer_token_guard() -> 
 
 def test_sprint_three_hundred_sixteen_documents_ascii_integer_token_guard() -> None:
     change_log = Path("docs/sprints/sprint-316-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ASCII Integer Token Guard" in change_log
     assert "requires ASCII base-10 digits only" in change_log
@@ -5834,7 +5846,7 @@ def test_sprint_three_hundred_sixteen_documents_ascii_integer_token_guard() -> N
 
 def test_sprint_three_hundred_seventeen_documents_fixed_ascii_float_token_guard() -> None:
     change_log = Path("docs/sprints/sprint-317-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Fixed ASCII Float Token Guard" in change_log
     assert "fixed ASCII decimal numbers" in change_log
@@ -5858,7 +5870,7 @@ def test_sprint_three_hundred_seventeen_documents_fixed_ascii_float_token_guard(
 
 def test_sprint_three_hundred_eighteen_documents_public_web_csv_empty_item_guard() -> None:
     change_log = Path("docs/sprints/sprint-318-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public Web CSV Empty Item Guard" in change_log
     assert "rejects empty items" in change_log
@@ -5881,7 +5893,7 @@ def test_sprint_three_hundred_eighteen_documents_public_web_csv_empty_item_guard
 
 def test_sprint_three_hundred_nineteen_documents_public_web_validation_redaction() -> None:
     change_log = Path("docs/sprints/sprint-319-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public Web Validation Diagnostic Redaction" in change_log
     assert "no longer echoes raw invalid public-web" in change_log
@@ -5902,7 +5914,7 @@ def test_sprint_three_hundred_nineteen_documents_public_web_validation_redaction
 
 def test_sprint_three_hundred_twenty_documents_provider_base_url_host_guard() -> None:
     change_log = Path("docs/sprints/sprint-320-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider Base URL Non-Public Host Guard" in change_log
     assert "rejects non-public host targets" in change_log
@@ -5924,7 +5936,7 @@ def test_sprint_three_hundred_twenty_documents_provider_base_url_host_guard() ->
 
 def test_sprint_three_hundred_twenty_one_documents_provider_settings_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-321-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider Settings Validation Input Redaction" in change_log
     assert "OpenAI provider settings now suppress rejected input values" in change_log
@@ -5948,7 +5960,7 @@ def test_sprint_three_hundred_twenty_one_documents_provider_settings_error_redac
 
 def test_sprint_three_hundred_twenty_two_documents_runtime_settings_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-322-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Settings Validation Input Redaction" in change_log
     assert "Direct `RuntimeSettings` validation now suppresses rejected input values" in (
@@ -5973,7 +5985,7 @@ def test_sprint_three_hundred_twenty_two_documents_runtime_settings_error_redact
 
 def test_sprint_three_hundred_twenty_three_documents_servicenow_boundary_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-323-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Boundary Validation Input Redaction" in change_log
     assert "Direct ServiceNow boundary model validation now suppresses" in change_log
@@ -5995,7 +6007,7 @@ def test_sprint_three_hundred_twenty_three_documents_servicenow_boundary_error_r
 
 def test_sprint_three_hundred_twenty_four_documents_operational_record_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-324-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational Record Validation Input Redaction" in change_log
     assert "Lifecycle ingress and operational-store record validation now suppress" in (change_log)
@@ -6017,7 +6029,7 @@ def test_sprint_three_hundred_twenty_four_documents_operational_record_error_red
 
 def test_sprint_three_hundred_twenty_five_documents_model_packet_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-325-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model and Packet Validation Input Redaction" in change_log
     assert "Core model and implementation packet validation now suppress" in change_log
@@ -6039,7 +6051,7 @@ def test_sprint_three_hundred_twenty_five_documents_model_packet_error_redaction
 
 def test_sprint_three_hundred_twenty_six_documents_intent_generation_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-326-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Intent and Artifact Generation Validation Input Redaction" in change_log
     assert "Normalized automation intent validation now suppresses" in change_log
@@ -6064,7 +6076,7 @@ def test_sprint_three_hundred_twenty_six_documents_intent_generation_error_redac
 
 def test_sprint_three_hundred_twenty_seven_documents_rag_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-327-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "RAG and public documentation validation input redaction" in change_log
     assert "RAG document and retrieval result validation now suppresses" in change_log
@@ -6084,7 +6096,7 @@ def test_sprint_three_hundred_twenty_seven_documents_rag_error_redaction() -> No
 
 def test_sprint_three_hundred_twenty_eight_documents_operational_dto_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-328-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "operational DTO validation input redaction" in change_log
     assert "Operational DTO validation now suppresses rejected input values" in change_log
@@ -6105,7 +6117,7 @@ def test_sprint_three_hundred_twenty_eight_documents_operational_dto_error_redac
 
 def test_sprint_three_hundred_twenty_nine_documents_discovery_flow_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-329-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "discovery and Flow evidence validation input redaction" in change_log
     assert "Discovery and Flow evidence DTO validation now suppresses" in change_log
@@ -6126,7 +6138,7 @@ def test_sprint_three_hundred_twenty_nine_documents_discovery_flow_error_redacti
 
 def test_sprint_three_hundred_thirty_documents_update_writeback_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-330-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set and writeback DTO validation input redaction" in change_log
     assert "retrieved Update Set handoff, and writeback DTO validation" in change_log
@@ -6146,7 +6158,7 @@ def test_sprint_three_hundred_thirty_documents_update_writeback_error_redaction(
 
 def test_sprint_three_hundred_thirty_one_documents_capability_planning_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-331-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "capability, planning, safety, and review DTO validation input redaction" in (change_log)
     assert "Capability, planning, safety, and review DTO validation now suppresses" in (change_log)
@@ -6166,7 +6178,7 @@ def test_sprint_three_hundred_thirty_one_documents_capability_planning_error_red
 
 def test_sprint_three_hundred_thirty_two_documents_runtime_control_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-332-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "runtime and control-plane DTO validation input redaction" in change_log
     assert "Runtime and control-plane DTO validation now suppresses" in change_log
@@ -6186,7 +6198,7 @@ def test_sprint_three_hundred_thirty_two_documents_runtime_control_error_redacti
 
 def test_sprint_three_hundred_thirty_three_documents_bootstrap_legacy_error_redaction() -> None:
     change_log = Path("docs/sprints/sprint-333-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "bootstrap, enrichment, and risk DTO validation input redaction" in change_log
     assert "Bootstrap, enrichment, and risk DTO validation now suppresses" in change_log
@@ -6208,7 +6220,7 @@ def test_sprint_three_hundred_thirty_three_documents_bootstrap_legacy_error_reda
 
 def test_sprint_three_hundred_thirty_four_documents_worker_failure_diagnostic_redaction() -> None:
     change_log = Path("docs/sprints/sprint-334-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "core fulfillment worker failure diagnostic redaction" in change_log
     assert "Core fulfillment worker failures now redact" in change_log
@@ -6230,7 +6242,7 @@ def test_sprint_three_hundred_thirty_four_documents_worker_failure_diagnostic_re
 
 def test_sprint_three_hundred_thirty_five_documents_cli_validation_diagnostic_redaction() -> None:
     change_log = Path("docs/sprints/sprint-335-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CLI validation diagnostic redaction" in change_log
     assert "Bootstrap and delivery CLI commands now redact" in change_log
@@ -6253,7 +6265,7 @@ def test_sprint_three_hundred_thirty_five_documents_cli_validation_diagnostic_re
 
 def test_sprint_three_hundred_thirty_six_documents_artifact_path_containment() -> None:
     change_log = Path("docs/sprints/sprint-336-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "local artifact path containment" in change_log
     assert "Shared local artifact writers now reject unsafe artifact filenames" in change_log
@@ -6274,7 +6286,7 @@ def test_sprint_three_hundred_thirty_six_documents_artifact_path_containment() -
 
 def test_sprint_three_hundred_thirty_seven_documents_exclusive_artifact_create() -> None:
     change_log = Path("docs/sprints/sprint-337-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "exclusive local artifact creation" in change_log
     assert "exclusive file creation instead of an exists-then-write sequence" in change_log
@@ -6293,7 +6305,7 @@ def test_sprint_three_hundred_thirty_seven_documents_exclusive_artifact_create()
 
 def test_sprint_three_hundred_thirty_eight_documents_artifact_read_safety() -> None:
     change_log = Path("docs/sprints/sprint-338-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "artifact provenance read safety" in change_log
     assert "validates the filesystem entry before streaming" in change_log
@@ -6315,7 +6327,7 @@ def test_sprint_three_hundred_thirty_eight_documents_artifact_read_safety() -> N
 
 def test_sprint_three_hundred_thirty_nine_documents_attachment_read_safety() -> None:
     change_log = Path("docs/sprints/sprint-339-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment artifact read safety" in change_log
     assert "shared regular-file artifact reader instead of `Path.read_bytes()`" in (change_log)
@@ -6335,7 +6347,7 @@ def test_sprint_three_hundred_thirty_nine_documents_attachment_read_safety() -> 
 
 def test_sprint_three_hundred_forty_documents_xml_scanner_read_safety() -> None:
     change_log = Path("docs/sprints/sprint-340-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "reviewed XML scanner artifact read safety" in change_log
     assert "shared regular-file artifact reader instead of direct `Path.open()`" in (change_log)
@@ -6356,7 +6368,7 @@ def test_sprint_three_hundred_forty_documents_xml_scanner_read_safety() -> None:
 
 def test_sprint_three_hundred_forty_one_documents_smoke_xml_exclusive_create() -> None:
     change_log = Path("docs/sprints/sprint-341-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "delivery smoke XML exclusive artifact creation" in change_log
     assert "shared exclusive-create text artifact writer" in change_log
@@ -6376,7 +6388,7 @@ def test_sprint_three_hundred_forty_one_documents_smoke_xml_exclusive_create() -
 
 def test_sprint_three_hundred_forty_two_documents_cli_json_regular_file_input() -> None:
     change_log = Path("docs/sprints/sprint-342-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CLI JSON input regular-file enforcement" in change_log
     assert "shared descriptor-safe regular-file reader instead of direct `Path.open()`" in (
@@ -6399,7 +6411,7 @@ def test_sprint_three_hundred_forty_two_documents_cli_json_regular_file_input() 
 
 def test_sprint_three_hundred_forty_three_documents_env_toml_regular_file_input() -> None:
     change_log = Path("docs/sprints/sprint-343-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "local env and TOML regular-file enforcement" in change_log
     assert "Local `.env` loading now uses the shared descriptor-safe" in change_log
@@ -6423,7 +6435,7 @@ def test_sprint_three_hundred_forty_three_documents_env_toml_regular_file_input(
 
 def test_sprint_three_hundred_forty_four_documents_public_web_redirect_blocking() -> None:
     change_log = Path("docs/sprints/sprint-344-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "public documentation redirect blocking" in change_log
     assert "explicit urllib opener with a no-redirect handler" in change_log
@@ -6445,7 +6457,7 @@ def test_sprint_three_hundred_forty_four_documents_public_web_redirect_blocking(
 
 def test_sprint_three_hundred_forty_five_documents_servicenow_redirect_blocking() -> None:
     change_log = Path("docs/sprints/sprint-345-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport redirect blocking" in change_log
     assert "OAuth, Table API, and Attachment API calls" in change_log
@@ -6467,7 +6479,7 @@ def test_sprint_three_hundred_forty_five_documents_servicenow_redirect_blocking(
 
 def test_sprint_three_hundred_forty_six_documents_inbound_admin_auth_no_trim() -> None:
     change_log = Path("docs/sprints/sprint-346-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "inbound admin Authorization credential normalization" in change_log
     assert "no longer strips inbound credential material" in change_log
@@ -6488,7 +6500,7 @@ def test_sprint_three_hundred_forty_six_documents_inbound_admin_auth_no_trim() -
 
 def test_sprint_three_hundred_forty_seven_documents_lifecycle_webhook_auth_no_trim() -> None:
     change_log = Path("docs/sprints/sprint-347-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "lifecycle webhook inbound auth header normalization" in change_log
     assert "before integer parsing" in change_log
@@ -6507,7 +6519,7 @@ def test_sprint_three_hundred_forty_seven_documents_lifecycle_webhook_auth_no_tr
 
 def test_sprint_three_hundred_forty_eight_documents_decoded_basic_auth_no_trim() -> None:
     change_log = Path("docs/sprints/sprint-348-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "decoded Basic-auth credential normalization" in change_log
     assert "rejects malformed decoded credential parts" in change_log
@@ -6526,7 +6538,7 @@ def test_sprint_three_hundred_forty_eight_documents_decoded_basic_auth_no_trim()
 
 def test_sprint_three_hundred_forty_nine_documents_runtime_mode_auth_no_trim() -> None:
     change_log = Path("docs/sprints/sprint-349-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "direct runtime environment normalization at auth decisions" in change_log
     assert "no longer strips or lowercases direct runtime environment values" in change_log
@@ -6545,7 +6557,7 @@ def test_sprint_three_hundred_forty_nine_documents_runtime_mode_auth_no_trim() -
 
 def test_sprint_three_hundred_fifty_documents_servicenow_oauth_token_no_trim() -> None:
     change_log = Path("docs/sprints/sprint-350-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth access-token response normalization" in change_log
     assert "rejects malformed `access_token` response values" in change_log
@@ -6566,7 +6578,7 @@ def test_sprint_three_hundred_fifty_documents_servicenow_oauth_token_no_trim() -
 
 def test_sprint_three_hundred_fifty_one_documents_anthropic_retry_after_no_trim() -> None:
     change_log = Path("docs/sprints/sprint-351-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic retry-after response normalization" in change_log
     assert "no longer strips upstream `retry-after` response header values" in change_log
@@ -6585,7 +6597,7 @@ def test_sprint_three_hundred_fifty_one_documents_anthropic_retry_after_no_trim(
 
 def test_sprint_three_hundred_fifty_two_documents_openai_error_metadata_redaction() -> None:
     change_log = Path("docs/sprints/sprint-352-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI structured error metadata normalization" in change_log
     assert "upstream structured `error.type` and `error.code` values" in change_log
@@ -6604,7 +6616,7 @@ def test_sprint_three_hundred_fifty_two_documents_openai_error_metadata_redactio
 
 def test_sprint_three_hundred_fifty_three_documents_servicenow_error_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-353-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API error diagnostic metadata normalization" in change_log
     assert "recursively applies the shared sensitive-key vocabulary" in change_log
@@ -6623,7 +6635,7 @@ def test_sprint_three_hundred_fifty_three_documents_servicenow_error_diagnostics
 
 def test_sprint_three_hundred_fifty_four_documents_servicenow_error_cap() -> None:
     change_log = Path("docs/sprints/sprint-354-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API final diagnostic size cap" in change_log
     assert "final post-redaction size cap" in change_log
@@ -6642,7 +6654,7 @@ def test_sprint_three_hundred_fifty_four_documents_servicenow_error_cap() -> Non
 
 def test_sprint_three_hundred_fifty_five_documents_provider_output_bounds() -> None:
     change_log = Path("docs/sprints/sprint-355-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider successful-output parse bounds" in change_log
     assert "successful `200`" in change_log
@@ -6662,7 +6674,7 @@ def test_sprint_three_hundred_fifty_five_documents_provider_output_bounds() -> N
 
 def test_sprint_three_hundred_fifty_six_documents_lifecycle_validation_no_echo() -> None:
     change_log = Path("docs/sprints/sprint-356-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook validation error input suppression" in change_log
     assert "cannot reflect" in change_log
@@ -6683,7 +6695,7 @@ def test_sprint_three_hundred_fifty_six_documents_lifecycle_validation_no_echo()
 
 def test_sprint_three_hundred_fifty_seven_documents_runtime_validation_no_echo() -> None:
     change_log = Path("docs/sprints/sprint-357-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime request validation error input suppression" in change_log
     assert "FastAPI can raise `RequestValidationError`" in change_log
@@ -6702,7 +6714,7 @@ def test_sprint_three_hundred_fifty_seven_documents_runtime_validation_no_echo()
 
 def test_sprint_three_hundred_fifty_eight_documents_admin_diagnostic_bounds() -> None:
     change_log = Path("docs/sprints/sprint-358-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Persisted admin diagnostic response bounds" in change_log
     assert "persisted failure text cannot create oversized API or HTML" in change_log
@@ -6726,7 +6738,7 @@ def test_sprint_603_documents_admin_diagnostic_text_normalization() -> None:
     change_log = Path("docs/sprints/sprint-603-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin diagnostic text normalization" in change_log
     assert "`_admin_diagnostic_text()`" in change_log
@@ -6742,7 +6754,7 @@ def test_sprint_603_documents_admin_diagnostic_text_normalization() -> None:
 
 def test_sprint_three_hundred_fifty_nine_documents_artifact_payload_bounds() -> None:
     change_log = Path("docs/sprints/sprint-359-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Whole artifact diagnostic payload bounds" in change_log
     assert "large structured payload cannot create an oversized admin" in change_log
@@ -6763,7 +6775,7 @@ def test_sprint_three_hundred_fifty_nine_documents_artifact_payload_bounds() -> 
 
 def test_sprint_three_hundred_sixty_documents_artifact_traversal_bounds() -> None:
     change_log = Path("docs/sprints/sprint-360-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Traversal-bounded artifact payload diagnostics" in change_log
     assert "bounded before full recursive" in change_log
@@ -6786,7 +6798,7 @@ def test_sprint_three_hundred_sixty_documents_artifact_traversal_bounds() -> Non
 
 def test_sprint_three_hundred_sixty_one_documents_iterator_bounded_artifacts() -> None:
     change_log = Path("docs/sprints/sprint-361-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Iterator-bounded artifact diagnostic sampling" in change_log
     assert "`list(value.items())` before sampling" in change_log
@@ -6804,7 +6816,7 @@ def test_sprint_three_hundred_sixty_one_documents_iterator_bounded_artifacts() -
 
 def test_sprint_three_hundred_sixty_two_documents_alert_response_bounds() -> None:
     change_log = Path("docs/sprints/sprint-362-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response diagnostic bounds" in change_log
     assert "post-redaction size cap" in change_log
@@ -6825,7 +6837,7 @@ def test_sprint_three_hundred_sixty_two_documents_alert_response_bounds() -> Non
 
 def test_sprint_three_hundred_sixty_three_documents_alert_response_aggregate_bounds() -> None:
     change_log = Path("docs/sprints/sprint-363-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Whole alert sink response diagnostic bounds" in change_log
     assert "entire structured sink response is bounded after" in change_log
@@ -6844,7 +6856,7 @@ def test_sprint_three_hundred_sixty_three_documents_alert_response_aggregate_bou
 
 def test_sprint_three_hundred_sixty_four_documents_alert_response_traversal_bounds() -> None:
     change_log = Path("docs/sprints/sprint-364-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Traversal-bounded alert sink diagnostics" in change_log
     assert "sample dictionaries, lists, and tuples with bounded iterators" in change_log
@@ -6865,7 +6877,7 @@ def test_sprint_three_hundred_sixty_four_documents_alert_response_traversal_boun
 
 def test_sprint_three_hundred_sixty_five_documents_alert_response_json_safe() -> None:
     change_log = Path("docs/sprints/sprint-365-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "JSON-safe alert sink diagnostics" in change_log
     assert "non-JSON nested values cannot break" in change_log
@@ -6886,7 +6898,7 @@ def test_sprint_604_documents_alert_delivery_text_normalization() -> None:
     change_log = Path("docs/sprints/sprint-604-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert delivery text normalization" in change_log
     assert "`emit_alert_webhook()`" in change_log
@@ -6908,7 +6920,7 @@ def test_sprint_607_documents_alert_sink_response_truncation_marker_collision() 
     change_log = Path("docs/sprints/sprint-607-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response truncation marker collision safety" in change_log
     assert "`_redact_alert_response_node()`" in change_log
@@ -6928,7 +6940,7 @@ def test_sprint_608_documents_alert_sink_response_exact_string_boundary() -> Non
     change_log = Path("docs/sprints/sprint-608-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response exact-string diagnostic boundary" in change_log
     assert "`_alert_response_key()`" in change_log
@@ -6946,7 +6958,7 @@ def test_sprint_931_documents_alert_sink_response_scalar_subclass_boundary() -> 
     change_log = Path("docs/sprints/sprint-931-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response scalar-subclass diagnostic boundary" in change_log
     assert "`_redact_alert_response_node()`" in change_log
@@ -6962,7 +6974,7 @@ def test_sprint_931_documents_alert_sink_response_scalar_subclass_boundary() -> 
 
 def test_sprint_936_documents_alert_response_exact_container_boundary() -> None:
     change_log = Path("docs/sprints/sprint-936-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert response exact-container diagnostic boundary" in change_log
     assert "`_redact_alert_response_node()`" in change_log
@@ -6977,7 +6989,7 @@ def test_sprint_936_documents_alert_response_exact_container_boundary() -> None:
 
 def test_sprint_three_hundred_sixty_six_documents_servicenow_diagnostic_traversal_bounds() -> None:
     change_log = Path("docs/sprints/sprint-366-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Traversal-bounded ServiceNow API diagnostics" in change_log
     assert "wide response body cannot force full recursive redaction" in change_log
@@ -6997,7 +7009,7 @@ def test_sprint_three_hundred_sixty_six_documents_servicenow_diagnostic_traversa
 
 def test_sprint_three_hundred_sixty_seven_documents_http_error_bounds() -> None:
     change_log = Path("docs/sprints/sprint-367-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Traversal-bounded HTTP error diagnostic shaping" in change_log
     assert "parsed HTTP error JSON cannot force full recursive diagnostic shaping" in (change_log)
@@ -7017,7 +7029,7 @@ def test_sprint_three_hundred_sixty_seven_documents_http_error_bounds() -> None:
 
 def test_sprint_three_hundred_sixty_eight_documents_secret_redaction_bounds() -> None:
     change_log = Path("docs/sprints/sprint-368-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Traversal-bounded ServiceNow secret redaction" in change_log
     assert "wide request or response diagnostic bodies cannot force full recursive redaction" in (
@@ -7039,7 +7051,7 @@ def test_sprint_three_hundred_sixty_eight_documents_secret_redaction_bounds() ->
 
 def test_sprint_three_hundred_sixty_nine_documents_provider_output_traversal() -> None:
     change_log = Path("docs/sprints/sprint-369-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded provider successful-response traversal" in change_log
     assert "cannot force unbounded collection traversal" in change_log
@@ -7058,7 +7070,7 @@ def test_sprint_three_hundred_sixty_nine_documents_provider_output_traversal() -
 
 def test_sprint_three_hundred_seventy_documents_anthropic_error_metadata() -> None:
     change_log = Path("docs/sprints/sprint-370-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic structured error metadata redaction" in change_log
     assert "structured `error.type` metadata cannot inject log lines" in change_log
@@ -7075,7 +7087,7 @@ def test_sprint_three_hundred_seventy_documents_anthropic_error_metadata() -> No
 
 def test_sprint_three_hundred_seventy_one_documents_provider_normalization_bounds() -> None:
     change_log = Path("docs/sprints/sprint-371-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded provider candidate normalization" in change_log
     assert "cannot produce oversized post-parse candidate structures" in change_log
@@ -7097,7 +7109,7 @@ def test_sprint_three_hundred_seventy_one_documents_provider_normalization_bound
 
 def test_sprint_three_hundred_seventy_two_documents_generic_provider_bounds() -> None:
     change_log = Path("docs/sprints/sprint-372-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Generic provider response validation bounds" in change_log
     assert "used by `generate_with_provider()`" in change_log
@@ -7118,7 +7130,7 @@ def test_sprint_three_hundred_seventy_two_documents_generic_provider_bounds() ->
 
 def test_sprint_three_hundred_seventy_three_documents_provider_block_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-373-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized provider-policy block diagnostics" in change_log
     assert "configured provider ids and requested task names" in change_log
@@ -7137,7 +7149,7 @@ def test_sprint_three_hundred_seventy_three_documents_provider_block_diagnostics
 
 def test_sprint_three_hundred_seventy_four_documents_packet_validation_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-374-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized implementation-packet validation diagnostics" in change_log
     assert "model-provided safety decisions" in change_log
@@ -7156,7 +7168,7 @@ def test_sprint_three_hundred_seventy_four_documents_packet_validation_diagnosti
 
 def test_sprint_three_hundred_seventy_five_documents_raw_xml_scan_bounds() -> None:
     change_log = Path("docs/sprints/sprint-375-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded raw XML validation traversal" in change_log
     assert "unbounded recursive traversal" in change_log
@@ -7178,7 +7190,7 @@ def test_sprint_three_hundred_seventy_five_documents_raw_xml_scan_bounds() -> No
 
 def test_sprint_three_hundred_seventy_six_documents_packet_review_bounds() -> None:
     change_log = Path("docs/sprints/sprint-376-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded implementation-packet review contracts" in change_log
     assert "oversized change lists" in change_log
@@ -7199,7 +7211,7 @@ def test_sprint_three_hundred_seventy_six_documents_packet_review_bounds() -> No
 
 def test_sprint_three_hundred_seventy_seven_documents_packet_review_item_bounds() -> None:
     change_log = Path("docs/sprints/sprint-377-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded implementation-packet review note content" in change_log
     assert "oversized text" in change_log
@@ -7219,7 +7231,7 @@ def test_sprint_three_hundred_seventy_seven_documents_packet_review_item_bounds(
 
 def test_sprint_three_hundred_seventy_eight_documents_feedback_note_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-378-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized manual-review automation feedback" in change_log
     assert "`operator_feedback` entries with `str()`" in change_log
@@ -7239,7 +7251,7 @@ def test_sprint_three_hundred_seventy_eight_documents_feedback_note_sanitization
 
 def test_sprint_three_hundred_seventy_nine_documents_surface_reason_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-379-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized surface-operation eligibility reasons" in change_log
     assert "`surface_operation_plan.operations[].kind`" in change_log
@@ -7260,7 +7272,7 @@ def test_sprint_three_hundred_seventy_nine_documents_surface_reason_sanitization
 
 def test_sprint_three_hundred_eighty_documents_surface_reason_collection_bounds() -> None:
     change_log = Path("docs/sprints/sprint-380-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded surface-operation reason collections" in change_log
     assert "every unsupported operation and every reason code" in change_log
@@ -7282,7 +7294,7 @@ def test_sprint_three_hundred_eighty_documents_surface_reason_collection_bounds(
 
 def test_sprint_three_hundred_eighty_one_documents_manual_work_note_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-381-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized manual-review ServiceNow work notes" in change_log
     assert "joined `eligibility_reasons` directly" in change_log
@@ -7302,7 +7314,7 @@ def test_sprint_three_hundred_eighty_one_documents_manual_work_note_sanitization
 
 def test_sprint_three_hundred_eighty_two_documents_external_build_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-382-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized external-build ServiceNow work notes" in change_log
     assert "`ExternalBuildResult.build_reference`" in change_log
@@ -7322,7 +7334,7 @@ def test_sprint_three_hundred_eighty_two_documents_external_build_work_notes() -
 
 def test_sprint_three_hundred_eighty_three_documents_build_claim_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-383-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized build-claim ServiceNow work notes" in change_log
     assert "`_build_claim_work_notes()`" in change_log
@@ -7342,7 +7354,7 @@ def test_sprint_three_hundred_eighty_three_documents_build_claim_work_notes() ->
 
 def test_sprint_three_hundred_eighty_four_documents_runtime_failure_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-384-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized runtime failure ServiceNow work notes" in change_log
     assert "`_servicenow_failure_notifier()`" in change_log
@@ -7362,7 +7374,7 @@ def test_sprint_three_hundred_eighty_four_documents_runtime_failure_work_notes()
 
 def test_sprint_three_hundred_eighty_five_documents_runtime_completion_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-385-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized runtime completion ServiceNow work notes" in change_log
     assert "`_servicenow_complete_notifier()`" in change_log
@@ -7381,7 +7393,7 @@ def test_sprint_three_hundred_eighty_five_documents_runtime_completion_work_note
 
 def test_sprint_three_hundred_eighty_six_documents_handoff_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-386-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized retrieved Update Set handoff work notes" in change_log
     assert "`create_update_set_handoff()`" in change_log
@@ -7401,7 +7413,7 @@ def test_sprint_three_hundred_eighty_six_documents_handoff_work_notes() -> None:
 
 def test_sprint_three_hundred_eighty_seven_documents_intake_feedback_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-387-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized intake feedback work notes" in change_log
     assert "`intake_feedback_work_note()`" in change_log
@@ -7423,7 +7435,7 @@ def test_sprint_three_hundred_eighty_seven_documents_intake_feedback_work_notes(
 
 def test_sprint_three_hundred_eighty_eight_documents_artifact_handoff_work_notes() -> None:
     change_log = Path("docs/sprints/sprint-388-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized artifact handoff summary work notes" in change_log
     assert "`build_artifact_handoff_work_note()`" in change_log
@@ -7442,7 +7454,7 @@ def test_sprint_three_hundred_eighty_eight_documents_artifact_handoff_work_notes
 
 def test_sprint_three_hundred_eighty_nine_documents_cli_summary_output() -> None:
     change_log = Path("docs/sprints/sprint-389-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized CLI summary output" in change_log
     assert "`render_summary()`" in change_log
@@ -7461,7 +7473,7 @@ def test_sprint_three_hundred_eighty_nine_documents_cli_summary_output() -> None
 
 def test_sprint_three_hundred_ninety_documents_admin_artifact_payload_keys() -> None:
     change_log = Path("docs/sprints/sprint-390-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sanitized admin artifact payload keys" in change_log
     assert "dictionary keys" in change_log
@@ -7485,7 +7497,7 @@ def test_sprint_934_documents_admin_artifact_payload_key_string_subclass_boundar
     None
 ):
     change_log = Path("docs/sprints/sprint-934-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact payload key string-subclass boundary" in change_log
     assert "`_admin_payload_key()`" in change_log
@@ -7496,7 +7508,7 @@ def test_sprint_934_documents_admin_artifact_payload_key_string_subclass_boundar
 
 def test_sprint_three_hundred_ninety_one_documents_request_id_reflection() -> None:
     change_log = Path("docs/sprints/sprint-391-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Hardened reflected request IDs" in change_log
     assert "`X-JEDI-Request-ID`" in change_log
@@ -7520,7 +7532,7 @@ def test_sprint_three_hundred_ninety_one_documents_request_id_reflection() -> No
 
 def test_sprint_three_hundred_ninety_two_documents_ascii_request_ids() -> None:
     change_log = Path("docs/sprints/sprint-392-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Enforced ASCII-only request IDs" in change_log
     assert "`X-Request-ID`" in change_log
@@ -7541,7 +7553,7 @@ def test_sprint_three_hundred_ninety_two_documents_ascii_request_ids() -> None:
 
 def test_sprint_three_hundred_ninety_three_documents_duplicate_payload_keys() -> None:
     change_log = Path("docs/sprints/sprint-393-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded duplicate artifact payload keys" in change_log
     assert "duplicate suffix was appended after that cap" in change_log
@@ -7560,7 +7572,7 @@ def test_sprint_three_hundred_ninety_three_documents_duplicate_payload_keys() ->
 
 def test_sprint_three_hundred_ninety_four_documents_empty_payload_keys() -> None:
     change_log = Path("docs/sprints/sprint-394-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Non-empty artifact payload key diagnostics" in change_log
     assert "keys that sanitize to an empty label" in change_log
@@ -7579,7 +7591,7 @@ def test_sprint_three_hundred_ninety_four_documents_empty_payload_keys() -> None
 
 def test_sprint_three_hundred_ninety_five_documents_truncation_marker_collision() -> None:
     change_log = Path("docs/sprints/sprint-395-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Collision-safe artifact truncation marker" in change_log
     assert "cannot overwrite a user-supplied payload key" in change_log
@@ -7599,7 +7611,7 @@ def test_sprint_three_hundred_ninety_five_documents_truncation_marker_collision(
 
 def test_sprint_three_hundred_ninety_six_documents_alert_header_bounds() -> None:
     change_log = Path("docs/sprints/sprint-396-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded alert webhook metadata headers" in change_log
     assert "cannot be oversized" in change_log
@@ -7618,7 +7630,7 @@ def test_sprint_three_hundred_ninety_six_documents_alert_header_bounds() -> None
 
 def test_sprint_three_hundred_ninety_seven_documents_alert_body_text_bounds() -> None:
     change_log = Path("docs/sprints/sprint-397-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Pre-serialization alert body text bounds" in change_log
     assert "cannot force unbounded JSON serialization" in change_log
@@ -7638,7 +7650,7 @@ def test_sprint_three_hundred_ninety_seven_documents_alert_body_text_bounds() ->
 
 def test_sprint_three_hundred_ninety_eight_documents_alert_routing_taxonomy() -> None:
     change_log = Path("docs/sprints/sprint-398-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert routing taxonomy gate" in change_log
     assert "cannot be arbitrary generated strings" in change_log
@@ -7659,7 +7671,7 @@ def test_sprint_three_hundred_ninety_eight_documents_alert_routing_taxonomy() ->
 
 def test_sprint_three_hundred_ninety_nine_documents_alert_metadata_nonblank() -> None:
     change_log = Path("docs/sprints/sprint-399-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Nonblank alert metadata headers" in change_log
     assert "cannot be empty or padded" in change_log
@@ -7679,7 +7691,7 @@ def test_sprint_three_hundred_ninety_nine_documents_alert_metadata_nonblank() ->
 
 def test_sprint_four_hundred_documents_alert_timestamp_timezone() -> None:
     change_log = Path("docs/sprints/sprint-400-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Timezone-aware alert timestamps" in change_log
     assert "cannot be ambiguous local-time values" in change_log
@@ -7699,7 +7711,7 @@ def test_sprint_four_hundred_documents_alert_timestamp_timezone() -> None:
 
 def test_sprint_four_hundred_one_documents_stale_requeue_preview_bounds() -> None:
     change_log = Path("docs/sprints/sprint-401-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded stale requeue alert job-id previews" in change_log
     assert "cannot create unbounded alert detail text" in change_log
@@ -7720,7 +7732,7 @@ def test_sprint_four_hundred_one_documents_stale_requeue_preview_bounds() -> Non
 
 def test_sprint_four_hundred_two_documents_generated_alert_diagnostic_bounds() -> None:
     change_log = Path("docs/sprints/sprint-402-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded generated alert diagnostics" in change_log
     assert "large upstream diagnostic strings" in change_log
@@ -7741,7 +7753,7 @@ def test_sprint_four_hundred_two_documents_generated_alert_diagnostic_bounds() -
 
 def test_sprint_four_hundred_three_documents_generated_alert_timezone_bounds() -> None:
     change_log = Path("docs/sprints/sprint-403-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Timezone-aware generated alert construction" in change_log
     assert "ambiguous local-time datetimes" in change_log
@@ -7761,7 +7773,7 @@ def test_sprint_four_hundred_three_documents_generated_alert_timezone_bounds() -
 
 def test_sprint_four_hundred_four_documents_stale_requeue_detail_bounds() -> None:
     change_log = Path("docs/sprints/sprint-404-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded stale-requeue alert diagnostics" in change_log
     assert "oversized individual job ids" in change_log
@@ -7781,7 +7793,7 @@ def test_sprint_four_hundred_four_documents_stale_requeue_detail_bounds() -> Non
 
 def test_sprint_four_hundred_five_documents_generated_alert_metadata_bounds() -> None:
     change_log = Path("docs/sprints/sprint-405-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Constructor-safe generated alert metadata" in change_log
     assert "unsafe metadata is rejected before an `ExternalAlert` is returned" in (change_log)
@@ -7803,7 +7815,7 @@ def test_sprint_four_hundred_five_documents_generated_alert_metadata_bounds() ->
 
 def test_sprint_four_hundred_six_documents_lifecycle_webhook_credential_bounds() -> None:
     change_log = Path("docs/sprints/sprint-406-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded lifecycle webhook credentials" in change_log
     assert "oversized inbound credential headers" in change_log
@@ -7822,7 +7834,7 @@ def test_sprint_four_hundred_six_documents_lifecycle_webhook_credential_bounds()
 
 def test_sprint_four_hundred_seven_documents_lifecycle_webhook_ascii_credentials() -> None:
     change_log = Path("docs/sprints/sprint-407-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ASCII-only lifecycle webhook credentials" in change_log
     assert "non-ASCII inbound credential values" in change_log
@@ -7841,7 +7853,7 @@ def test_sprint_four_hundred_seven_documents_lifecycle_webhook_ascii_credentials
 
 def test_sprint_four_hundred_eight_documents_lifecycle_hmac_signature_shapes() -> None:
     change_log = Path("docs/sprints/sprint-408-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shaped lifecycle HMAC signatures" in change_log
     assert "malformed signature headers are rejected" in change_log
@@ -7861,7 +7873,7 @@ def test_sprint_four_hundred_eight_documents_lifecycle_hmac_signature_shapes() -
 
 def test_sprint_four_hundred_nine_documents_configured_lifecycle_secret_bounds() -> None:
     change_log = Path("docs/sprints/sprint-409-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Configured lifecycle webhook secret validation" in change_log
     assert "malformed configured webhook secrets are rejected" in change_log
@@ -7880,7 +7892,7 @@ def test_sprint_four_hundred_nine_documents_configured_lifecycle_secret_bounds()
 
 def test_sprint_four_hundred_ten_documents_configured_admin_token_bounds() -> None:
     change_log = Path("docs/sprints/sprint-410-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Configured admin bearer token validation" in change_log
     assert "malformed configured admin API tokens are rejected" in change_log
@@ -7897,7 +7909,7 @@ def test_sprint_four_hundred_ten_documents_configured_admin_token_bounds() -> No
 
 def test_sprint_four_hundred_eleven_documents_configured_console_credential_bounds() -> None:
     change_log = Path("docs/sprints/sprint-411-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Configured admin console credential validation" in change_log
     assert "malformed configured console credentials are rejected" in change_log
@@ -7915,7 +7927,7 @@ def test_sprint_four_hundred_eleven_documents_configured_console_credential_boun
 
 def test_sprint_four_hundred_twelve_documents_basic_auth_ascii_payloads() -> None:
     change_log = Path("docs/sprints/sprint-412-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ASCII-only Basic-auth encoded payloads" in change_log
     assert "non-ASCII encoded credential sections are rejected" in change_log
@@ -7933,7 +7945,7 @@ def test_sprint_four_hundred_twelve_documents_basic_auth_ascii_payloads() -> Non
 
 def test_sprint_four_hundred_thirteen_documents_bounded_rate_limit_keys() -> None:
     change_log = Path("docs/sprints/sprint-413-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bounded rate-limit bucket keys" in change_log
     assert "caller-provided bucket keys are bounded and sanitized before storage" in change_log
@@ -7950,7 +7962,7 @@ def test_sprint_four_hundred_thirteen_documents_bounded_rate_limit_keys() -> Non
 
 def test_sprint_four_hundred_fourteen_documents_capped_rate_limit_buckets() -> None:
     change_log = Path("docs/sprints/sprint-414-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Capped rate-limit bucket cardinality" in change_log
     assert "live bucket count is bounded" in change_log
@@ -7967,7 +7979,7 @@ def test_sprint_four_hundred_fourteen_documents_capped_rate_limit_buckets() -> N
 
 def test_sprint_four_hundred_fifteen_documents_runtime_rate_limit_bucket_caps() -> None:
     change_log = Path("docs/sprints/sprint-415-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime-configurable rate-limit bucket caps" in change_log
     assert "`JEDI_LIFECYCLE_RATE_LIMIT_MAX_BUCKETS`" in change_log
@@ -7983,7 +7995,7 @@ def test_sprint_four_hundred_fifteen_documents_runtime_rate_limit_bucket_caps() 
 
 def test_sprint_four_hundred_sixteen_documents_rate_limit_bucket_cap_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-416-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Upper-bounded rate-limit bucket caps" in change_log
     assert "hard upper bound" in change_log
@@ -8000,7 +8012,7 @@ def test_sprint_four_hundred_sixteen_documents_rate_limit_bucket_cap_ceiling() -
 
 def test_sprint_four_hundred_seventeen_documents_rate_limit_request_cap_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-417-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Upper-bounded rate-limit request caps" in change_log
     assert "`max_requests`" in change_log
@@ -8017,7 +8029,7 @@ def test_sprint_four_hundred_seventeen_documents_rate_limit_request_cap_ceiling(
 
 def test_sprint_four_hundred_eighteen_documents_rate_limit_window_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-418-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Upper-bounded rate-limit windows" in change_log
     assert "`window_seconds`" in change_log
@@ -8034,7 +8046,7 @@ def test_sprint_four_hundred_eighteen_documents_rate_limit_window_ceiling() -> N
 
 def test_sprint_four_hundred_nineteen_documents_backward_clock_safe_rate_limiting() -> None:
     change_log = Path("docs/sprints/sprint-419-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Backward-clock-safe rate limiting" in change_log
     assert "backward process-clock movement" in change_log
@@ -8051,7 +8063,7 @@ def test_sprint_four_hundred_nineteen_documents_backward_clock_safe_rate_limitin
 
 def test_sprint_four_hundred_twenty_documents_concurrent_safe_rate_limiting() -> None:
     change_log = Path("docs/sprints/sprint-420-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Concurrent-safe rate limiting" in change_log
     assert "without a critical section" in change_log
@@ -8070,7 +8082,7 @@ def test_sprint_four_hundred_twenty_one_documents_unstringifiable_handler_except
     None
 ):
     change_log = Path("docs/sprints/sprint-421-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Unstringifiable handler exception redaction" in change_log
     assert "`str(exc)` inside `_redacting_handler()`" in change_log
@@ -8088,7 +8100,7 @@ def test_sprint_four_hundred_twenty_two_documents_safe_unstringifiable_exception
     None
 ):
     change_log = Path("docs/sprints/sprint-422-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Safe unstringifiable exception type labels" in change_log
     assert "exception class metadata can be mutated" in change_log
@@ -8107,7 +8119,7 @@ def test_sprint_four_hundred_twenty_three_documents_core_worker_unstringifiable_
     None
 ):
     change_log = Path("docs/sprints/sprint-423-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Core worker unstringifiable exception handling" in change_log
     assert "`process_one_fulfillment_job()`" in change_log
@@ -8127,7 +8139,7 @@ def test_sprint_four_hundred_twenty_three_documents_core_worker_unstringifiable_
 
 def test_sprint_four_hundred_twenty_four_documents_runtime_worker_logging_safe_exceptions() -> None:
     change_log = Path("docs/sprints/sprint-424-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime-worker logging-safe exception formatting" in change_log
     assert "called `str(error)` in the logger arguments" in change_log
@@ -8145,7 +8157,7 @@ def test_sprint_four_hundred_twenty_four_documents_runtime_worker_logging_safe_e
 
 def test_sprint_four_hundred_twenty_five_documents_shared_safe_exception_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-425-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shared safe exception diagnostics" in change_log
     assert "`jedi_devproject.exception_diagnostics.exception_diagnostic_message()`" in change_log
@@ -8163,7 +8175,7 @@ def test_sprint_four_hundred_twenty_five_documents_shared_safe_exception_diagnos
 
 def test_sprint_four_hundred_twenty_six_documents_lifecycle_alert_logging_safe_exceptions() -> None:
     change_log = Path("docs/sprints/sprint-426-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle rejected-job alert logging-safe exceptions" in change_log
     assert "called `str(exc)` while preparing the warning log message" in change_log
@@ -8182,7 +8194,7 @@ def test_sprint_four_hundred_twenty_six_documents_lifecycle_alert_logging_safe_e
 
 def test_sprint_427_documents_runtime_config_numeric_parser_safe_exceptions() -> None:
     change_log = Path("docs/sprints/sprint-427-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime config numeric parser safe exceptions" in change_log
     assert "`str(exc)` while wrapping numeric parser errors" in change_log
@@ -8198,7 +8210,7 @@ def test_sprint_427_documents_runtime_config_numeric_parser_safe_exceptions() ->
 
 def test_sprint_428_documents_worker_optional_float_parser_safe_exceptions() -> None:
     change_log = Path("docs/sprints/sprint-428-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker optional-float parser safe exceptions" in change_log
     assert "`runtime_worker._optional_float()`" in change_log
@@ -8214,7 +8226,7 @@ def test_sprint_428_documents_worker_optional_float_parser_safe_exceptions() -> 
 
 def test_sprint_429_documents_flow_roundtrip_import_failure_safe_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-429-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow roundtrip import failure safe diagnostics" in change_log
     assert "`run_flow_roundtrip()`" in change_log
@@ -8233,7 +8245,7 @@ def test_sprint_429_documents_flow_roundtrip_import_failure_safe_diagnostics() -
 
 def test_sprint_430_documents_flow_xml_evidence_invalid_shape_safe_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-430-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow XML evidence invalid-shape safe diagnostics" in change_log
     assert "`validate_flow_xml_shape_evidence()`" in change_log
@@ -8252,7 +8264,7 @@ def test_sprint_1009_documents_flow_xml_evidence_record_collection_guard() -> No
     change_log = Path("docs/sprints/sprint-1009-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow XML evidence record collection guard" in change_log
     assert "`collect_flow_xml_evidence()`" in change_log
@@ -8285,7 +8297,7 @@ def test_sprint_1009_documents_flow_xml_evidence_record_collection_guard() -> No
 
 def test_sprint_431_documents_cli_batch_blocked_reason_safe_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-431-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CLI implementation-candidate batch blocked reason safe diagnostics" in change_log
     assert "`run_implementation_candidates_command()`" in change_log
@@ -8302,7 +8314,7 @@ def test_sprint_431_documents_cli_batch_blocked_reason_safe_diagnostics() -> Non
 
 def test_sprint_432_documents_flow_graph_diff_structural_validation_error_routing() -> None:
     change_log = Path("docs/sprints/sprint-432-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph diff structural validation-error routing" in change_log
     assert "`validate_flow_graph_diff_candidate()`" in change_log
@@ -8321,7 +8333,7 @@ def test_sprint_432_documents_flow_graph_diff_structural_validation_error_routin
 
 def test_sprint_433_documents_servicenow_attachment_artifact_read_typed_errors() -> None:
     change_log = Path("docs/sprints/sprint-433-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment artifact read typed errors" in change_log
     assert '`str(exc).startswith("artifact file exceeds ")`' in change_log
@@ -8339,7 +8351,7 @@ def test_sprint_433_documents_servicenow_attachment_artifact_read_typed_errors()
 
 def test_sprint_434_documents_cli_external_build_delivery_typed_success_requirement() -> None:
     change_log = Path("docs/sprints/sprint-434-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CLI external-build delivery typed success requirement" in change_log
     assert '`str(exc) != "successful_build_required"`' in change_log
@@ -8354,7 +8366,7 @@ def test_sprint_434_documents_cli_external_build_delivery_typed_success_requirem
 
 def test_sprint_435_documents_local_input_loader_non_reflective_path_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-435-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Local input loader non-reflective path diagnostics" in change_log
     assert "`json_input_too_large`" in change_log
@@ -8370,7 +8382,7 @@ def test_sprint_435_documents_local_input_loader_non_reflective_path_diagnostics
 
 def test_sprint_436_documents_lifecycle_webhook_invalid_utf8_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-436-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook invalid UTF-8 JSON rejection" in change_log
     assert "`UnicodeDecodeError`" in change_log
@@ -8386,7 +8398,7 @@ def test_sprint_436_documents_lifecycle_webhook_invalid_utf8_json_rejection() ->
 
 def test_sprint_437_documents_local_input_loader_invalid_utf8_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-437-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Local input loader invalid UTF-8 diagnostics" in change_log
     assert "`UnicodeDecodeError`" in change_log
@@ -8402,7 +8414,7 @@ def test_sprint_437_documents_local_input_loader_invalid_utf8_diagnostics() -> N
 
 def test_sprint_438_documents_dotenv_loader_non_reflective_path_and_utf8_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-438-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dotenv loader non-reflective path and UTF-8 diagnostics" in change_log
     assert "`dotenv_input_too_large`" in change_log
@@ -8419,7 +8431,7 @@ def test_sprint_438_documents_dotenv_loader_non_reflective_path_and_utf8_diagnos
 
 def test_sprint_439_documents_servicenow_transport_success_parse_hardening() -> None:
     change_log = Path("docs/sprints/sprint-439-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport successful response parse hardening" in change_log
     assert '`body.decode("utf-8")`' in change_log
@@ -8437,7 +8449,7 @@ def test_sprint_439_documents_servicenow_transport_success_parse_hardening() -> 
 
 def test_sprint_440_documents_servicenow_successful_result_list_shape_validation() -> None:
     change_log = Path("docs/sprints/sprint-440-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow successful result-list shape validation" in change_log
     assert "`_required_result_record_list()`" in change_log
@@ -8453,7 +8465,7 @@ def test_sprint_440_documents_servicenow_successful_result_list_shape_validation
 
 def test_sprint_441_documents_servicenow_successful_result_object_shape_validation() -> None:
     change_log = Path("docs/sprints/sprint-441-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow successful result-object shape validation" in change_log
     assert "`_required_result_object()`" in change_log
@@ -8468,7 +8480,7 @@ def test_sprint_441_documents_servicenow_successful_result_object_shape_validati
 
 def test_sprint_442_documents_cicd_capability_malformed_result_classification() -> None:
     change_log = Path("docs/sprints/sprint-442-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CI/CD capability malformed-result classification" in change_log
     assert "`malformed_result_payload`" in change_log
@@ -8483,7 +8495,7 @@ def test_sprint_442_documents_cicd_capability_malformed_result_classification() 
 
 def test_sprint_443_documents_provider_candidate_field_name_normalization() -> None:
     change_log = Path("docs/sprints/sprint-443-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider candidate field-name normalization" in change_log
     assert "last-value-wins semantics" in change_log
@@ -8500,7 +8512,7 @@ def test_sprint_443_documents_provider_candidate_field_name_normalization() -> N
 
 def test_sprint_444_documents_anthropic_max_token_ascii_integer_parsing() -> None:
     change_log = Path("docs/sprints/sprint-444-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic max-token ASCII integer parsing" in change_log
     assert "`ANTHROPIC_MAX_TOKENS`" in change_log
@@ -8518,7 +8530,7 @@ def test_sprint_444_documents_anthropic_max_token_ascii_integer_parsing() -> Non
 
 def test_sprint_445_documents_anthropic_retry_after_ascii_decimal_parsing() -> None:
     change_log = Path("docs/sprints/sprint-445-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic retry-after ASCII decimal parsing" in change_log
     assert "Python `float(retry_after_header)`" in change_log
@@ -8538,7 +8550,7 @@ def test_sprint_445_documents_anthropic_retry_after_ascii_decimal_parsing() -> N
 
 def test_sprint_446_documents_alert_sink_response_key_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-446-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response diagnostic key sanitization" in change_log
     assert "response object keys are treated as untrusted sink output" in change_log
@@ -8555,7 +8567,7 @@ def test_sprint_446_documents_alert_sink_response_key_sanitization() -> None:
 
 def test_sprint_447_documents_admin_artifact_non_string_payload_key_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-447-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact non-string payload key sanitization" in change_log
     assert "never flow through Python `str(key)`" in change_log
@@ -8571,7 +8583,7 @@ def test_sprint_447_documents_admin_artifact_non_string_payload_key_sanitization
 
 def test_sprint_448_documents_admin_artifact_non_json_scalar_value_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-448-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact non-JSON scalar value sanitization" in change_log
     assert "unsupported scalar values cannot crash JSON or HTML diagnostic rendering" in (
@@ -8591,7 +8603,7 @@ def test_sprint_933_documents_admin_artifact_payload_scalar_subclass_boundary() 
     None
 ):
     change_log = Path("docs/sprints/sprint-933-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact payload scalar-subclass diagnostic boundary" in change_log
     assert "`_bounded_redacted_artifact_payload_node()`" in change_log
@@ -8607,7 +8619,7 @@ def test_sprint_937_documents_admin_artifact_payload_exact_container_boundary() 
     None
 ):
     change_log = Path("docs/sprints/sprint-937-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact payload exact-container diagnostic boundary" in change_log
     assert "`_bounded_redacted_artifact_payload_node()`" in change_log
@@ -8620,7 +8632,7 @@ def test_sprint_937_documents_admin_artifact_payload_exact_container_boundary() 
 
 def test_sprint_449_documents_admin_artifact_unstringifiable_payload_key_hardening() -> None:
     change_log = Path("docs/sprints/sprint-449-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact unstringifiable payload key hardening" in change_log
     assert "not stringified during sensitive-key classification" in change_log
@@ -8636,7 +8648,7 @@ def test_sprint_449_documents_admin_artifact_unstringifiable_payload_key_hardeni
 
 def test_sprint_450_documents_admin_artifact_circular_payload_traversal_hardening() -> None:
     change_log = Path("docs/sprints/sprint-450-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact circular payload traversal hardening" in change_log
     assert "cyclic in-memory containers cannot recurse until failure" in change_log
@@ -8651,7 +8663,7 @@ def test_sprint_450_documents_admin_artifact_circular_payload_traversal_hardenin
 
 def test_sprint_451_documents_admin_artifact_payload_depth_bound_hardening() -> None:
     change_log = Path("docs/sprints/sprint-451-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact payload depth-bound hardening" in change_log
     assert "deeply nested but acyclic payloads cannot force unbounded" in change_log
@@ -8666,7 +8678,7 @@ def test_sprint_451_documents_admin_artifact_payload_depth_bound_hardening() -> 
 
 def test_sprint_452_documents_shared_sensitive_key_unstringifiable_input_hardening() -> None:
     change_log = Path("docs/sprints/sprint-452-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shared sensitive-key unstringifiable input hardening" in change_log
     assert "malformed key objects cannot crash diagnostic redaction paths" in change_log
@@ -8683,7 +8695,7 @@ def test_sprint_452_documents_shared_sensitive_key_unstringifiable_input_hardeni
 
 def test_sprint_453_documents_alert_sink_response_circular_diagnostic_hardening() -> None:
     change_log = Path("docs/sprints/sprint-453-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response circular diagnostic hardening" in change_log
     assert "cyclic response payloads cannot raise a secondary recursion failure" in change_log
@@ -8698,7 +8710,7 @@ def test_sprint_453_documents_alert_sink_response_circular_diagnostic_hardening(
 
 def test_sprint_454_documents_alert_sink_response_depth_bound_diagnostic_hardening() -> None:
     change_log = Path("docs/sprints/sprint-454-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response depth-bound diagnostic hardening" in change_log
     assert "deeply nested but acyclic response payloads cannot force unbounded" in (
@@ -8717,7 +8729,7 @@ def test_sprint_454_documents_alert_sink_response_depth_bound_diagnostic_hardeni
 
 def test_sprint_455_documents_alert_sink_response_non_json_type_name_suppression() -> None:
     change_log = Path("docs/sprints/sprint-455-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response non-JSON type-name suppression" in change_log
     assert "unsupported scalar values no longer expose Python type names" in change_log
@@ -8732,7 +8744,7 @@ def test_sprint_455_documents_alert_sink_response_non_json_type_name_suppression
 
 def test_sprint_456_documents_alert_sink_response_non_finite_float_diagnostic_hardening() -> None:
     change_log = Path("docs/sprints/sprint-456-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert sink response non-finite float diagnostic hardening" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8748,7 +8760,7 @@ def test_sprint_456_documents_alert_sink_response_non_finite_float_diagnostic_ha
 
 def test_sprint_457_documents_servicenow_outbound_json_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-457-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow outbound JSON non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8765,7 +8777,7 @@ def test_sprint_457_documents_servicenow_outbound_json_non_finite_number_rejecti
 
 def test_sprint_458_documents_model_provider_prompt_payload_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-458-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model provider prompt payload non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8780,7 +8792,7 @@ def test_sprint_458_documents_model_provider_prompt_payload_non_finite_number_re
 
 def test_sprint_459_documents_model_provider_response_non_finite_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-459-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model provider response non-finite JSON rejection" in change_log
     assert "`NaN`" in change_log
@@ -8797,7 +8809,7 @@ def test_sprint_459_documents_model_provider_response_non_finite_json_rejection(
 
 def test_sprint_460_documents_lifecycle_webhook_non_finite_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-460-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook non-finite JSON rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8813,7 +8825,7 @@ def test_sprint_460_documents_lifecycle_webhook_non_finite_json_rejection() -> N
 
 def test_sprint_461_documents_servicenow_response_non_finite_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-461-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow response non-finite JSON rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8830,7 +8842,7 @@ def test_sprint_461_documents_servicenow_response_non_finite_json_rejection() ->
 
 def test_sprint_462_documents_cli_json_input_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-462-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CLI JSON input non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8846,7 +8858,7 @@ def test_sprint_462_documents_cli_json_input_non_finite_number_rejection() -> No
 
 def test_sprint_463_documents_artifact_json_output_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-463-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact JSON output non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8862,7 +8874,7 @@ def test_sprint_463_documents_artifact_json_output_non_finite_number_rejection()
 
 def test_sprint_464_documents_operational_artifact_jsonb_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-464-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational artifact JSONB non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8878,7 +8890,7 @@ def test_sprint_464_documents_operational_artifact_jsonb_non_finite_number_rejec
 
 def test_sprint_465_documents_stable_artifact_hash_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-465-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stable artifact hash non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8894,7 +8906,7 @@ def test_sprint_465_documents_stable_artifact_hash_non_finite_number_rejection()
 
 def test_sprint_466_documents_flow_snapshot_evidence_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-466-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow snapshot evidence non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8910,7 +8922,7 @@ def test_sprint_466_documents_flow_snapshot_evidence_non_finite_number_rejection
 
 def test_sprint_467_documents_flow_graph_diff_validator_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-467-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph diff validator non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8926,7 +8938,7 @@ def test_sprint_467_documents_flow_graph_diff_validator_non_finite_number_reject
 
 def test_sprint_468_documents_lifecycle_event_jsonb_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-468-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational lifecycle event JSONB non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8947,7 +8959,7 @@ def test_sprint_468_documents_lifecycle_event_jsonb_non_finite_number_rejection(
 
 def test_sprint_469_documents_flow_graph_state_hash_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-469-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph round-trip state hash non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8965,7 +8977,7 @@ def test_sprint_469_documents_flow_graph_state_hash_non_finite_number_rejection(
 
 def test_sprint_470_documents_alert_webhook_outbound_json_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-470-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook outbound JSON non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8981,7 +8993,7 @@ def test_sprint_470_documents_alert_webhook_outbound_json_non_finite_rejection()
 
 def test_sprint_471_documents_intake_feedback_hash_non_finite_number_rejection() -> None:
     change_log = Path("docs/sprints/sprint-471-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Intake feedback content hash non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -8997,7 +9009,7 @@ def test_sprint_471_documents_intake_feedback_hash_non_finite_number_rejection()
 
 def test_sprint_472_documents_model_fulfillment_artifact_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-472-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment artifact payload non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9015,7 +9027,7 @@ def test_sprint_472_documents_model_fulfillment_artifact_non_finite_rejection() 
 
 def test_sprint_473_documents_implementation_packet_nested_payload_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-473-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet nested payload non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9035,7 +9047,7 @@ def test_sprint_473_documents_implementation_packet_nested_payload_non_finite_re
 
 def test_sprint_474_documents_packet_raw_normalized_intent_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-474-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet raw normalized-intent non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9055,7 +9067,7 @@ def test_sprint_474_documents_packet_raw_normalized_intent_non_finite_rejection(
 
 def test_sprint_619_documents_packet_raw_payload_strict_json_boundary() -> None:
     change_log = Path("docs/sprints/sprint-619-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet raw payload strict JSON boundary" in change_log
     assert "`_packet_raw_payload()`" in change_log
@@ -9075,7 +9087,7 @@ def test_sprint_619_documents_packet_raw_payload_strict_json_boundary() -> None:
 
 def test_sprint_930_documents_packet_raw_payload_scalar_subclass_boundary() -> None:
     change_log = Path("docs/sprints/sprint-930-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet raw payload scalar-subclass boundary" in change_log
     assert "`_packet_raw_payload()`" in change_log
@@ -9093,7 +9105,7 @@ def test_sprint_930_documents_packet_raw_payload_scalar_subclass_boundary() -> N
 
 def test_sprint_475_documents_context_dossier_dto_payload_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-475-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Context dossier DTO payload non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9109,7 +9121,7 @@ def test_sprint_475_documents_context_dossier_dto_payload_non_finite_rejection()
 
 def test_sprint_476_documents_legacy_dto_artifact_writer_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-476-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Legacy DTO artifact writer non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9125,7 +9137,7 @@ def test_sprint_476_documents_legacy_dto_artifact_writer_non_finite_rejection() 
 
 def test_sprint_477_documents_runtime_worker_report_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-477-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime worker stdout report non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9141,7 +9153,7 @@ def test_sprint_477_documents_runtime_worker_report_non_finite_rejection() -> No
 
 def test_sprint_478_documents_admin_artifact_diagnostic_json_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-478-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact diagnostic JSON non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9159,7 +9171,7 @@ def test_sprint_478_documents_admin_artifact_diagnostic_json_non_finite_rejectio
 
 def test_sprint_479_documents_capability_assessment_intent_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-479-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Capability assessment automation-intent non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9177,7 +9189,7 @@ def test_sprint_479_documents_capability_assessment_intent_non_finite_rejection(
 
 def test_sprint_480_documents_atf_test_plan_artifact_non_finite_rejection() -> None:
     change_log = Path("docs/sprints/sprint-480-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Advisory ATF test plan artifact non-finite number rejection" in change_log
     assert "`NaN`, `Infinity`, or `-Infinity`" in change_log
@@ -9197,7 +9209,7 @@ def test_sprint_480_documents_atf_test_plan_artifact_non_finite_rejection() -> N
 
 def test_sprint_481_documents_legacy_external_build_field_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-481-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Legacy external-build structured writeback field sanitization" in change_log
     assert "`u_ai_build_reference` and `u_ai_candidate_artifact`" in change_log
@@ -9215,7 +9227,7 @@ def test_sprint_481_documents_legacy_external_build_field_sanitization() -> None
 
 def test_sprint_482_documents_build_claim_artifact_field_sanitization() -> None:
     change_log = Path("docs/sprints/sprint-482-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Build-claim structured artifact field sanitization" in change_log
     assert "`plan_story_build_claim_writeback()`" in change_log
@@ -9231,7 +9243,7 @@ def test_sprint_482_documents_build_claim_artifact_field_sanitization() -> None:
 
 def test_sprint_483_documents_writeback_verification_field_normalization() -> None:
     change_log = Path("docs/sprints/sprint-483-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback verification structured-field normalization" in change_log
     assert "`verify_writeback()`" in change_log
@@ -9247,7 +9259,7 @@ def test_sprint_483_documents_writeback_verification_field_normalization() -> No
 
 def test_sprint_484_documents_writeback_verification_actual_field_redaction() -> None:
     change_log = Path("docs/sprints/sprint-484-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback verification actual-field diagnostic redaction" in change_log
     assert "`WritebackVerificationResult.actual_fields`" in change_log
@@ -9263,7 +9275,7 @@ def test_sprint_484_documents_writeback_verification_actual_field_redaction() ->
 
 def test_sprint_485_documents_writeback_batch_report_redaction() -> None:
     change_log = Path("docs/sprints/sprint-485-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report diagnostic redaction" in change_log
     assert "`build_writeback_batch_report()`" in change_log
@@ -9278,7 +9290,7 @@ def test_sprint_485_documents_writeback_batch_report_redaction() -> None:
 
 def test_sprint_486_documents_writeback_batch_report_traversal_hardening() -> None:
     change_log = Path("docs/sprints/sprint-486-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report traversal hardening" in change_log
     assert "`_diagnostic_report_value()`" in change_log
@@ -9296,7 +9308,7 @@ def test_sprint_486_documents_writeback_batch_report_traversal_hardening() -> No
 
 def test_sprint_487_documents_writeback_batch_report_scalar_normalization() -> None:
     change_log = Path("docs/sprints/sprint-487-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report scalar diagnostic normalization" in change_log
     assert "`_diagnostic_report_value()`" in change_log
@@ -9314,7 +9326,7 @@ def test_sprint_605_documents_writeback_batch_report_diagnostic_key_projection()
     change_log = Path("docs/sprints/sprint-605-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report diagnostic key projection" in change_log
     assert "`_diagnostic_report_key()`" in change_log
@@ -9331,7 +9343,7 @@ def test_sprint_606_documents_writeback_batch_report_key_collision_preservation(
     change_log = Path("docs/sprints/sprint-606-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report diagnostic key collision preservation" in change_log
     assert "`_deduplicated_diagnostic_report_key()`" in change_log
@@ -9348,7 +9360,7 @@ def test_sprint_606_documents_writeback_batch_report_key_collision_preservation(
 
 def test_sprint_488_documents_flow_graph_diff_non_json_payload_rejection() -> None:
     change_log = Path("docs/sprints/sprint-488-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph diff non-JSON payload rejection" in change_log
     assert "`_strict_validation_json()`" in change_log
@@ -9366,7 +9378,7 @@ def test_sprint_488_documents_flow_graph_diff_non_json_payload_rejection() -> No
 
 def test_sprint_489_documents_flow_snapshot_evidence_non_json_value_rejection() -> None:
     change_log = Path("docs/sprints/sprint-489-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow snapshot evidence non-JSON value rejection" in change_log
     assert "`sys_hub_flow_snapshot:invalid`" in change_log
@@ -9387,7 +9399,7 @@ def test_sprint_489_documents_flow_snapshot_evidence_non_json_value_rejection() 
 
 def test_sprint_490_documents_stable_artifact_hash_non_json_value_rejection() -> None:
     change_log = Path("docs/sprints/sprint-490-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stable artifact hash non-JSON value rejection" in change_log
     assert "`stable_artifact_hash()`" in change_log
@@ -9403,7 +9415,7 @@ def test_sprint_490_documents_stable_artifact_hash_non_json_value_rejection() ->
 
 def test_sprint_613_documents_stable_artifact_hash_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-613-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stable artifact hash exact-string boundary" in change_log
     assert "`stable_artifact_hash()`" in change_log
@@ -9420,7 +9432,7 @@ def test_sprint_613_documents_stable_artifact_hash_exact_string_boundary() -> No
 
 def test_sprint_929_documents_stable_artifact_hash_scalar_subclass_boundary() -> None:
     change_log = Path("docs/sprints/sprint-929-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stable artifact hash scalar-subclass boundary" in change_log
     assert "`stable_artifact_hash()`" in change_log
@@ -9438,7 +9450,7 @@ def test_sprint_929_documents_stable_artifact_hash_scalar_subclass_boundary() ->
 
 def test_sprint_940_documents_artifact_container_subclass_boundaries() -> None:
     change_log = Path("docs/sprints/sprint-940-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact container-subclass boundaries" in change_log
     assert "`_ensure_artifact_hash_payload_json_safe()`" in change_log
@@ -9456,7 +9468,7 @@ def test_sprint_940_documents_artifact_container_subclass_boundaries() -> None:
 
 def test_sprint_491_documents_operational_lifecycle_event_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-491-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational lifecycle event non-JSON payload rejection" in change_log
     assert "`PostgresOperationalStore.record_lifecycle_event()`" in change_log
@@ -9476,7 +9488,7 @@ def test_sprint_610_documents_operational_lifecycle_event_exact_string_boundary(
     change_log = Path("docs/sprints/sprint-610-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational lifecycle event exact-string JSONB boundary" in change_log
     assert "`_ensure_lifecycle_event_payload_json_safe()`" in change_log
@@ -9492,7 +9504,7 @@ def test_sprint_610_documents_operational_lifecycle_event_exact_string_boundary(
 
 def test_sprint_492_documents_operational_artifact_jsonb_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-492-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational artifact JSONB non-JSON payload rejection" in change_log
     assert "`PostgresOperationalStore.record_json_artifact()`" in change_log
@@ -9511,7 +9523,7 @@ def test_sprint_611_documents_operational_artifact_exact_string_boundary() -> No
     change_log = Path("docs/sprints/sprint-611-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational artifact exact-string JSONB boundary" in change_log
     assert "`_ensure_operational_artifact_payload_json_safe()`" in change_log
@@ -9531,7 +9543,7 @@ def test_sprint_941_documents_operational_store_container_subclass_boundaries() 
     change_log = Path("docs/sprints/sprint-941-change-log.md").read_text(
         encoding="utf-8",
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational-store container-subclass JSONB boundaries" in change_log
     assert "`_ensure_lifecycle_event_payload_json_safe()`" in change_log
@@ -9551,7 +9563,7 @@ def test_sprint_941_documents_operational_store_container_subclass_boundaries() 
 
 def test_sprint_493_documents_runtime_worker_report_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-493-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime worker stdout report non-JSON value rejection" in change_log
     assert "`_runtime_report_json()`" in change_log
@@ -9570,7 +9582,7 @@ def test_sprint_609_documents_runtime_worker_report_exact_string_boundary() -> N
     change_log = Path("docs/sprints/sprint-609-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime worker report exact-string boundary" in change_log
     assert "`_ensure_runtime_report_json_safe()`" in change_log
@@ -9583,7 +9595,7 @@ def test_sprint_609_documents_runtime_worker_report_exact_string_boundary() -> N
 
 def test_sprint_494_documents_legacy_dto_artifact_writer_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-494-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Legacy artifact DTO non-JSON value rejection" in change_log
     assert "`_artifact_model_json()`" in change_log
@@ -9599,7 +9611,7 @@ def test_sprint_494_documents_legacy_dto_artifact_writer_non_json_rejection() ->
 
 def test_sprint_612_documents_artifact_dto_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-612-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact DTO exact-string output boundary" in change_log
     assert "`_ensure_artifact_dto_payload_json_safe()`" in change_log
@@ -9613,7 +9625,7 @@ def test_sprint_612_documents_artifact_dto_exact_string_boundary() -> None:
 
 def test_sprint_495_documents_context_dossier_dto_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-495-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Context dossier DTO non-JSON value rejection" in change_log
     assert "`_context_model_payload()`" in change_log
@@ -9631,7 +9643,7 @@ def test_sprint_495_documents_context_dossier_dto_non_json_rejection() -> None:
 
 def test_sprint_617_documents_context_dossier_dto_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-617-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Context dossier DTO exact-string boundary" in change_log
     assert "`_context_model_payload()`" in change_log
@@ -9648,7 +9660,7 @@ def test_sprint_617_documents_context_dossier_dto_exact_string_boundary() -> Non
 
 def test_sprint_496_documents_automation_intent_payload_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-496-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Automation intent payload non-JSON value rejection" in change_log
     assert "`_automation_intent_payload()`" in change_log
@@ -9664,7 +9676,7 @@ def test_sprint_496_documents_automation_intent_payload_non_json_rejection() -> 
 
 def test_sprint_614_documents_automation_intent_payload_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-614-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Automation-intent payload exact-string boundary" in change_log
     assert "`_automation_intent_payload()`" in change_log
@@ -9685,7 +9697,7 @@ def test_sprint_939_documents_model_payload_exact_scalar_container_boundaries() 
     change_log = Path("docs/sprints/sprint-939-change-log.md").read_text(
         encoding="utf-8",
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model payload exact scalar and container boundaries" in change_log
     assert "`_ensure_context_dto_payload_json_safe()`" in change_log
@@ -9701,7 +9713,7 @@ def test_sprint_939_documents_model_payload_exact_scalar_container_boundaries() 
 
 def test_sprint_497_documents_intake_feedback_hash_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-497-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Intake feedback hash non-JSON value rejection" in change_log
     assert "`_intake_content_hash()`" in change_log
@@ -9719,7 +9731,7 @@ def test_sprint_497_documents_intake_feedback_hash_non_json_rejection() -> None:
 
 def test_sprint_498_documents_model_fulfillment_artifact_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-498-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment artifact non-JSON value rejection" in change_log
     assert "`_model_artifact_payload()`" in change_log
@@ -9735,7 +9747,7 @@ def test_sprint_498_documents_model_fulfillment_artifact_non_json_rejection() ->
 
 def test_sprint_615_documents_model_fulfillment_artifact_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-615-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment artifact exact-string boundary" in change_log
     assert "`_model_artifact_payload()`" in change_log
@@ -9754,7 +9766,7 @@ def test_sprint_615_documents_model_fulfillment_artifact_exact_string_boundary()
 
 def test_sprint_499_documents_alert_webhook_payload_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-499-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook outbound JSON non-JSON value rejection" in change_log
     assert "`_alert_body_bytes()`" in change_log
@@ -9770,7 +9782,7 @@ def test_sprint_499_documents_alert_webhook_payload_non_json_rejection() -> None
 
 def test_sprint_618_documents_alert_webhook_payload_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-618-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook payload exact-string boundary" in change_log
     assert "`_alert_body_bytes()`" in change_log
@@ -9789,7 +9801,7 @@ def test_sprint_942_documents_egress_payload_container_subclass_boundaries() -> 
     change_log = Path("docs/sprints/sprint-942-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Egress payload container-subclass boundaries" in change_log
     assert "`_ensure_model_artifact_payload_json_safe()`" in change_log
@@ -9808,7 +9820,7 @@ def test_sprint_942_documents_egress_payload_container_subclass_boundaries() -> 
 
 def test_sprint_500_documents_implementation_packet_nested_dto_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-500-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet nested DTO non-JSON value rejection" in change_log
     assert "`_packet_model_payload()`" in change_log
@@ -9826,7 +9838,7 @@ def test_sprint_500_documents_implementation_packet_nested_dto_non_json_rejectio
 
 def test_sprint_616_documents_implementation_packet_nested_dto_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-616-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet nested DTO exact-string boundary" in change_log
     assert "`_packet_model_payload()`" in change_log
@@ -9846,7 +9858,7 @@ def test_sprint_943_documents_implementation_packet_container_subclass_boundarie
     change_log = Path("docs/sprints/sprint-943-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet container-subclass boundaries" in change_log
     assert "`_ensure_packet_model_payload_json_safe()`" in change_log
@@ -9868,7 +9880,7 @@ def test_sprint_943_documents_implementation_packet_container_subclass_boundarie
 
 def test_sprint_501_documents_generation_field_scalar_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-501-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Generation field scalar non-JSON value rejection" in change_log
     assert "`validation_helpers.py`" in change_log
@@ -9887,7 +9899,7 @@ def test_sprint_501_documents_generation_field_scalar_non_json_rejection() -> No
 
 def test_sprint_889_documents_generation_field_scalar_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-889-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Generation field scalar string-subclass guard" in change_log
     assert "2 failing-first validation-helper string-subclass assertions" in change_log
@@ -9904,7 +9916,7 @@ def test_sprint_889_documents_generation_field_scalar_string_subclass_guard() ->
 
 def test_sprint_928_documents_generation_field_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-928-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shared generation-field scalar-subclass guard" in change_log
     assert "`validation_helpers.py`" in change_log
@@ -9926,7 +9938,7 @@ def test_sprint_944_documents_generation_helper_container_numeric_subclass_guard
     change_log = Path("docs/sprints/sprint-944-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shared generation-helper container and numeric subclass boundaries" in (
         change_log
@@ -9959,7 +9971,7 @@ def test_sprint_890_documents_project_quality_gate_cleanup() -> None:
 
 def test_sprint_502_documents_retrieved_update_set_customer_update_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-502-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set customer update scalar non-JSON value rejection" in change_log
     assert "`import_retrieved_update_set()`" in change_log
@@ -9977,7 +9989,7 @@ def test_sprint_502_documents_retrieved_update_set_customer_update_non_json_reje
 
 def test_sprint_503_documents_dictionary_form_handoff_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-503-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form handoff field non-JSON value rejection" in change_log
     assert "`create_update_set_handoff()`" in change_log
@@ -9997,7 +10009,7 @@ def test_sprint_503_documents_dictionary_form_handoff_field_non_json_rejection()
 
 def test_sprint_504_documents_form_section_removal_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-504-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Form-section removal field non-JSON value rejection" in change_log
     assert "`form_section_customer_updates()`" in change_log
@@ -10013,7 +10025,7 @@ def test_sprint_504_documents_form_section_removal_field_non_json_rejection() ->
 
 def test_sprint_505_documents_record_producer_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-505-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Record producer generation field non-JSON value rejection" in change_log
     assert "`record_producer_customer_updates()`" in change_log
@@ -10029,7 +10041,7 @@ def test_sprint_505_documents_record_producer_generation_field_non_json_rejectio
 
 def test_sprint_893_documents_record_producer_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-893-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Record producer generation string-subclass guard" in change_log
     assert "`record_producer_customer_updates()`" in change_log
@@ -10046,7 +10058,7 @@ def test_sprint_1001_documents_record_producer_metadata_record_collection_guard(
     change_log = Path("docs/sprints/sprint-1001-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Record Producer metadata record collection guard" in change_log
     assert "`_record_producer_metadata_records()`" in change_log
@@ -10072,7 +10084,7 @@ def test_sprint_1001_documents_record_producer_metadata_record_collection_guard(
 
 def test_sprint_506_documents_catalog_item_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-506-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog item generation field non-JSON value rejection" in change_log
     assert "`catalog_item_customer_updates()`" in change_log
@@ -10088,7 +10100,7 @@ def test_sprint_506_documents_catalog_item_generation_field_non_json_rejection()
 
 def test_sprint_892_documents_catalog_item_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-892-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog item generation string-subclass guard" in change_log
     assert "1 failing-first catalog item string-subclass assertion" in change_log
@@ -10101,7 +10113,7 @@ def test_sprint_892_documents_catalog_item_generation_string_subclass_guard() ->
 
 def test_sprint_507_documents_script_include_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-507-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Script Include generation field non-JSON value rejection" in change_log
     assert "`script_include_customer_updates()`" in change_log
@@ -10117,7 +10129,7 @@ def test_sprint_507_documents_script_include_generation_field_non_json_rejection
 
 def test_sprint_895_documents_script_include_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-895-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Script Include generation string-subclass guard" in change_log
     assert "`script_include_customer_updates()`" in change_log
@@ -10132,7 +10144,7 @@ def test_sprint_895_documents_script_include_generation_string_subclass_guard() 
 
 def test_sprint_508_documents_business_rule_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-508-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Business Rule generation field non-JSON value rejection" in change_log
     assert "`business_rule_customer_updates()`" in change_log
@@ -10148,7 +10160,7 @@ def test_sprint_508_documents_business_rule_generation_field_non_json_rejection(
 
 def test_sprint_894_documents_business_rule_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-894-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Business Rule generation string-subclass guard" in change_log
     assert "`business_rule_customer_updates()`" in change_log
@@ -10163,7 +10175,7 @@ def test_sprint_894_documents_business_rule_generation_string_subclass_guard() -
 
 def test_sprint_509_documents_client_script_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-509-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Client Script generation field non-JSON value rejection" in change_log
     assert "`client_script_customer_updates()`" in change_log
@@ -10179,7 +10191,7 @@ def test_sprint_509_documents_client_script_generation_field_non_json_rejection(
 
 def test_sprint_896_documents_client_script_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-896-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Client Script generation string-subclass guard" in change_log
     assert "`client_script_customer_updates()`" in change_log
@@ -10194,7 +10206,7 @@ def test_sprint_896_documents_client_script_generation_string_subclass_guard() -
 
 def test_sprint_510_documents_ui_policy_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-510-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "UI Policy generation field non-JSON value rejection" in change_log
     assert "`ui_policy_customer_updates()`" in change_log
@@ -10210,7 +10222,7 @@ def test_sprint_510_documents_ui_policy_generation_field_non_json_rejection() ->
 
 def test_sprint_897_documents_ui_policy_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-897-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "UI Policy generation string-subclass guard" in change_log
     assert "`ui_policy_customer_updates()`" in change_log
@@ -10225,7 +10237,7 @@ def test_sprint_897_documents_ui_policy_generation_string_subclass_guard() -> No
 
 def test_sprint_511_documents_catalog_ui_policy_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-511-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog UI Policy generation field non-JSON value rejection" in change_log
     assert "`catalog_ui_policy_customer_updates()`" in change_log
@@ -10241,7 +10253,7 @@ def test_sprint_511_documents_catalog_ui_policy_generation_field_non_json_reject
 
 def test_sprint_898_documents_catalog_ui_policy_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-898-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog UI Policy generation string-subclass guard" in change_log
     assert "`catalog_ui_policy_customer_updates()`" in change_log
@@ -10256,7 +10268,7 @@ def test_sprint_898_documents_catalog_ui_policy_generation_string_subclass_guard
 
 def test_sprint_512_documents_catalog_client_script_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-512-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog Client Script generation field non-JSON value rejection" in change_log
     assert "`catalog_client_script_customer_updates()`" in change_log
@@ -10272,7 +10284,7 @@ def test_sprint_512_documents_catalog_client_script_generation_field_non_json_re
 
 def test_sprint_899_documents_catalog_client_script_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-899-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog Client Script generation string-subclass guard" in change_log
     assert "`catalog_client_script_customer_updates()`" in change_log
@@ -10287,7 +10299,7 @@ def test_sprint_899_documents_catalog_client_script_generation_string_subclass_g
 
 def test_sprint_513_documents_atf_test_plan_generation_field_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-513-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Advisory ATF test plan generation field non-JSON value rejection" in change_log
     assert "`generate_atf_test_plan()`" in change_log
@@ -10305,7 +10317,7 @@ def test_sprint_513_documents_atf_test_plan_generation_field_non_json_rejection(
 
 def test_sprint_900_documents_atf_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-900-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Advisory ATF test plan generation string-subclass guard" in change_log
     assert "`generate_atf_test_plan()`" in change_log
@@ -10320,7 +10332,7 @@ def test_sprint_900_documents_atf_generation_string_subclass_guard() -> None:
 
 def test_sprint_901_documents_form_section_generation_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-901-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Form-section generation string-subclass guard" in change_log
     assert "`form_section_customer_updates()`" in change_log
@@ -10335,7 +10347,7 @@ def test_sprint_901_documents_form_section_generation_string_subclass_guard() ->
 
 def test_sprint_926_documents_form_section_generation_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-926-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Form-section generation scalar-subclass guard" in change_log
     assert "`form_section_customer_updates()`" in change_log
@@ -10352,7 +10364,7 @@ def test_sprint_951_documents_form_section_container_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-951-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Form-section container-subclass guard" in change_log
     assert "`_section_names()`" in change_log
@@ -10380,7 +10392,7 @@ def test_sprint_1003_documents_form_section_metadata_record_collection_guard() -
     change_log = Path("docs/sprints/sprint-1003-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Form-section metadata record collection guard" in change_log
     assert "`_form_section_metadata_records()`" in change_log
@@ -10407,7 +10419,7 @@ def test_sprint_1003_documents_form_section_metadata_record_collection_guard() -
 
 def test_sprint_902_documents_dictionary_form_metadata_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-902-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form metadata string-subclass guard" in change_log
     assert "`dictionary_form_customer_updates()`" in change_log
@@ -10422,7 +10434,7 @@ def test_sprint_902_documents_dictionary_form_metadata_string_subclass_guard() -
 
 def test_sprint_927_documents_dictionary_form_metadata_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-927-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form metadata scalar-subclass guard" in change_log
     assert "`dictionary_form_customer_updates()`" in change_log
@@ -10440,7 +10452,7 @@ def test_sprint_927_documents_dictionary_form_metadata_scalar_subclass_guard() -
 
 def test_sprint_903_documents_retrieved_update_set_customer_update_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-903-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set customer update string-subclass guard" in change_log
     assert "`import_retrieved_update_set()`" in change_log
@@ -10457,7 +10469,7 @@ def test_sprint_903_documents_retrieved_update_set_customer_update_string_subcla
 
 def test_sprint_904_documents_packet_intent_catalog_ui_policy_tristate_guard() -> None:
     change_log = Path("docs/sprints/sprint-904-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog UI Policy tristate guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10476,7 +10488,7 @@ def test_sprint_904_documents_packet_intent_catalog_ui_policy_tristate_guard() -
 
 def test_sprint_905_documents_packet_intent_catalog_client_script_action_guard() -> None:
     change_log = Path("docs/sprints/sprint-905-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog client script action guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10497,7 +10509,7 @@ def test_sprint_905_documents_packet_intent_catalog_client_script_action_guard()
 
 def test_sprint_906_documents_packet_intent_catalog_variable_set_name_guard() -> None:
     change_log = Path("docs/sprints/sprint-906-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog variable set name guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10514,7 +10526,7 @@ def test_sprint_906_documents_packet_intent_catalog_variable_set_name_guard() ->
 
 def test_sprint_907_documents_packet_intent_catalog_variable_group_member_guard() -> None:
     change_log = Path("docs/sprints/sprint-907-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog variable group member guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10533,7 +10545,7 @@ def test_sprint_907_documents_packet_intent_catalog_variable_group_member_guard(
 
 def test_sprint_908_documents_packet_intent_catalog_ui_policy_cleared_guard() -> None:
     change_log = Path("docs/sprints/sprint-908-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog UI Policy cleared boolean guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10552,7 +10564,7 @@ def test_sprint_908_documents_packet_intent_catalog_ui_policy_cleared_guard() ->
 
 def test_sprint_909_documents_packet_intent_catalog_ui_policy_reverse_guard() -> None:
     change_log = Path("docs/sprints/sprint-909-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog UI Policy reverse_if_false boolean guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10573,7 +10585,7 @@ def test_sprint_909_documents_packet_intent_catalog_ui_policy_reverse_guard() ->
 
 def test_sprint_910_documents_packet_intent_catalog_variable_mandatory_guard() -> None:
     change_log = Path("docs/sprints/sprint-910-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent catalog variable mandatory boolean guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10590,7 +10602,7 @@ def test_sprint_910_documents_packet_intent_catalog_variable_mandatory_guard() -
 
 def test_sprint_911_documents_packet_intent_record_producer_variable_mandatory_guard() -> None:
     change_log = Path("docs/sprints/sprint-911-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent record producer variable mandatory boolean guard" in change_log
     assert "`_record_producer_changes_from_normalized_intent()`" in change_log
@@ -10607,7 +10619,7 @@ def test_sprint_911_documents_packet_intent_record_producer_variable_mandatory_g
 
 def test_sprint_912_documents_packet_intent_fulfillment_flow_attachment_flag_guard() -> None:
     change_log = Path("docs/sprints/sprint-912-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent fulfillment flow attachment flag guard" in change_log
     assert "`_catalog_item_changes_from_normalized_intent()`" in change_log
@@ -10628,7 +10640,7 @@ def test_sprint_912_documents_packet_intent_fulfillment_flow_attachment_flag_gua
 
 def test_sprint_913_documents_packet_intent_normalized_text_guard() -> None:
     change_log = Path("docs/sprints/sprint-913-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent normalized text exact-string guard" in change_log
     assert "`_optional_intent_text()`" in change_log
@@ -10640,7 +10652,7 @@ def test_sprint_913_documents_packet_intent_normalized_text_guard() -> None:
 
 def test_sprint_914_documents_packet_intent_normalized_order_guard() -> None:
     change_log = Path("docs/sprints/sprint-914-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent normalized order exact-integer guard" in change_log
     assert "`_optional_intent_order()`" in change_log
@@ -10652,7 +10664,7 @@ def test_sprint_914_documents_packet_intent_normalized_order_guard() -> None:
 
 def test_sprint_915_documents_packet_intent_ui_policy_render_guard() -> None:
     change_log = Path("docs/sprints/sprint-915-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent UI Policy rendering exact-value guard" in change_log
     assert "`_catalog_ui_policy_changes()`" in change_log
@@ -10669,7 +10681,7 @@ def test_sprint_915_documents_packet_intent_ui_policy_render_guard() -> None:
 
 def test_sprint_916_documents_packet_intent_client_script_render_guard() -> None:
     change_log = Path("docs/sprints/sprint-916-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Packet-intent client script rendering exact-value guard" in change_log
     assert "`_catalog_client_script_changes()`" in change_log
@@ -10686,7 +10698,7 @@ def test_sprint_916_documents_packet_intent_client_script_render_guard() -> None
 
 def test_sprint_917_documents_catalog_metadata_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-917-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog metadata scalar-subclass guard" in change_log
     assert "`_catalog_field_text()`" in change_log
@@ -10705,7 +10717,7 @@ def test_sprint_917_documents_catalog_metadata_scalar_subclass_guard() -> None:
 
 def test_sprint_918_documents_catalog_client_script_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-918-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog client script scalar-subclass guard" in change_log
     assert "`_catalog_client_script_field_text()`" in change_log
@@ -10727,7 +10739,7 @@ def test_sprint_946_documents_catalog_client_script_list_subclass_guard() -> Non
     change_log = Path("docs/sprints/sprint-946-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog Client Script list-subclass guard" in change_log
     assert "`_catalog_client_script_string_list()`" in change_log
@@ -10750,7 +10762,7 @@ def test_sprint_947_documents_catalog_item_container_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-947-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog item container-subclass guard" in change_log
     assert "`_variable_set_names()`" in change_log
@@ -10779,7 +10791,7 @@ def test_sprint_1000_documents_catalog_metadata_record_collection_guard() -> Non
     change_log = Path("docs/sprints/sprint-1000-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog metadata record collection guard" in change_log
     assert "`_catalog_metadata_records()`" in change_log
@@ -10808,7 +10820,7 @@ def test_sprint_1002_documents_dictionary_form_metadata_record_collection_guard(
     change_log = Path("docs/sprints/sprint-1002-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form metadata record collection guard" in change_log
     assert "`_dictionary_form_metadata_records()`" in change_log
@@ -10837,7 +10849,7 @@ def test_sprint_1002_documents_dictionary_form_metadata_record_collection_guard(
 
 def test_sprint_919_documents_business_rule_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-919-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Business Rule scalar-subclass guard" in change_log
     assert "`_business_rule_field_text()`" in change_log
@@ -10854,7 +10866,7 @@ def test_sprint_950_documents_business_rule_list_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-950-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Business Rule list-subclass guard" in change_log
     assert "`_business_rule_string_list()`" in change_log
@@ -10873,7 +10885,7 @@ def test_sprint_950_documents_business_rule_list_subclass_guard() -> None:
 
 def test_sprint_920_documents_client_script_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-920-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Client Script scalar-subclass guard" in change_log
     assert "`_client_script_field_text()`" in change_log
@@ -10890,7 +10902,7 @@ def test_sprint_948_documents_client_script_list_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-948-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Client Script list-subclass guard" in change_log
     assert "`_client_script_string_list()`" in change_log
@@ -10909,7 +10921,7 @@ def test_sprint_948_documents_client_script_list_subclass_guard() -> None:
 
 def test_sprint_921_documents_script_include_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-921-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Script Include scalar-subclass guard" in change_log
     assert "`_script_include_field_text()`" in change_log
@@ -10926,7 +10938,7 @@ def test_sprint_949_documents_script_include_list_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-949-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Script Include list-subclass guard" in change_log
     assert "`_script_include_string_list()`" in change_log
@@ -10945,7 +10957,7 @@ def test_sprint_949_documents_script_include_list_subclass_guard() -> None:
 
 def test_sprint_922_documents_ui_policy_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-922-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "UI Policy scalar-subclass guard" in change_log
     assert "`_ui_policy_field_text()`" in change_log
@@ -10960,7 +10972,7 @@ def test_sprint_922_documents_ui_policy_scalar_subclass_guard() -> None:
 
 def test_sprint_923_documents_catalog_ui_policy_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-923-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog UI Policy scalar-subclass guard" in change_log
     assert "`_catalog_ui_policy_field_text()`" in change_log
@@ -10978,7 +10990,7 @@ def test_sprint_923_documents_catalog_ui_policy_scalar_subclass_guard() -> None:
 
 def test_sprint_924_documents_record_producer_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-924-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Record producer scalar-subclass guard" in change_log
     assert "`_record_producer_field_text()`" in change_log
@@ -10993,7 +11005,7 @@ def test_sprint_924_documents_record_producer_scalar_subclass_guard() -> None:
 
 def test_sprint_925_documents_atf_generation_scalar_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-925-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ATF generation scalar-subclass guard" in change_log
     assert "`_atf_field_text()`" in change_log
@@ -11010,7 +11022,7 @@ def test_sprint_945_documents_atf_generation_list_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-945-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ATF generation list-subclass guard" in change_log
     assert "`_atf_string_list()`" in change_log
@@ -11026,7 +11038,7 @@ def test_sprint_945_documents_atf_generation_list_subclass_guard() -> None:
 
 def test_sprint_514_documents_dictionary_form_metadata_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-514-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form metadata non-JSON value rejection" in change_log
     assert "`dictionary_form_customer_updates()`" in change_log
@@ -11044,7 +11056,7 @@ def test_sprint_514_documents_dictionary_form_metadata_non_json_rejection() -> N
 
 def test_sprint_515_documents_retrieved_update_set_lookup_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-515-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set lookup non-JSON value rejection" in change_log
     assert "`import_retrieved_update_set()`" in change_log
@@ -11066,7 +11078,7 @@ def test_sprint_515_documents_retrieved_update_set_lookup_non_json_rejection() -
 
 def test_sprint_516_documents_legacy_update_set_apply_lookup_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-516-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Legacy Update Set apply lookup non-JSON value rejection" in change_log
     assert "`apply_candidate_to_update_set()`" in change_log
@@ -11084,7 +11096,7 @@ def test_sprint_516_documents_legacy_update_set_apply_lookup_non_json_rejection(
 
 def test_sprint_517_documents_update_set_importer_lookup_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-517-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set importer bootstrap lookup non-JSON value rejection" in change_log
     assert "`apply_update_set_importer_records()`" in change_log
@@ -11103,7 +11115,7 @@ def test_sprint_517_documents_update_set_importer_lookup_non_json_rejection() ->
 
 def test_sprint_518_documents_update_set_importer_apply_result_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-518-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set importer apply-result sys_id non-JSON value rejection" in change_log
     assert "`UpdateSetImporterApplyResult.upserted_records`" in change_log
@@ -11120,7 +11132,7 @@ def test_sprint_998_documents_update_set_importer_apply_response_guard() -> None
     change_log = Path("docs/sprints/sprint-998-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set importer apply response guard" in change_log
     assert "`_update_set_importer_upsert_result()`" in change_log
@@ -11149,7 +11161,7 @@ def test_sprint_998_documents_update_set_importer_apply_response_guard() -> None
 
 def test_sprint_887_documents_update_set_importer_lookup_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-887-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set importer lookup string-subclass guard" in change_log
     assert "2 failing-first Update Set importer lookup string-subclass assertions" in change_log
@@ -11166,7 +11178,7 @@ def test_sprint_887_documents_update_set_importer_lookup_string_subclass_guard()
 
 def test_sprint_519_documents_lifecycle_webhook_lookup_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-519-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook bootstrap lookup non-JSON value rejection" in change_log
     assert "`apply_lifecycle_webhook_records()`" in change_log
@@ -11185,7 +11197,7 @@ def test_sprint_519_documents_lifecycle_webhook_lookup_non_json_rejection() -> N
 
 def test_sprint_520_documents_lifecycle_webhook_apply_result_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-520-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook apply-result sys_id non-JSON value rejection" in change_log
     assert "`LifecycleWebhookApplyResult.upserted_records`" in change_log
@@ -11200,7 +11212,7 @@ def test_sprint_520_documents_lifecycle_webhook_apply_result_non_json_rejection(
 
 def test_sprint_888_documents_lifecycle_webhook_lookup_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-888-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook lookup string-subclass guard" in change_log
     assert "2 failing-first lifecycle webhook lookup string-subclass assertions" in change_log
@@ -11219,7 +11231,7 @@ def test_sprint_999_documents_bootstrap_verification_record_guard() -> None:
     change_log = Path("docs/sprints/sprint-999-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bootstrap verification record guard" in change_log
     assert "`_lifecycle_webhook_fetch_result()`" in change_log
@@ -11249,7 +11261,7 @@ def test_sprint_999_documents_bootstrap_verification_record_guard() -> None:
 
 def test_sprint_891_documents_lifecycle_webhook_verification_metadata_guard() -> None:
     change_log = Path("docs/sprints/sprint-891-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook verification metadata guard" in change_log
     assert "2 failing-first lifecycle verification metadata assertions" in change_log
@@ -11266,7 +11278,7 @@ def test_sprint_891_documents_lifecycle_webhook_verification_metadata_guard() ->
 
 def test_sprint_521_documents_servicenow_upsert_lookup_non_json_rejection() -> None:
     change_log = Path("docs/sprints/sprint-521-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow client upsert lookup sys_id non-JSON value rejection" in change_log
     assert "`ServiceNowClient.upsert_table_record()`" in change_log
@@ -11282,7 +11294,7 @@ def test_sprint_521_documents_servicenow_upsert_lookup_non_json_rejection() -> N
 
 def test_sprint_522_documents_servicenow_lookup_query_delimiter_rejection() -> None:
     change_log = Path("docs/sprints/sprint-522-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Table API lookup query delimiter rejection" in change_log
     assert "`ServiceNowClient.fetch_table_record()`" in change_log
@@ -11299,7 +11311,7 @@ def test_sprint_522_documents_servicenow_lookup_query_delimiter_rejection() -> N
 
 def test_sprint_523_documents_servicenow_table_name_path_rejection() -> None:
     change_log = Path("docs/sprints/sprint-523-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Table API table-name path rejection" in change_log
     assert "`ServiceNowClient.upsert_table_record()`" in change_log
@@ -11315,7 +11327,7 @@ def test_sprint_523_documents_servicenow_table_name_path_rejection() -> None:
 
 def test_sprint_524_documents_servicenow_record_id_path_rejection() -> None:
     change_log = Path("docs/sprints/sprint-524-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Table API record-id path rejection" in change_log
     assert "`ServiceNowClient.update_story_fields()`" in change_log
@@ -11332,7 +11344,7 @@ def test_sprint_524_documents_servicenow_record_id_path_rejection() -> None:
 
 def test_sprint_525_documents_servicenow_cicd_path_id_rejection() -> None:
     change_log = Path("docs/sprints/sprint-525-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CI/CD path-id rejection" in change_log
     assert "`ServiceNowClient.preview_cicd_update_set()`" in change_log
@@ -11350,7 +11362,7 @@ def test_sprint_525_documents_servicenow_cicd_path_id_rejection() -> None:
 
 def test_sprint_526_documents_servicenow_importer_operation_uri_rejection() -> None:
     change_log = Path("docs/sprints/sprint-526-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow importer operation URI path rejection" in change_log
     assert "`ServiceNowClient.import_update_set_xml()`" in change_log
@@ -11367,7 +11379,7 @@ def test_sprint_526_documents_servicenow_importer_operation_uri_rejection() -> N
 
 def test_sprint_558_documents_servicenow_operation_uri_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-558-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow operation URI length guard" in change_log
     assert "`ServiceNowClient.import_update_set_xml()`" in change_log
@@ -11384,7 +11396,7 @@ def test_sprint_558_documents_servicenow_operation_uri_length_guard() -> None:
 
 def test_sprint_527_documents_servicenow_attachment_story_id_before_file_read() -> None:
     change_log = Path("docs/sprints/sprint-527-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment story-id validation before file read" in change_log
     assert "`ServiceNowClient.attach_story_file()`" in change_log
@@ -11399,7 +11411,7 @@ def test_sprint_527_documents_servicenow_attachment_story_id_before_file_read() 
 
 def test_sprint_528_documents_servicenow_attachment_metadata_before_file_read() -> None:
     change_log = Path("docs/sprints/sprint-528-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment metadata validation before file read" in change_log
     assert "`ServiceNowClient.attach_story_file()`" in change_log
@@ -11417,7 +11429,7 @@ def test_sprint_528_documents_servicenow_attachment_metadata_before_file_read() 
 
 def test_sprint_529_documents_servicenow_attachment_read_error_path_redaction() -> None:
     change_log = Path("docs/sprints/sprint-529-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment read-error path redaction" in change_log
     assert "`ServiceNowClient.attach_story_file()`" in change_log
@@ -11435,7 +11447,7 @@ def test_sprint_529_documents_servicenow_attachment_read_error_path_redaction() 
 
 def test_sprint_547_documents_servicenow_attachment_metadata_type_guards() -> None:
     change_log = Path("docs/sprints/sprint-547-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment metadata type guards" in change_log
     assert "`_servicenow_attachment_file_name()`" in change_log
@@ -11452,7 +11464,7 @@ def test_sprint_547_documents_servicenow_attachment_metadata_type_guards() -> No
 
 def test_sprint_560_documents_servicenow_attachment_content_type_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-560-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment content-type length guard" in change_log
     assert "`_servicenow_attachment_content_type()`" in change_log
@@ -11474,7 +11486,7 @@ def test_sprint_579_documents_servicenow_attachment_file_name_str_subclass_guard
     change_log = Path("docs/sprints/sprint-579-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment file-name string-subclass guard" in change_log
     assert "`_servicenow_attachment_file_name()`" in change_log
@@ -11500,7 +11512,7 @@ def test_sprint_580_documents_servicenow_attachment_content_type_str_subclass_gu
     change_log = Path("docs/sprints/sprint-580-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment content-type string-subclass guard" in change_log
     assert "`_servicenow_attachment_content_type()`" in change_log
@@ -11526,7 +11538,7 @@ def test_sprint_581_documents_servicenow_oauth_access_token_str_subclass_guard()
     change_log = Path("docs/sprints/sprint-581-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth access-token string-subclass guard" in change_log
     assert "`OAuthClientCredentials._fetch_token()`" in change_log
@@ -11548,7 +11560,7 @@ def test_sprint_582_documents_servicenow_lookup_part_str_subclass_guard() -> Non
     change_log = Path("docs/sprints/sprint-582-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow lookup part string-subclass guard" in change_log
     assert "`_is_unsafe_servicenow_lookup_part()`" in change_log
@@ -11567,7 +11579,7 @@ def test_sprint_583_documents_servicenow_story_response_text_str_subclass_guard(
     change_log = Path("docs/sprints/sprint-583-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story response text string-subclass guard" in change_log
     assert "`_servicenow_story_response_text()`" in change_log
@@ -11588,7 +11600,7 @@ def test_sprint_584_documents_servicenow_lookup_response_text_str_subclass_guard
     change_log = Path("docs/sprints/sprint-584-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow lookup response text string-subclass guard" in change_log
     assert "`_servicenow_lookup_text()`" in change_log
@@ -11609,7 +11621,7 @@ def test_sprint_585_documents_servicenow_api_diagnostic_text_str_subclass_guard(
     change_log = Path("docs/sprints/sprint-585-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API diagnostic text string-subclass guard" in change_log
     assert "`_servicenow_diagnostic_value()`" in change_log
@@ -11635,7 +11647,7 @@ def test_sprint_586_documents_servicenow_secret_redaction_str_subclass_guard() -
     change_log = Path("docs/sprints/sprint-586-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow secret redaction string-subclass guard" in change_log
     assert "`redact_secrets()`" in change_log
@@ -11661,7 +11673,7 @@ def test_sprint_587_documents_servicenow_http_error_diagnostic_str_subclass_guar
     change_log = Path("docs/sprints/sprint-587-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP error diagnostic string-subclass guard" in change_log
     assert "`_bound_http_error_diagnostics()`" in change_log
@@ -11681,7 +11693,7 @@ def test_sprint_588_documents_servicenow_api_diagnostic_key_projection() -> None
     change_log = Path("docs/sprints/sprint-588-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API diagnostic key projection" in change_log
     assert "`_servicenow_diagnostic_value()`" in change_log
@@ -11704,7 +11716,7 @@ def test_sprint_589_documents_servicenow_http_error_diagnostic_key_projection() 
     change_log = Path("docs/sprints/sprint-589-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP error diagnostic key projection" in change_log
     assert "`_bound_http_error_diagnostics()`" in change_log
@@ -11727,7 +11739,7 @@ def test_sprint_935_documents_servicenow_diagnostic_exact_container_boundary() -
     None
 ):
     change_log = Path("docs/sprints/sprint-935-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow diagnostic exact-container boundary" in change_log
     assert "`_bound_http_error_diagnostics()`" in change_log
@@ -11749,7 +11761,7 @@ def test_sprint_590_documents_servicenow_http_error_diagnostic_scalar_normalizat
     change_log = Path("docs/sprints/sprint-590-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP error diagnostic scalar normalization" in change_log
     assert "`_bound_http_error_diagnostics()`" in change_log
@@ -11771,7 +11783,7 @@ def test_sprint_591_documents_servicenow_secret_redaction_key_projection() -> No
     change_log = Path("docs/sprints/sprint-591-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow secret redaction key projection" in change_log
     assert "`redact_secrets()`" in change_log
@@ -11796,7 +11808,7 @@ def test_sprint_592_documents_servicenow_secret_redaction_scalar_normalization()
     change_log = Path("docs/sprints/sprint-592-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow secret redaction scalar normalization" in change_log
     assert "`redact_secrets()`" in change_log
@@ -11818,7 +11830,7 @@ def test_sprint_593_documents_servicenow_api_diagnostic_cycle_safety() -> None:
     change_log = Path("docs/sprints/sprint-593-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API diagnostic cycle safety" in change_log
     assert "`_servicenow_diagnostic_value()`" in change_log
@@ -11834,7 +11846,7 @@ def test_sprint_594_documents_servicenow_http_error_diagnostic_cycle_safety() ->
     change_log = Path("docs/sprints/sprint-594-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP error diagnostic cycle safety" in change_log
     assert "`_bound_http_error_diagnostics()`" in change_log
@@ -11857,7 +11869,7 @@ def test_sprint_595_documents_servicenow_http_diagnostic_exact_truncation_cap() 
     change_log = Path("docs/sprints/sprint-595-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP diagnostic exact truncation cap" in change_log
     assert "`_truncate_http_error_diagnostic()`" in change_log
@@ -11876,7 +11888,7 @@ def test_sprint_596_documents_servicenow_api_diagnostic_per_string_cap() -> None
     change_log = Path("docs/sprints/sprint-596-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API diagnostic per-string cap" in change_log
     assert "`_servicenow_diagnostic_value()`" in change_log
@@ -11892,7 +11904,7 @@ def test_sprint_602_documents_servicenow_http_error_diagnostic_text_normalizatio
     change_log = Path("docs/sprints/sprint-602-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow HTTP error diagnostic text normalization" in change_log
     assert "`_bound_http_error_diagnostics()`" in change_log
@@ -11918,7 +11930,7 @@ def test_sprint_597_documents_servicenow_diagnostic_duplicate_key_exact_cap() ->
     change_log = Path("docs/sprints/sprint-597-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow diagnostic duplicate key exact cap" in change_log
     assert "`_unique_servicenow_diagnostic_key()`" in change_log
@@ -11935,7 +11947,7 @@ def test_sprint_598_documents_servicenow_secret_redaction_cycle_safety() -> None
     change_log = Path("docs/sprints/sprint-598-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow secret redaction cycle safety" in change_log
     assert "`redact_secrets()`" in change_log
@@ -11955,7 +11967,7 @@ def test_sprint_599_documents_servicenow_secret_redaction_text_value_cap() -> No
     change_log = Path("docs/sprints/sprint-599-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow secret redaction text value cap" in change_log
     assert "`redact_secrets()`" in change_log
@@ -11976,7 +11988,7 @@ def test_sprint_600_documents_servicenow_diagnostic_truncation_marker_collision_
     change_log = Path("docs/sprints/sprint-600-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow diagnostic truncation marker collision safety" in change_log
     assert "`_add_servicenow_truncation_marker()`" in change_log
@@ -12000,7 +12012,7 @@ def test_sprint_601_documents_servicenow_secret_redaction_text_normalization() -
     change_log = Path("docs/sprints/sprint-601-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow secret redaction text normalization" in change_log
     assert "`redact_secrets()`" in change_log
@@ -12017,7 +12029,7 @@ def test_sprint_601_documents_servicenow_secret_redaction_text_normalization() -
 
 def test_sprint_548_documents_servicenow_story_response_text_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-548-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story response text type guard" in change_log
     assert "`_story_from_record()`" in change_log
@@ -12034,7 +12046,7 @@ def test_sprint_548_documents_servicenow_story_response_text_type_guard() -> Non
 
 def test_sprint_562_documents_servicenow_story_additional_context_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-562-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story additional-context length guard" in change_log
     assert "`_story_from_record()`" in change_log
@@ -12050,7 +12062,7 @@ def test_sprint_562_documents_servicenow_story_additional_context_length_guard()
 
 def test_sprint_549_documents_servicenow_metadata_response_text_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-549-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response text type guard" in change_log
     assert "`_state_choice_from_record()`" in change_log
@@ -12072,7 +12084,7 @@ def test_sprint_563_documents_servicenow_metadata_response_text_length_guard() -
     change_log = Path("docs/sprints/sprint-563-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response text length guard" in change_log
     assert "`_servicenow_metadata_response_text()`" in change_log
@@ -12093,7 +12105,7 @@ def test_sprint_565_documents_servicenow_metadata_response_text_control_guard() 
     change_log = Path("docs/sprints/sprint-565-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response text control-character guard" in change_log
     assert "`_servicenow_metadata_response_text()`" in change_log
@@ -12116,7 +12128,7 @@ def test_sprint_568_documents_servicenow_metadata_text_str_subclass_guard() -> N
     change_log = Path("docs/sprints/sprint-568-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata text string-subclass guard" in change_log
     assert "`_servicenow_metadata_response_text()`" in change_log
@@ -12137,7 +12149,7 @@ def test_sprint_568_documents_servicenow_metadata_text_str_subclass_guard() -> N
 
 def test_sprint_550_documents_servicenow_metadata_response_boolean_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-550-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response boolean type guard" in change_log
     assert "`_truthy()`" in change_log
@@ -12158,7 +12170,7 @@ def test_sprint_564_documents_servicenow_metadata_response_boolean_padding_guard
     change_log = Path("docs/sprints/sprint-564-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response boolean padding guard" in change_log
     assert "`_servicenow_metadata_response_bool()`" in change_log
@@ -12181,7 +12193,7 @@ def test_sprint_567_documents_servicenow_metadata_boolean_str_subclass_guard() -
     change_log = Path("docs/sprints/sprint-567-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata boolean string-subclass guard" in change_log
     assert "`_servicenow_metadata_response_bool()`" in change_log
@@ -12202,7 +12214,7 @@ def test_sprint_567_documents_servicenow_metadata_boolean_str_subclass_guard() -
 
 def test_sprint_551_documents_servicenow_metadata_response_sequence_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-551-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response sequence type guard" in change_log
     assert "`sys_choice.sequence`" in change_log
@@ -12224,7 +12236,7 @@ def test_sprint_566_documents_servicenow_metadata_response_sequence_range_guard(
     change_log = Path("docs/sprints/sprint-566-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata response sequence range guard" in change_log
     assert "`_servicenow_metadata_response_int()`" in change_log
@@ -12248,7 +12260,7 @@ def test_sprint_569_documents_servicenow_metadata_sequence_str_subclass_guard() 
     change_log = Path("docs/sprints/sprint-569-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata sequence string-subclass guard" in change_log
     assert "`_servicenow_metadata_response_int()`" in change_log
@@ -12272,7 +12284,7 @@ def test_sprint_570_documents_servicenow_metadata_sequence_int_subclass_guard() 
     change_log = Path("docs/sprints/sprint-570-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow metadata sequence integer-subclass guard" in change_log
     assert "`_servicenow_metadata_response_int()`" in change_log
@@ -12296,7 +12308,7 @@ def test_sprint_571_documents_servicenow_story_priority_int_subclass_guard() -> 
     change_log = Path("docs/sprints/sprint-571-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story response priority integer-subclass guard" in change_log
     assert "`_servicenow_story_response_int()`" in change_log
@@ -12320,7 +12332,7 @@ def test_sprint_572_documents_servicenow_story_points_float_subclass_guard() -> 
     change_log = Path("docs/sprints/sprint-572-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story response story-points numeric-subclass guard" in change_log
     assert "`_servicenow_story_response_float()`" in change_log
@@ -12346,7 +12358,7 @@ def test_sprint_573_documents_servicenow_table_name_str_subclass_guard() -> None
     change_log = Path("docs/sprints/sprint-573-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow table-name string-subclass guard" in change_log
     assert "`_servicenow_table_name()`" in change_log
@@ -12367,7 +12379,7 @@ def test_sprint_574_documents_servicenow_record_id_str_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-574-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow record-id string-subclass guard" in change_log
     assert "`_servicenow_record_id()`" in change_log
@@ -12388,7 +12400,7 @@ def test_sprint_575_documents_servicenow_field_name_str_subclass_guard() -> None
     change_log = Path("docs/sprints/sprint-575-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow field-name string-subclass guard" in change_log
     assert "`_servicenow_field_name()`" in change_log
@@ -12409,7 +12421,7 @@ def test_sprint_576_documents_servicenow_operation_uri_str_subclass_guard() -> N
     change_log = Path("docs/sprints/sprint-576-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow operation URI string-subclass guard" in change_log
     assert "`_servicenow_operation_uri()`" in change_log
@@ -12430,7 +12442,7 @@ def test_sprint_577_documents_servicenow_dictionary_internal_type_str_subclass_g
     change_log = Path("docs/sprints/sprint-577-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary internal-type string-subclass guard" in change_log
     assert "`_servicenow_dictionary_internal_type()`" in change_log
@@ -12454,7 +12466,7 @@ def test_sprint_578_documents_servicenow_dictionary_column_label_str_subclass_gu
     change_log = Path("docs/sprints/sprint-578-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary column-label string-subclass guard" in change_log
     assert "`_servicenow_dictionary_column_label()`" in change_log
@@ -12476,7 +12488,7 @@ def test_sprint_578_documents_servicenow_dictionary_column_label_str_subclass_gu
 
 def test_sprint_552_documents_servicenow_story_response_priority_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-552-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story response priority type guard" in change_log
     assert "`_story_from_record()`" in change_log
@@ -12498,7 +12510,7 @@ def test_sprint_552_documents_servicenow_story_response_priority_type_guard() ->
 
 def test_sprint_553_documents_servicenow_story_response_story_points_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-553-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story response story-points type guard" in change_log
     assert "`_story_from_record()`" in change_log
@@ -12522,7 +12534,7 @@ def test_sprint_553_documents_servicenow_story_response_story_points_type_guard(
 
 def test_sprint_554_documents_servicenow_oauth_access_token_size_and_ascii_guard() -> None:
     change_log = Path("docs/sprints/sprint-554-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth access-token size and ASCII guard" in change_log
     assert "`OAuthClientCredentials._fetch_token()`" in change_log
@@ -12539,7 +12551,7 @@ def test_sprint_554_documents_servicenow_oauth_access_token_size_and_ascii_guard
 
 def test_sprint_555_documents_servicenow_record_id_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-555-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow record-id length guard" in change_log
     assert "`_servicenow_record_id()`" in change_log
@@ -12556,7 +12568,7 @@ def test_sprint_555_documents_servicenow_record_id_length_guard() -> None:
 
 def test_sprint_530_documents_ready_story_project_id_query_guard() -> None:
     change_log = Path("docs/sprints/sprint-530-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow ready-story project-id query injection guard" in change_log
     assert "`ServiceNowClient.fetch_ready_stories(project_sys_id=...)`" in change_log
@@ -12576,7 +12588,7 @@ def test_sprint_530_documents_ready_story_project_id_query_guard() -> None:
 
 def test_sprint_531_documents_servicenow_sysparm_fields_projection_guard() -> None:
     change_log = Path("docs/sprints/sprint-531-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow sysparm_fields projection guard" in change_log
     assert "`ServiceNowClient.fetch_table_records(fields=...)`" in change_log
@@ -12594,7 +12606,7 @@ def test_sprint_531_documents_servicenow_sysparm_fields_projection_guard() -> No
 
 def test_sprint_532_documents_servicenow_sysparm_limit_range_guard() -> None:
     change_log = Path("docs/sprints/sprint-532-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow sysparm_limit range guard" in change_log
     assert "`ServiceNowClient.fetch_stories()`" in change_log
@@ -12612,7 +12624,7 @@ def test_sprint_532_documents_servicenow_sysparm_limit_range_guard() -> None:
 
 def test_sprint_533_documents_servicenow_cicd_retrieve_id_validation() -> None:
     change_log = Path("docs/sprints/sprint-533-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CI/CD retrieve id validation" in change_log
     assert "`ServiceNowClient.retrieve_cicd_update_set()`" in change_log
@@ -12631,7 +12643,7 @@ def test_sprint_533_documents_servicenow_cicd_retrieve_id_validation() -> None:
 
 def test_sprint_534_documents_servicenow_boolean_flag_serialization_guard() -> None:
     change_log = Path("docs/sprints/sprint-534-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow boolean flag serialization guard" in change_log
     assert "`_bool_query_value()`" in change_log
@@ -12650,7 +12662,7 @@ def test_sprint_534_documents_servicenow_boolean_flag_serialization_guard() -> N
 
 def test_sprint_535_documents_servicenow_dictionary_element_write_guard() -> None:
     change_log = Path("docs/sprints/sprint-535-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary element write guard" in change_log
     assert "`ServiceNowClient.create_story_dictionary_field()`" in change_log
@@ -12669,7 +12681,7 @@ def test_sprint_535_documents_servicenow_dictionary_element_write_guard() -> Non
 
 def test_sprint_536_documents_servicenow_dictionary_internal_type_write_guard() -> None:
     change_log = Path("docs/sprints/sprint-536-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary internal type write guard" in change_log
     assert "`ServiceNowClient.create_story_dictionary_field()`" in change_log
@@ -12688,7 +12700,7 @@ def test_sprint_536_documents_servicenow_dictionary_internal_type_write_guard() 
 
 def test_sprint_537_documents_servicenow_dictionary_max_length_write_guard() -> None:
     change_log = Path("docs/sprints/sprint-537-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary max length write guard" in change_log
     assert "`ServiceNowClient.create_story_dictionary_field()`" in change_log
@@ -12706,7 +12718,7 @@ def test_sprint_537_documents_servicenow_dictionary_max_length_write_guard() -> 
 
 def test_sprint_538_documents_servicenow_dictionary_column_label_write_guard() -> None:
     change_log = Path("docs/sprints/sprint-538-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary column label write guard" in change_log
     assert "`ServiceNowClient.create_story_dictionary_field()`" in change_log
@@ -12724,7 +12736,7 @@ def test_sprint_538_documents_servicenow_dictionary_column_label_write_guard() -
 
 def test_sprint_539_documents_servicenow_story_patch_field_name_guard() -> None:
     change_log = Path("docs/sprints/sprint-539-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story PATCH field-name guard" in change_log
     assert "`ServiceNowClient.update_story_fields()`" in change_log
@@ -12741,7 +12753,7 @@ def test_sprint_539_documents_servicenow_story_patch_field_name_guard() -> None:
 
 def test_sprint_540_documents_servicenow_generic_upsert_field_name_guard() -> None:
     change_log = Path("docs/sprints/sprint-540-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow generic upsert field-name guard" in change_log
     assert "`ServiceNowClient.upsert_table_record()`" in change_log
@@ -12760,7 +12772,7 @@ def test_sprint_540_documents_servicenow_generic_upsert_field_name_guard() -> No
 
 def test_sprint_541_documents_servicenow_field_name_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-541-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow field-name type guard" in change_log
     assert "`_servicenow_field_name()`" in change_log
@@ -12777,7 +12789,7 @@ def test_sprint_541_documents_servicenow_field_name_type_guard() -> None:
 
 def test_sprint_542_documents_servicenow_record_id_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-542-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow record-id type guard" in change_log
     assert "`_servicenow_record_id()`" in change_log
@@ -12794,7 +12806,7 @@ def test_sprint_542_documents_servicenow_record_id_type_guard() -> None:
 
 def test_sprint_543_documents_servicenow_table_name_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-543-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow table-name type guard" in change_log
     assert "`_servicenow_table_name()`" in change_log
@@ -12811,7 +12823,7 @@ def test_sprint_543_documents_servicenow_table_name_type_guard() -> None:
 
 def test_sprint_556_documents_servicenow_table_name_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-556-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow table-name length guard" in change_log
     assert "`_servicenow_table_name()`" in change_log
@@ -12828,7 +12840,7 @@ def test_sprint_556_documents_servicenow_table_name_length_guard() -> None:
 
 def test_sprint_557_documents_servicenow_field_name_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-557-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow field-name length guard" in change_log
     assert "`_servicenow_field_name()`" in change_log
@@ -12845,7 +12857,7 @@ def test_sprint_557_documents_servicenow_field_name_length_guard() -> None:
 
 def test_sprint_544_documents_servicenow_lookup_query_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-544-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow lookup query type guard" in change_log
     assert "`_servicenow_lookup_query()`" in change_log
@@ -12862,7 +12874,7 @@ def test_sprint_544_documents_servicenow_lookup_query_type_guard() -> None:
 
 def test_sprint_559_documents_servicenow_lookup_part_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-559-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow lookup part length guard" in change_log
     assert "`_servicenow_lookup_query()`" in change_log
@@ -12879,7 +12891,7 @@ def test_sprint_559_documents_servicenow_lookup_part_length_guard() -> None:
 
 def test_sprint_545_documents_servicenow_result_limit_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-545-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow sysparm_limit type guard" in change_log
     assert "`_servicenow_result_limit()`" in change_log
@@ -12896,7 +12908,7 @@ def test_sprint_545_documents_servicenow_result_limit_type_guard() -> None:
 
 def test_sprint_546_documents_servicenow_dictionary_internal_type_type_guard() -> None:
     change_log = Path("docs/sprints/sprint-546-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary internal type type guard" in change_log
     assert "`_servicenow_dictionary_internal_type()`" in change_log
@@ -12915,7 +12927,7 @@ def test_sprint_546_documents_servicenow_dictionary_internal_type_type_guard() -
 
 def test_sprint_561_documents_servicenow_dictionary_internal_type_length_guard() -> None:
     change_log = Path("docs/sprints/sprint-561-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary internal-type length guard" in change_log
     assert "`_servicenow_dictionary_internal_type()`" in change_log
@@ -12931,7 +12943,7 @@ def test_sprint_561_documents_servicenow_dictionary_internal_type_length_guard()
 
 def test_sprint_620_documents_exact_string_work_note_boundary() -> None:
     change_log = Path("docs/sprints/sprint-620-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Exact-string ServiceNow work-note boundary" in change_log
     assert "`safe_work_note_value()` now accepts exact `str` values only" in change_log
@@ -12948,7 +12960,7 @@ def test_sprint_620_documents_exact_string_work_note_boundary() -> None:
 
 def test_sprint_621_documents_artifact_handoff_summary_exact_scalar_boundary() -> None:
     change_log = Path("docs/sprints/sprint-621-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact handoff summary exact-scalar boundary" in change_log
     assert "`build_artifact_handoff_work_note()` summary rendering" in change_log
@@ -12967,7 +12979,7 @@ def test_sprint_621_documents_artifact_handoff_summary_exact_scalar_boundary() -
 
 def test_sprint_622_documents_artifact_handoff_delivery_job_validation() -> None:
     change_log = Path("docs/sprints/sprint-622-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact handoff delivery job fail-closed validation" in change_log
     assert "`delivery_attachment_jobs_from_report()`" in change_log
@@ -12982,7 +12994,7 @@ def test_sprint_622_documents_artifact_handoff_delivery_job_validation() -> None
 
 def test_sprint_623_documents_artifact_handoff_report_creation_validation() -> None:
     change_log = Path("docs/sprints/sprint-623-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact handoff report creation fail-closed validation" in change_log
     assert "`build_artifact_handoff_report()`" in change_log
@@ -13001,7 +13013,7 @@ def test_sprint_623_documents_artifact_handoff_report_creation_validation() -> N
 
 def test_sprint_624_documents_writeback_state_choice_exact_string_mapping() -> None:
     change_log = Path("docs/sprints/sprint-624-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback state choice exact-string mapping" in change_log
     assert "`build_state_mapping_from_choices()`" in change_log
@@ -13015,7 +13027,7 @@ def test_sprint_624_documents_writeback_state_choice_exact_string_mapping() -> N
 
 def test_sprint_625_documents_writeback_batch_report_exact_string_values() -> None:
     change_log = Path("docs/sprints/sprint-625-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report exact-string diagnostic values" in change_log
     assert "`_diagnostic_report_value()`" in change_log
@@ -13031,7 +13043,7 @@ def test_sprint_932_documents_writeback_batch_report_scalar_subclass_boundary() 
     None
 ):
     change_log = Path("docs/sprints/sprint-932-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report scalar-subclass diagnostic boundary" in change_log
     assert "`_diagnostic_report_value()`" in change_log
@@ -13046,7 +13058,7 @@ def test_sprint_938_documents_writeback_batch_report_exact_container_boundary() 
     change_log = Path("docs/sprints/sprint-938-change-log.md").read_text(
         encoding="utf-8",
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback batch report exact-container diagnostic boundary" in change_log
     assert "`_diagnostic_report_node()`" in change_log
@@ -13063,7 +13075,7 @@ def test_sprint_938_documents_writeback_batch_report_exact_container_boundary() 
 
 def test_sprint_626_documents_manual_review_feedback_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-626-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Manual-review feedback exact-string metadata boundary" in change_log
     assert "`eligibility_reasons` and `reviewer_notes`" in change_log
@@ -13077,7 +13089,7 @@ def test_sprint_626_documents_manual_review_feedback_exact_string_boundary() -> 
 
 def test_sprint_627_documents_context_escalation_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-627-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Context escalation exact-string routing boundary" in change_log
     assert "`plan_context_escalation()`" in change_log
@@ -13090,7 +13102,7 @@ def test_sprint_627_documents_context_escalation_exact_string_boundary() -> None
 
 def test_sprint_628_documents_openai_provider_validation_exact_location_diagnostics() -> None:
     change_log = Path("docs/sprints/sprint-628-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI provider validation exact-location diagnostics" in change_log
     assert "`_openai_runtime_error_fields()`" in change_log
@@ -13105,7 +13117,7 @@ def test_sprint_628_documents_openai_provider_validation_exact_location_diagnost
 
 def test_sprint_629_documents_admin_alert_row_exact_string_rendering() -> None:
     change_log = Path("docs/sprints/sprint-629-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin alert row exact-string rendering" in change_log
     assert "`_admin_alert_row()`" in change_log
@@ -13118,7 +13130,7 @@ def test_sprint_629_documents_admin_alert_row_exact_string_rendering() -> None:
 
 def test_sprint_630_documents_artifact_handoff_cli_exact_story_number_boundary() -> None:
     change_log = Path("docs/sprints/sprint-630-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact handoff CLI exact story-number boundary" in change_log
     assert "`_handoff_report_story_number()`" in change_log
@@ -13132,7 +13144,7 @@ def test_sprint_630_documents_artifact_handoff_cli_exact_story_number_boundary()
 
 def test_sprint_631_documents_delivery_attachment_audit_exact_response_metadata() -> None:
     change_log = Path("docs/sprints/sprint-631-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Delivery attachment audit exact-string response metadata" in change_log
     assert "1 failing-first CLI test" in change_log
@@ -13145,7 +13157,7 @@ def test_sprint_631_documents_delivery_attachment_audit_exact_response_metadata(
 
 def test_sprint_632_documents_model_fulfillment_story_text_exact_context_boundary() -> None:
     change_log = Path("docs/sprints/sprint-632-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment story text exact-string context boundary" in change_log
     assert "`_surface_context_and_rags_for_story()`" in change_log
@@ -13159,7 +13171,7 @@ def test_sprint_632_documents_model_fulfillment_story_text_exact_context_boundar
 
 def test_sprint_633_documents_model_fulfillment_required_surface_exact_boundary() -> None:
     change_log = Path("docs/sprints/sprint-633-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment required-surface exact-string boundary" in change_log
     assert "`_required_surfaces_for_assessment()`" in change_log
@@ -13173,7 +13185,7 @@ def test_sprint_633_documents_model_fulfillment_required_surface_exact_boundary(
 
 def test_sprint_634_documents_public_doc_citation_version_exact_boundary() -> None:
     change_log = Path("docs/sprints/sprint-634-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public documentation citation version exact-string boundary" in change_log
     assert "`_public_doc_citation_version()`" in change_log
@@ -13187,7 +13199,7 @@ def test_sprint_634_documents_public_doc_citation_version_exact_boundary() -> No
 
 def test_sprint_635_documents_retrieved_update_set_handoff_exact_scalar_boundary() -> None:
     change_log = Path("docs/sprints/sprint-635-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff exact primitive scalar boundary" in change_log
     assert "`_candidate_field_text()`" in change_log
@@ -13201,7 +13213,7 @@ def test_sprint_635_documents_retrieved_update_set_handoff_exact_scalar_boundary
 
 def test_sprint_636_documents_artifact_manifest_concrete_path_boundary() -> None:
     change_log = Path("docs/sprints/sprint-636-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact manifest concrete Path boundary" in change_log
     assert "2 failing-first artifact manifest tests" in change_log
@@ -13214,7 +13226,7 @@ def test_sprint_636_documents_artifact_manifest_concrete_path_boundary() -> None
 
 def test_sprint_637_documents_model_fulfillment_persisted_artifact_boundary() -> None:
     change_log = Path("docs/sprints/sprint-637-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment persisted artifact exact-string boundary" in change_log
     assert "`str(artifact.path)`" in change_log
@@ -13227,7 +13239,7 @@ def test_sprint_637_documents_model_fulfillment_persisted_artifact_boundary() ->
 
 def test_sprint_638_documents_public_doc_context_bundle_citation_boundary() -> None:
     change_log = Path("docs/sprints/sprint-638-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public documentation context-bundle citation version boundary" in change_log
     assert "`str(result.citation.version or \"\")`" in change_log
@@ -13243,7 +13255,7 @@ def test_sprint_638_documents_public_doc_context_bundle_citation_boundary() -> N
 
 def test_sprint_639_documents_public_doc_required_citation_boundary() -> None:
     change_log = Path("docs/sprints/sprint-639-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public documentation required citation metadata boundary" in change_log
     assert "`source` and `content_hash`" in change_log
@@ -13256,7 +13268,7 @@ def test_sprint_639_documents_public_doc_required_citation_boundary() -> None:
 
 def test_sprint_640_documents_public_doc_content_excerpt_boundary() -> None:
     change_log = Path("docs/sprints/sprint-640-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public documentation content excerpt boundary" in change_log
     assert "hostile public-doc content string subclass" in change_log
@@ -13270,7 +13282,7 @@ def test_sprint_640_documents_public_doc_content_excerpt_boundary() -> None:
 
 def test_sprint_641_documents_public_doc_query_evidence_boundary() -> None:
     change_log = Path("docs/sprints/sprint-641-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public documentation query evidence boundary" in change_log
     assert "`instance_context_bundle.public_doc_queries`" in change_log
@@ -13283,7 +13295,7 @@ def test_sprint_641_documents_public_doc_query_evidence_boundary() -> None:
 
 def test_sprint_642_documents_public_doc_confidence_format_boundary() -> None:
     change_log = Path("docs/sprints/sprint-642-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public documentation citation confidence formatting boundary" in change_log
     assert "custom `__format__` behavior" in change_log
@@ -13296,7 +13308,7 @@ def test_sprint_642_documents_public_doc_confidence_format_boundary() -> None:
 
 def test_sprint_643_documents_dictionary_form_discovery_metadata_boundary() -> None:
     change_log = Path("docs/sprints/sprint-643-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form discovery metadata exact-string boundary" in change_log
     assert "`discover_dictionary_form_context()`" in change_log
@@ -13309,7 +13321,7 @@ def test_sprint_643_documents_dictionary_form_discovery_metadata_boundary() -> N
 
 def test_sprint_644_documents_dictionary_form_discovery_numeric_boundary() -> None:
     change_log = Path("docs/sprints/sprint-644-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form discovery numeric metadata boundary" in change_log
     assert "hostile form element position object" in change_log
@@ -13324,7 +13336,7 @@ def test_sprint_1004_documents_dictionary_form_discovery_record_collection_guard
     change_log = Path("docs/sprints/sprint-1004-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form discovery record collection guard" in change_log
     assert "`discover_dictionary_form_context()`" in change_log
@@ -13352,7 +13364,7 @@ def test_sprint_1004_documents_dictionary_form_discovery_record_collection_guard
 
 def test_sprint_645_documents_discovery_active_metadata_boundary() -> None:
     change_log = Path("docs/sprints/sprint-645-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Discovery active metadata exact bool/string boundary" in change_log
     assert "hostile active-state object" in change_log
@@ -13365,7 +13377,7 @@ def test_sprint_645_documents_discovery_active_metadata_boundary() -> None:
 
 def test_sprint_646_documents_discovery_text_metadata_boundary() -> None:
     change_log = Path("docs/sprints/sprint-646-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Discovery surface text metadata exact-string boundary" in change_log
     assert "hostile business-rule name object" in change_log
@@ -13382,7 +13394,7 @@ def test_sprint_1005_documents_shared_surface_discovery_record_collection_guard(
     change_log = Path("docs/sprints/sprint-1005-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Shared surface discovery record collection guard" in change_log
     assert "`_table_surface()`" in change_log
@@ -13412,7 +13424,7 @@ def test_sprint_1008_documents_cmdb_ire_discovery_record_collection_guard() -> N
     change_log = Path("docs/sprints/sprint-1008-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CMDB IRE discovery record collection guard" in change_log
     assert "`_cmdb_ire_identification_rules_surface()`" in change_log
@@ -13443,7 +13455,7 @@ def test_sprint_1008_documents_cmdb_ire_discovery_record_collection_guard() -> N
 
 def test_sprint_647_documents_implementation_packet_review_item_boundary() -> None:
     change_log = Path("docs/sprints/sprint-647-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation-packet review item exact-string boundary" in change_log
     assert "hostile review item string subclass" in change_log
@@ -13456,7 +13468,7 @@ def test_sprint_647_documents_implementation_packet_review_item_boundary() -> No
 
 def test_sprint_648_documents_raw_xml_scanner_exact_key_boundary() -> None:
     change_log = Path("docs/sprints/sprint-648-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation-packet raw XML scanner exact-key boundary" in change_log
     assert "hostile provider-response key" in change_log
@@ -13471,7 +13483,7 @@ def test_sprint_648_documents_raw_xml_scanner_exact_key_boundary() -> None:
 
 def test_sprint_649_documents_response_table_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-649-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation-packet response table exact-string boundary" in change_log
     assert "hostile provider-response table object" in change_log
@@ -13484,7 +13496,7 @@ def test_sprint_649_documents_response_table_exact_string_boundary() -> None:
 
 def test_sprint_650_documents_generic_provider_response_identifier_boundary() -> None:
     change_log = Path("docs/sprints/sprint-650-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Generic provider response exact identifier boundary" in change_log
     assert "hostile operation object" in change_log
@@ -13497,7 +13509,7 @@ def test_sprint_650_documents_generic_provider_response_identifier_boundary() ->
 
 def test_sprint_651_documents_provider_field_name_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-651-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider field-name exact-string normalization boundary" in change_log
     assert "hostile field-name string subclass" in change_log
@@ -13510,7 +13522,7 @@ def test_sprint_651_documents_provider_field_name_exact_string_boundary() -> Non
 
 def test_sprint_652_documents_provider_candidate_exact_container_boundary() -> None:
     change_log = Path("docs/sprints/sprint-652-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider candidate exact-container normalization boundary" in change_log
     assert "hostile `list` and `dict` subclasses" in change_log
@@ -13524,7 +13536,7 @@ def test_sprint_652_documents_provider_candidate_exact_container_boundary() -> N
 
 def test_sprint_653_documents_provider_candidate_root_exact_object_boundary() -> None:
     change_log = Path("docs/sprints/sprint-653-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider candidate root exact-object normalization boundary" in change_log
     assert "hostile root candidate dictionary subclass" in change_log
@@ -13540,7 +13552,7 @@ def test_sprint_653_documents_provider_candidate_root_exact_object_boundary() ->
 
 def test_sprint_654_documents_provider_candidate_exact_object_key_boundary() -> None:
     change_log = Path("docs/sprints/sprint-654-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider candidate exact-object-key normalization boundary" in change_log
     assert "unsafe root, change, and field-entry string-subclass keys" in change_log
@@ -13555,7 +13567,7 @@ def test_sprint_654_documents_provider_candidate_exact_object_key_boundary() -> 
 
 def test_sprint_655_documents_provider_field_value_json_scalar_boundary() -> None:
     change_log = Path("docs/sprints/sprint-655-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider field-value JSON-scalar normalization boundary" in change_log
     assert "4 failing-first provider-response-normalization tests" in change_log
@@ -13570,7 +13582,7 @@ def test_sprint_655_documents_provider_field_value_json_scalar_boundary() -> Non
 
 def test_sprint_656_documents_provider_root_text_list_boundary() -> None:
     change_log = Path("docs/sprints/sprint-656-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider root text-list normalization boundary" in change_log
     assert "3 failing-first provider-response-normalization tests" in change_log
@@ -13585,7 +13597,7 @@ def test_sprint_656_documents_provider_root_text_list_boundary() -> None:
 
 def test_sprint_657_documents_provider_allowed_property_boundary() -> None:
     change_log = Path("docs/sprints/sprint-657-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider candidate allowed-property normalization boundary" in change_log
     assert "additionalProperties: false" in change_log
@@ -13602,7 +13614,7 @@ def test_sprint_657_documents_provider_allowed_property_boundary() -> None:
 
 def test_sprint_658_documents_provider_change_metadata_boundary() -> None:
     change_log = Path("docs/sprints/sprint-658-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider change metadata schema normalization boundary" in change_log
     assert "5 failing-first provider-response-normalization tests" in change_log
@@ -13618,7 +13630,7 @@ def test_sprint_658_documents_provider_change_metadata_boundary() -> None:
 
 def test_sprint_659_documents_provider_root_text_list_bounds() -> None:
     change_log = Path("docs/sprints/sprint-659-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider root text-list bound normalization boundary" in change_log
     assert "2 failing-first provider-response-normalization tests" in change_log
@@ -13632,7 +13644,7 @@ def test_sprint_659_documents_provider_root_text_list_bounds() -> None:
 
 def test_sprint_660_documents_provider_change_metadata_text_bounds() -> None:
     change_log = Path("docs/sprints/sprint-660-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider change metadata text-bound normalization boundary" in change_log
     assert "5 failing-first provider-response-normalization tests" in change_log
@@ -13645,7 +13657,7 @@ def test_sprint_660_documents_provider_change_metadata_text_bounds() -> None:
 
 def test_sprint_661_documents_provider_string_field_value_bounds() -> None:
     change_log = Path("docs/sprints/sprint-661-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider string field-value bound normalization boundary" in change_log
     assert "2 failing-first provider-response-normalization tests" in change_log
@@ -13658,7 +13670,7 @@ def test_sprint_661_documents_provider_string_field_value_bounds() -> None:
 
 def test_sprint_662_documents_provider_numeric_field_value_bounds() -> None:
     change_log = Path("docs/sprints/sprint-662-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider numeric field-value safe JSON boundary" in change_log
     assert "4 failing-first provider-response-normalization assertions" in change_log
@@ -13671,7 +13683,7 @@ def test_sprint_662_documents_provider_numeric_field_value_bounds() -> None:
 
 def test_sprint_663_documents_provider_minimum_change_count() -> None:
     change_log = Path("docs/sprints/sprint-663-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider minimum-change normalization boundary" in change_log
     assert "1 failing-first provider-response-normalization test" in change_log
@@ -13682,7 +13694,7 @@ def test_sprint_663_documents_provider_minimum_change_count() -> None:
 
 def test_sprint_664_documents_provider_schema_bound_alignment() -> None:
     change_log = Path("docs/sprints/sprint-664-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider schema bound alignment" in change_log
     assert "1 failing-first OpenAI provider schema test" in change_log
@@ -13695,7 +13707,7 @@ def test_sprint_664_documents_provider_schema_bound_alignment() -> None:
 
 def test_sprint_665_documents_provider_schema_numeric_bound_alignment() -> None:
     change_log = Path("docs/sprints/sprint-665-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider schema numeric-bound alignment" in change_log
     assert "1 failing-first OpenAI provider schema assertion" in change_log
@@ -13708,7 +13720,7 @@ def test_sprint_665_documents_provider_schema_numeric_bound_alignment() -> None:
 
 def test_sprint_666_documents_provider_review_item_non_empty_boundary() -> None:
     change_log = Path("docs/sprints/sprint-666-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider review-list item non-empty boundary" in change_log
     assert "2 failing-first provider-response-normalization assertions" in change_log
@@ -13721,7 +13733,7 @@ def test_sprint_666_documents_provider_review_item_non_empty_boundary() -> None:
 
 def test_sprint_667_documents_provider_table_identifier_shape_boundary() -> None:
     change_log = Path("docs/sprints/sprint-667-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider table identifier shape boundary" in change_log
     assert "4 failing-first provider-response-normalization assertions" in change_log
@@ -13734,7 +13746,7 @@ def test_sprint_667_documents_provider_table_identifier_shape_boundary() -> None
 
 def test_sprint_668_documents_provider_field_identifier_shape_boundary() -> None:
     change_log = Path("docs/sprints/sprint-668-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider field identifier shape boundary" in change_log
     assert "4 failing-first provider-response-normalization assertions" in change_log
@@ -13747,7 +13759,7 @@ def test_sprint_668_documents_provider_field_identifier_shape_boundary() -> None
 
 def test_sprint_669_documents_provider_schema_identifier_pattern_alignment() -> None:
     change_log = Path("docs/sprints/sprint-669-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider schema identifier-pattern alignment" in change_log
     assert "1 failing-first OpenAI provider schema assertion" in change_log
@@ -13761,7 +13773,7 @@ def test_sprint_669_documents_provider_schema_identifier_pattern_alignment() -> 
 
 def test_sprint_670_documents_provider_identifier_pattern_single_source() -> None:
     change_log = Path("docs/sprints/sprint-670-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider identifier pattern single-source enforcement" in change_log
     assert "2 failing-first provider-response-normalization assertions" in change_log
@@ -13774,7 +13786,7 @@ def test_sprint_670_documents_provider_identifier_pattern_single_source() -> Non
 
 def test_sprint_671_documents_provider_rationale_control_character_boundary() -> None:
     change_log = Path("docs/sprints/sprint-671-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider rationale control-character boundary" in change_log
     assert "2 failing-first provider-response-normalization assertions" in change_log
@@ -13787,7 +13799,7 @@ def test_sprint_671_documents_provider_rationale_control_character_boundary() ->
 
 def test_sprint_672_documents_provider_review_list_control_character_boundary() -> None:
     change_log = Path("docs/sprints/sprint-672-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider review-list control-character boundary" in change_log
     assert "2 failing-first provider-response-normalization assertions" in change_log
@@ -13800,7 +13812,7 @@ def test_sprint_672_documents_provider_review_list_control_character_boundary() 
 
 def test_sprint_673_documents_provider_schema_no_control_text_pattern_alignment() -> None:
     change_log = Path("docs/sprints/sprint-673-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider schema no-control text-pattern alignment" in change_log
     assert "1 failing-first OpenAI provider schema assertion" in change_log
@@ -13814,7 +13826,7 @@ def test_sprint_673_documents_provider_schema_no_control_text_pattern_alignment(
 
 def test_sprint_674_documents_provider_text_pattern_single_source() -> None:
     change_log = Path("docs/sprints/sprint-674-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider text pattern single-source enforcement" in change_log
     assert "2 failing-first provider-response-normalization assertions" in change_log
@@ -13827,7 +13839,7 @@ def test_sprint_674_documents_provider_text_pattern_single_source() -> None:
 
 def test_sprint_675_documents_provider_meaningful_text_policy() -> None:
     change_log = Path("docs/sprints/sprint-675-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider meaningful text-policy boundary" in change_log
     assert "2 failing-first provider-response-normalization assertions" in change_log
@@ -13838,7 +13850,7 @@ def test_sprint_675_documents_provider_meaningful_text_policy() -> None:
 
 def test_sprint_676_documents_provider_prompt_sentence_boundary() -> None:
     change_log = Path("docs/sprints/sprint-676-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider prompt sentence-boundary hardening" in change_log
     assert "1 failing-first provider-contract assertion" in change_log
@@ -13851,7 +13863,7 @@ def test_sprint_676_documents_provider_prompt_sentence_boundary() -> None:
 
 def test_sprint_677_documents_anthropic_metadata_stringification_boundary() -> None:
     change_log = Path("docs/sprints/sprint-677-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic metadata stringification boundary" in change_log
     assert "1 failing-first Anthropic provider assertion" in change_log
@@ -13864,7 +13876,7 @@ def test_sprint_677_documents_anthropic_metadata_stringification_boundary() -> N
 
 def test_sprint_678_documents_provider_response_text_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-678-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider response text exact-string boundary" in change_log
     assert "3 failing-first provider response-text assertions" in change_log
@@ -13875,7 +13887,7 @@ def test_sprint_678_documents_provider_response_text_exact_string_boundary() -> 
 
 def test_sprint_679_documents_provider_response_list_exact_container_boundary() -> None:
     change_log = Path("docs/sprints/sprint-679-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider response list exact-container boundary" in change_log
     assert "3 failing-first provider response-list assertions" in change_log
@@ -13886,7 +13898,7 @@ def test_sprint_679_documents_provider_response_list_exact_container_boundary() 
 
 def test_sprint_680_documents_provider_response_dict_exact_item_boundary() -> None:
     change_log = Path("docs/sprints/sprint-680-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider response dict exact-item boundary" in change_log
     assert "3 failing-first provider response-dict assertions" in change_log
@@ -13897,7 +13909,7 @@ def test_sprint_680_documents_provider_response_dict_exact_item_boundary() -> No
 
 def test_sprint_681_documents_provider_error_envelope_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-681-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider error envelope exact-dict boundary" in change_log
     assert "2 failing-first provider error-envelope assertions" in change_log
@@ -13908,7 +13920,7 @@ def test_sprint_681_documents_provider_error_envelope_exact_dict_boundary() -> N
 
 def test_sprint_682_documents_provider_top_level_response_body_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-682-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider top-level response body exact-dict boundary" in change_log
     assert "4 failing-first provider top-level body assertions" in change_log
@@ -13921,7 +13933,7 @@ def test_sprint_682_documents_provider_top_level_response_body_exact_dict_bounda
 
 def test_sprint_683_documents_anthropic_response_header_exact_container_boundary() -> None:
     change_log = Path("docs/sprints/sprint-683-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic response header exact-container boundary" in change_log
     assert "3 failing-first Anthropic response-header assertions" in change_log
@@ -13935,7 +13947,7 @@ def test_sprint_683_documents_anthropic_response_header_exact_container_boundary
 
 def test_sprint_684_documents_provider_prompt_payload_exact_json_boundary() -> None:
     change_log = Path("docs/sprints/sprint-684-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider prompt payload exact-JSON boundary" in change_log
     assert "4 failing-first provider prompt-payload assertions" in change_log
@@ -13951,7 +13963,7 @@ def test_sprint_684_documents_provider_prompt_payload_exact_json_boundary() -> N
 
 def test_sprint_685_documents_openai_error_scalar_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-685-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "OpenAI error scalar exact-string boundary" in change_log
     assert "3 failing-first OpenAI error-scalar assertions" in change_log
@@ -13962,7 +13974,7 @@ def test_sprint_685_documents_openai_error_scalar_exact_string_boundary() -> Non
 
 def test_sprint_686_documents_anthropic_error_scalar_exact_string_boundary() -> None:
     change_log = Path("docs/sprints/sprint-686-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic error scalar exact-string boundary" in change_log
     assert "2 failing-first Anthropic error-scalar assertions" in change_log
@@ -13975,7 +13987,7 @@ def test_sprint_686_documents_anthropic_error_scalar_exact_string_boundary() -> 
 
 def test_sprint_687_documents_provider_content_type_marker_boundary() -> None:
     change_log = Path("docs/sprints/sprint-687-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider content type-marker exact-string boundary" in change_log
     assert "2 failing-first provider content type-marker assertions" in change_log
@@ -13986,7 +13998,7 @@ def test_sprint_687_documents_provider_content_type_marker_boundary() -> None:
 
 def test_sprint_688_documents_provider_status_code_exact_integer_boundary() -> None:
     change_log = Path("docs/sprints/sprint-688-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider response status-code exact-integer boundary" in change_log
     assert "2 failing-first provider status-code assertions" in change_log
@@ -13997,7 +14009,7 @@ def test_sprint_688_documents_provider_status_code_exact_integer_boundary() -> N
 
 def test_sprint_689_documents_provider_status_code_http_range_boundary() -> None:
     change_log = Path("docs/sprints/sprint-689-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider response status-code HTTP-range boundary" in change_log
     assert "4 failing-first provider status-code range assertions" in change_log
@@ -14011,7 +14023,7 @@ def test_sprint_689_documents_provider_status_code_http_range_boundary() -> None
 
 def test_sprint_690_documents_provider_response_object_exact_type_boundary() -> None:
     change_log = Path("docs/sprints/sprint-690-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider transport response object exact-type boundary" in change_log
     assert "2 failing-first provider response-object assertions" in change_log
@@ -14022,7 +14034,7 @@ def test_sprint_690_documents_provider_response_object_exact_type_boundary() -> 
 
 def test_sprint_691_documents_servicenow_oauth_response_status_boundary() -> None:
     change_log = Path("docs/sprints/sprint-691-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth response status boundary" in change_log
     assert "4 failing-first ServiceNow OAuth response assertions" in change_log
@@ -14038,7 +14050,7 @@ def test_sprint_691_documents_servicenow_oauth_response_status_boundary() -> Non
 
 def test_sprint_692_documents_servicenow_oauth_body_boundary() -> None:
     change_log = Path("docs/sprints/sprint-692-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow OAuth response body exact-dictionary boundary" in change_log
     assert "2 failing-first ServiceNow OAuth body assertions" in change_log
@@ -14050,7 +14062,7 @@ def test_sprint_692_documents_servicenow_oauth_body_boundary() -> None:
 
 def test_sprint_693_documents_servicenow_api_body_boundary() -> None:
     change_log = Path("docs/sprints/sprint-693-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API response body exact-dictionary boundary" in change_log
     assert "2 failing-first ServiceNow API response-body assertions" in change_log
@@ -14066,7 +14078,7 @@ def test_sprint_693_documents_servicenow_api_body_boundary() -> None:
 
 def test_sprint_694_documents_servicenow_api_response_status_boundary() -> None:
     change_log = Path("docs/sprints/sprint-694-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API response status boundary" in change_log
     assert "4 failing-first ServiceNow API response-status assertions" in change_log
@@ -14082,7 +14094,7 @@ def test_sprint_694_documents_servicenow_api_response_status_boundary() -> None:
 
 def test_sprint_695_documents_servicenow_api_error_body_top_level_boundary() -> None:
     change_log = Path("docs/sprints/sprint-695-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API error body top-level exact-dictionary boundary" in change_log
     assert "1 failing-first ServiceNow API error-body assertion" in change_log
@@ -14095,7 +14107,7 @@ def test_sprint_695_documents_servicenow_api_error_body_top_level_boundary() -> 
 
 def test_sprint_696_documents_servicenow_result_body_boundary() -> None:
     change_log = Path("docs/sprints/sprint-696-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Table API result body exact-dictionary boundary" in change_log
     assert "3 failing-first ServiceNow result-body assertions" in change_log
@@ -14108,7 +14120,7 @@ def test_sprint_696_documents_servicenow_result_body_boundary() -> None:
 
 def test_sprint_697_documents_servicenow_table_api_status_boundary() -> None:
     change_log = Path("docs/sprints/sprint-697-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow Table API response status boundary" in change_log
     assert "4 failing-first ServiceNow Table API response-status assertions" in change_log
@@ -14124,7 +14136,7 @@ def test_sprint_697_documents_servicenow_table_api_status_boundary() -> None:
 
 def test_sprint_698_documents_servicenow_cicd_probe_response_boundary() -> None:
     change_log = Path("docs/sprints/sprint-698-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CICD probe response boundary" in change_log
     assert "6 failing-first ServiceNow CICD probe response assertions" in change_log
@@ -14140,7 +14152,7 @@ def test_sprint_698_documents_servicenow_cicd_probe_response_boundary() -> None:
 
 def test_sprint_699_documents_servicenow_api_error_status_prevalidation() -> None:
     change_log = Path("docs/sprints/sprint-699-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow API error formatter prevalidated-status boundary" in change_log
     assert "2 failing-first ServiceNow API error-formatter assertions" in change_log
@@ -14153,7 +14165,7 @@ def test_sprint_699_documents_servicenow_api_error_status_prevalidation() -> Non
 
 def test_sprint_700_documents_servicenow_result_payload_exact_container_boundary() -> None:
     change_log = Path("docs/sprints/sprint-700-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow result payload exact-container boundary" in change_log
     assert "3 failing-first ServiceNow result-container assertions" in change_log
@@ -14168,7 +14180,7 @@ def test_sprint_700_documents_servicenow_result_payload_exact_container_boundary
 
 def test_sprint_701_documents_servicenow_mutation_field_body_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-701-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow mutation field-body exact-dict boundary" in change_log
     assert "2 failing-first ServiceNow field-body assertions" in change_log
@@ -14185,7 +14197,7 @@ def test_sprint_701_documents_servicenow_mutation_field_body_exact_dict_boundary
 
 def test_sprint_702_documents_servicenow_lookup_body_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-702-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow lookup body exact-dict boundary" in change_log
     assert "2 failing-first ServiceNow lookup-body assertions" in change_log
@@ -14201,7 +14213,7 @@ def test_sprint_702_documents_servicenow_lookup_body_exact_dict_boundary() -> No
 
 def test_sprint_703_documents_servicenow_field_list_exact_list_boundary() -> None:
     change_log = Path("docs/sprints/sprint-703-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow field-list exact-list boundary" in change_log
     assert "1 failing-first ServiceNow field-list assertion" in change_log
@@ -14215,7 +14227,7 @@ def test_sprint_703_documents_servicenow_field_list_exact_list_boundary() -> Non
 
 def test_sprint_704_documents_servicenow_result_limit_exact_int_boundary() -> None:
     change_log = Path("docs/sprints/sprint-704-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow result-limit exact-int boundary" in change_log
     assert "1 failing-first ServiceNow result-limit assertion" in change_log
@@ -14229,7 +14241,7 @@ def test_sprint_704_documents_servicenow_result_limit_exact_int_boundary() -> No
 
 def test_sprint_705_documents_servicenow_dictionary_max_length_exact_int_boundary() -> None:
     change_log = Path("docs/sprints/sprint-705-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dictionary max-length exact-int boundary" in change_log
     assert "1 failing-first ServiceNow dictionary max-length assertion" in change_log
@@ -14241,7 +14253,7 @@ def test_sprint_705_documents_servicenow_dictionary_max_length_exact_int_boundar
 
 def test_sprint_706_documents_servicenow_lookup_response_scalar_exact_type_boundary() -> None:
     change_log = Path("docs/sprints/sprint-706-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow lookup response scalar exact-type boundary" in change_log
     assert "1 failing-first ServiceNow lookup-response assertion" in change_log
@@ -14252,7 +14264,7 @@ def test_sprint_706_documents_servicenow_lookup_response_scalar_exact_type_bound
 
 def test_sprint_707_documents_servicenow_transport_query_params_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-707-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport query-params exact-dict boundary" in change_log
     assert "1 failing-first ServiceNow transport query-param assertion" in change_log
@@ -14266,7 +14278,7 @@ def test_sprint_707_documents_servicenow_transport_query_params_exact_dict_bound
 
 def test_sprint_708_documents_servicenow_transport_body_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-708-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport request-body exact-dict boundary" in change_log
     assert "1 failing-first ServiceNow transport body assertion" in change_log
@@ -14280,7 +14292,7 @@ def test_sprint_708_documents_servicenow_transport_body_exact_dict_boundary() ->
 
 def test_sprint_709_documents_servicenow_transport_headers_exact_dict_boundary() -> None:
     change_log = Path("docs/sprints/sprint-709-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport headers exact-dict boundary" in change_log
     assert "1 failing-first ServiceNow transport headers assertion" in change_log
@@ -14294,7 +14306,7 @@ def test_sprint_709_documents_servicenow_transport_headers_exact_dict_boundary()
 
 def test_sprint_710_documents_servicenow_transport_body_bytes_exact_bytes_boundary() -> None:
     change_log = Path("docs/sprints/sprint-710-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport body-bytes exact-bytes boundary" in change_log
     assert "1 failing-first ServiceNow transport body-bytes assertion" in change_log
@@ -14307,7 +14319,7 @@ def test_sprint_710_documents_servicenow_transport_body_bytes_exact_bytes_bounda
 
 def test_sprint_711_documents_servicenow_transport_form_body_scalar_boundary() -> None:
     change_log = Path("docs/sprints/sprint-711-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport form body scalar boundary" in change_log
     assert "2 failing-first ServiceNow transport form body assertions" in change_log
@@ -14321,7 +14333,7 @@ def test_sprint_711_documents_servicenow_transport_form_body_scalar_boundary() -
 
 def test_sprint_712_documents_servicenow_transport_json_body_exact_json_boundary() -> None:
     change_log = Path("docs/sprints/sprint-712-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport JSON body exact-JSON boundary" in change_log
     assert "2 failing-first ServiceNow transport JSON body assertions" in change_log
@@ -14335,7 +14347,7 @@ def test_sprint_712_documents_servicenow_transport_json_body_exact_json_boundary
 
 def test_sprint_713_documents_servicenow_transport_json_body_recursion_boundary() -> None:
     change_log = Path("docs/sprints/sprint-713-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport JSON body recursion boundary" in change_log
     assert "2 failing-first ServiceNow transport JSON recursion assertions" in change_log
@@ -14350,7 +14362,7 @@ def test_sprint_713_documents_servicenow_transport_json_body_recursion_boundary(
 
 def test_sprint_714_documents_servicenow_transport_method_url_boundary() -> None:
     change_log = Path("docs/sprints/sprint-714-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport method and URL boundary" in change_log
     assert "2 failing-first ServiceNow transport method/URL assertions" in change_log
@@ -14365,7 +14377,7 @@ def test_sprint_714_documents_servicenow_transport_method_url_boundary() -> None
 
 def test_sprint_715_documents_servicenow_transport_header_scalar_boundary() -> None:
     change_log = Path("docs/sprints/sprint-715-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport header scalar boundary" in change_log
     assert "2 failing-first ServiceNow transport header scalar assertions" in change_log
@@ -14383,7 +14395,7 @@ def test_sprint_715_documents_servicenow_transport_header_scalar_boundary() -> N
 
 def test_sprint_716_documents_servicenow_transport_query_scalar_boundary() -> None:
     change_log = Path("docs/sprints/sprint-716-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport query scalar boundary" in change_log
     assert "2 failing-first ServiceNow transport query scalar assertions" in change_log
@@ -14401,7 +14413,7 @@ def test_sprint_716_documents_servicenow_transport_query_scalar_boundary() -> No
 
 def test_sprint_717_documents_servicenow_transport_response_status_boundary() -> None:
     change_log = Path("docs/sprints/sprint-717-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport response status boundary" in change_log
     assert "2 failing-first ServiceNow transport response status assertions" in change_log
@@ -14419,7 +14431,7 @@ def test_sprint_717_documents_servicenow_transport_response_status_boundary() ->
 
 def test_sprint_718_documents_servicenow_transport_timeout_boundary() -> None:
     change_log = Path("docs/sprints/sprint-718-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport timeout boundary" in change_log
     assert "2 failing-first ServiceNow transport timeout assertions" in change_log
@@ -14435,7 +14447,7 @@ def test_sprint_718_documents_servicenow_transport_timeout_boundary() -> None:
 
 def test_sprint_719_documents_servicenow_transport_response_body_bytes_boundary() -> None:
     change_log = Path("docs/sprints/sprint-719-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport response body bytes boundary" in change_log
     assert "2 failing-first ServiceNow transport response body bytes assertions" in change_log
@@ -14449,7 +14461,7 @@ def test_sprint_719_documents_servicenow_transport_response_body_bytes_boundary(
 
 def test_sprint_720_documents_servicenow_transport_network_error_boundary() -> None:
     change_log = Path("docs/sprints/sprint-720-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport network error boundary" in change_log
     assert "2 failing-first ServiceNow transport network error assertions" in change_log
@@ -14463,7 +14475,7 @@ def test_sprint_720_documents_servicenow_transport_network_error_boundary() -> N
 
 def test_sprint_721_documents_servicenow_transport_status_before_body_boundary() -> None:
     change_log = Path("docs/sprints/sprint-721-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport status-before-body boundary" in change_log
     assert "2 failing-first ServiceNow transport status-before-body assertions" in change_log
@@ -14478,7 +14490,7 @@ def test_sprint_721_documents_servicenow_transport_status_before_body_boundary()
 
 def test_sprint_722_documents_servicenow_transport_status_attribute_boundary() -> None:
     change_log = Path("docs/sprints/sprint-722-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport status attribute boundary" in change_log
     assert "2 failing-first ServiceNow transport status attribute assertions" in change_log
@@ -14495,7 +14507,7 @@ def test_sprint_722_documents_servicenow_transport_status_attribute_boundary() -
 
 def test_sprint_723_documents_servicenow_transport_body_read_boundary() -> None:
     change_log = Path("docs/sprints/sprint-723-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport response body read boundary" in change_log
     assert "2 failing-first ServiceNow transport response body read assertions" in change_log
@@ -14509,7 +14521,7 @@ def test_sprint_723_documents_servicenow_transport_body_read_boundary() -> None:
 
 def test_sprint_724_documents_servicenow_transport_response_context_boundary() -> None:
     change_log = Path("docs/sprints/sprint-724-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport response context boundary" in change_log
     assert "2 failing-first ServiceNow transport response context assertions" in change_log
@@ -14523,7 +14535,7 @@ def test_sprint_724_documents_servicenow_transport_response_context_boundary() -
 
 def test_sprint_725_documents_servicenow_transport_opener_boundary() -> None:
     change_log = Path("docs/sprints/sprint-725-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport opener boundary" in change_log
     assert "2 failing-first ServiceNow transport opener assertions" in change_log
@@ -14537,7 +14549,7 @@ def test_sprint_725_documents_servicenow_transport_opener_boundary() -> None:
 
 def test_sprint_726_documents_servicenow_transport_opener_construction_boundary() -> None:
     change_log = Path("docs/sprints/sprint-726-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport opener construction boundary" in change_log
     assert "1 failing-first ServiceNow transport opener construction assertion" in change_log
@@ -14550,7 +14562,7 @@ def test_sprint_726_documents_servicenow_transport_opener_construction_boundary(
 
 def test_sprint_727_documents_servicenow_transport_request_construction_boundary() -> None:
     change_log = Path("docs/sprints/sprint-727-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport request construction boundary" in change_log
     assert "1 failing-first ServiceNow transport request construction assertion" in change_log
@@ -14563,7 +14575,7 @@ def test_sprint_727_documents_servicenow_transport_request_construction_boundary
 
 def test_sprint_728_documents_servicenow_transport_url_encoding_boundary() -> None:
     change_log = Path("docs/sprints/sprint-728-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport URL encoding boundary" in change_log
     assert "2 failing-first ServiceNow transport URL encoding assertions" in change_log
@@ -14575,7 +14587,7 @@ def test_sprint_728_documents_servicenow_transport_url_encoding_boundary() -> No
 
 def test_sprint_729_documents_servicenow_transport_json_encoding_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-729-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport JSON encoding cause boundary" in change_log
     assert "3 failing-first ServiceNow transport JSON encoding cause assertions" in change_log
@@ -14590,7 +14602,7 @@ def test_sprint_729_documents_servicenow_transport_json_encoding_cause_boundary(
 
 def test_sprint_730_documents_servicenow_transport_success_json_parse_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-730-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow transport successful-response JSON parse cause boundary" in change_log
     assert "3 failing-first ServiceNow successful-response JSON parse cause assertions" in (
@@ -14607,7 +14619,7 @@ def test_sprint_730_documents_servicenow_transport_success_json_parse_cause_boun
 
 def test_sprint_731_documents_servicenow_attachment_read_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-731-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow attachment read cause boundary" in change_log
     assert "3 failing-first ServiceNow attachment read cause assertions" in change_log
@@ -14620,7 +14632,7 @@ def test_sprint_731_documents_servicenow_attachment_read_cause_boundary() -> Non
 
 def test_sprint_732_documents_dotenv_read_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-732-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow dotenv read cause boundary" in change_log
     assert "2 failing-first ServiceNow dotenv read cause assertions" in change_log
@@ -14632,7 +14644,7 @@ def test_sprint_732_documents_dotenv_read_cause_boundary() -> None:
 
 def test_sprint_733_documents_project_config_read_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-733-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Project config read cause boundary" in change_log
     assert "2 failing-first project config read cause assertions" in change_log
@@ -14644,7 +14656,7 @@ def test_sprint_733_documents_project_config_read_cause_boundary() -> None:
 
 def test_sprint_734_documents_cli_json_input_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-734-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CLI JSON input cause boundary" in change_log
     assert "3 failing-first CLI JSON input cause assertions" in change_log
@@ -14657,7 +14669,7 @@ def test_sprint_734_documents_cli_json_input_cause_boundary() -> None:
 
 def test_sprint_735_documents_stable_artifact_hash_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-735-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stable artifact hash cause boundary" in change_log
     assert "3 failing-first stable artifact hash cause assertions" in change_log
@@ -14670,7 +14682,7 @@ def test_sprint_735_documents_stable_artifact_hash_cause_boundary() -> None:
 
 def test_sprint_736_documents_context_dossier_dto_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-736-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Context dossier DTO cause boundary" in change_log
     assert "3 failing-first context dossier DTO cause assertions" in change_log
@@ -14683,7 +14695,7 @@ def test_sprint_736_documents_context_dossier_dto_cause_boundary() -> None:
 
 def test_sprint_737_documents_model_fulfillment_artifact_payload_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-737-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment artifact payload cause boundary" in change_log
     assert "3 failing-first model fulfillment artifact payload cause assertions" in change_log
@@ -14698,7 +14710,7 @@ def test_sprint_737_documents_model_fulfillment_artifact_payload_cause_boundary(
 
 def test_sprint_738_documents_provider_contract_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-738-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider contract cause boundary" in change_log
     assert "7 failing-first provider contract cause assertions" in change_log
@@ -14713,7 +14725,7 @@ def test_sprint_738_documents_provider_contract_cause_boundary() -> None:
 
 def test_sprint_739_documents_capability_assessment_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-739-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Capability assessment cause boundary" in change_log
     assert "6 failing-first capability assessment cause assertions" in change_log
@@ -14726,7 +14738,7 @@ def test_sprint_739_documents_capability_assessment_cause_boundary() -> None:
 
 def test_sprint_740_documents_operational_store_jsonb_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-740-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store JSONB cause boundary" in change_log
     assert "6 failing-first operational store cause assertions" in change_log
@@ -14740,7 +14752,7 @@ def test_sprint_740_documents_operational_store_jsonb_cause_boundary() -> None:
 
 def test_sprint_741_documents_runtime_worker_report_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-741-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime worker report cause boundary" in change_log
     assert "4 failing-first runtime worker report cause assertions" in change_log
@@ -14753,7 +14765,7 @@ def test_sprint_741_documents_runtime_worker_report_cause_boundary() -> None:
 
 def test_sprint_742_documents_alert_webhook_payload_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-742-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook payload cause boundary" in change_log
     assert "3 failing-first alert webhook payload cause assertions" in change_log
@@ -14766,7 +14778,7 @@ def test_sprint_742_documents_alert_webhook_payload_cause_boundary() -> None:
 
 def test_sprint_743_documents_implementation_packet_payload_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-743-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Implementation packet payload cause boundary" in change_log
     assert "6 failing-first implementation packet payload cause assertions" in change_log
@@ -14780,7 +14792,7 @@ def test_sprint_743_documents_implementation_packet_payload_cause_boundary() -> 
 
 def test_sprint_744_documents_artifact_dto_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-744-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact DTO cause boundary" in change_log
     assert "3 failing-first artifact DTO cause assertions" in change_log
@@ -14793,7 +14805,7 @@ def test_sprint_744_documents_artifact_dto_cause_boundary() -> None:
 
 def test_sprint_745_documents_artifact_json_output_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-745-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact JSON output cause boundary" in change_log
     assert "1 failing-first artifact JSON output cause assertion" in change_log
@@ -14805,7 +14817,7 @@ def test_sprint_745_documents_artifact_json_output_cause_boundary() -> None:
 
 def test_sprint_746_documents_admin_artifact_payload_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-746-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin artifact payload cause boundary" in change_log
     assert "1 failing-first admin artifact payload cause assertion" in change_log
@@ -14820,7 +14832,7 @@ def test_sprint_746_documents_admin_artifact_payload_cause_boundary() -> None:
 
 def test_sprint_747_documents_flow_graph_hash_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-747-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph hash cause boundary" in change_log
     assert "1 failing-first Flow graph hash cause assertion" in change_log
@@ -14834,7 +14846,7 @@ def test_sprint_747_documents_flow_graph_hash_cause_boundary() -> None:
 
 def test_sprint_748_documents_flow_xml_shape_evidence_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-748-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow XML shape evidence cause boundary" in change_log
     assert "1 failing-first Flow XML shape evidence cause assertion" in change_log
@@ -14845,7 +14857,7 @@ def test_sprint_748_documents_flow_xml_shape_evidence_cause_boundary() -> None:
 
 def test_sprint_749_documents_flow_graph_diff_operation_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-749-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph diff operation cause boundary" in change_log
     assert "1 failing-first Flow graph diff operation cause assertion" in change_log
@@ -14856,7 +14868,7 @@ def test_sprint_749_documents_flow_graph_diff_operation_cause_boundary() -> None
 
 def test_sprint_750_documents_runtime_config_numeric_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-750-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime config numeric cause boundary" in change_log
     assert "2 failing-first runtime config numeric cause assertions" in change_log
@@ -14869,7 +14881,7 @@ def test_sprint_750_documents_runtime_config_numeric_cause_boundary() -> None:
 
 def test_sprint_751_documents_runtime_openai_provider_setting_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-751-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime OpenAI provider setting cause boundary" in change_log
     assert "2 failing-first runtime OpenAI provider setting cause assertions" in change_log
@@ -14882,7 +14894,7 @@ def test_sprint_751_documents_runtime_openai_provider_setting_cause_boundary() -
 
 def test_sprint_752_documents_flow_graph_diff_payload_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-752-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Flow graph diff payload cause boundary" in change_log
     assert "2 failing-first Flow graph diff payload cause assertions" in change_log
@@ -14894,7 +14906,7 @@ def test_sprint_752_documents_flow_graph_diff_payload_cause_boundary() -> None:
 
 def test_sprint_753_documents_public_web_transport_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-753-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public web transport cause boundary" in change_log
     assert "2 failing-first public web transport cause assertions" in change_log
@@ -14905,7 +14917,7 @@ def test_sprint_753_documents_public_web_transport_cause_boundary() -> None:
 
 def test_sprint_754_documents_lifecycle_hmac_timestamp_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-754-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle HMAC timestamp cause boundary" in change_log
     assert "1 failing-first lifecycle HMAC timestamp cause assertion" in change_log
@@ -14916,7 +14928,7 @@ def test_sprint_754_documents_lifecycle_hmac_timestamp_cause_boundary() -> None:
 
 def test_sprint_755_documents_runtime_handler_redaction_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-755-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime handler redaction cause boundary" in change_log
     assert "1 failing-first runtime handler redaction cause assertion" in change_log
@@ -14927,7 +14939,7 @@ def test_sprint_755_documents_runtime_handler_redaction_cause_boundary() -> None
 
 def test_sprint_756_documents_runtime_openai_provider_runtime_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-756-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime OpenAI provider runtime cause boundary" in change_log
     assert "2 failing-first runtime OpenAI provider runtime cause assertions" in change_log
@@ -14940,7 +14952,7 @@ def test_sprint_756_documents_runtime_openai_provider_runtime_cause_boundary() -
 
 def test_sprint_757_documents_artifact_filesystem_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-757-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact filesystem cause boundary" in change_log
     assert "2 failing-first artifact filesystem cause assertions" in change_log
@@ -14952,7 +14964,7 @@ def test_sprint_757_documents_artifact_filesystem_cause_boundary() -> None:
 
 def test_sprint_758_documents_lifecycle_payload_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-758-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle payload cause boundary" in change_log
     assert "2 failing-first lifecycle payload cause assertions" in change_log
@@ -14966,7 +14978,7 @@ def test_sprint_758_documents_lifecycle_payload_cause_boundary() -> None:
 
 def test_sprint_759_documents_admin_not_found_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-759-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin not-found cause boundary" in change_log
     assert "3 failing-first admin not-found cause assertions" in change_log
@@ -14978,7 +14990,7 @@ def test_sprint_759_documents_admin_not_found_cause_boundary() -> None:
 
 def test_sprint_760_documents_anthropic_max_tokens_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-760-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Anthropic max-tokens cause boundary" in change_log
     assert "1 failing-first Anthropic provider config cause assertion" in change_log
@@ -14992,7 +15004,7 @@ def test_sprint_760_documents_anthropic_max_tokens_cause_boundary() -> None:
 
 def test_sprint_761_documents_runtime_worker_float_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-761-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime worker float cause boundary" in change_log
     assert "1 failing-first runtime worker float cause assertion" in change_log
@@ -15006,7 +15018,7 @@ def test_sprint_761_documents_runtime_worker_float_cause_boundary() -> None:
 
 def test_sprint_762_documents_model_intent_validator_cause_boundary() -> None:
     change_log = Path("docs/sprints/sprint-762-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model intent validator cause boundary" in change_log
     assert "6 failing-first model intent validator cause assertions" in change_log
@@ -15019,7 +15031,7 @@ def test_sprint_762_documents_model_intent_validator_cause_boundary() -> None:
 
 def test_sprint_763_documents_explicit_exception_cause_regression_gate() -> None:
     change_log = Path("docs/sprints/sprint-763-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Explicit exception cause regression gate" in change_log
     assert "1 source-wide AST regression assertion" in change_log
@@ -15031,7 +15043,7 @@ def test_sprint_763_documents_explicit_exception_cause_regression_gate() -> None
 
 def test_sprint_764_documents_ci_verification_gate() -> None:
     change_log = Path("docs/sprints/sprint-764-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CI verification gate" in change_log
     assert "2 failing-first CI workflow assertions" in change_log
@@ -15043,7 +15055,7 @@ def test_sprint_764_documents_ci_verification_gate() -> None:
 
 def test_sprint_765_documents_hosted_container_port_and_healthcheck_contract() -> None:
     change_log = Path("docs/sprints/sprint-765-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Hosted container port and healthcheck contract" in change_log
     assert "3 failing-first container deployment assertions" in change_log
@@ -15055,7 +15067,7 @@ def test_sprint_765_documents_hosted_container_port_and_healthcheck_contract() -
 
 def test_sprint_766_documents_docker_context_secret_exclusion_contract() -> None:
     change_log = Path("docs/sprints/sprint-766-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Docker context secret exclusion contract" in change_log
     assert "2 failing-first Docker context assertions" in change_log
@@ -15067,7 +15079,7 @@ def test_sprint_766_documents_docker_context_secret_exclusion_contract() -> None
 
 def test_sprint_767_documents_hosted_process_separation_contract() -> None:
     change_log = Path("docs/sprints/sprint-767-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Hosted process separation contract" in change_log
     assert "3 failing-first hosted deployment assertions" in change_log
@@ -15079,7 +15091,7 @@ def test_sprint_767_documents_hosted_process_separation_contract() -> None:
 
 def test_sprint_768_documents_runtime_role_startup_boundary() -> None:
     change_log = Path("docs/sprints/sprint-768-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime role startup boundary" in change_log
     assert "7 failing-first runtime role assertions" in change_log
@@ -15092,7 +15104,7 @@ def test_sprint_768_documents_runtime_role_startup_boundary() -> None:
 
 def test_sprint_769_documents_operational_store_schema_readiness() -> None:
     change_log = Path("docs/sprints/sprint-769-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store schema readiness" in change_log
     assert "5 failing-first schema readiness assertions" in change_log
@@ -15106,7 +15118,7 @@ def test_sprint_1010_documents_operational_store_schema_readiness_row_guard() ->
     change_log = Path("docs/sprints/sprint-1010-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store schema readiness row guard" in change_log
     assert "`verify_schema_ready()`" in change_log
@@ -15131,7 +15143,7 @@ def test_sprint_1011_documents_operational_store_surface_maturity_row_guard() ->
     change_log = Path("docs/sprints/sprint-1011-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store surface maturity row guard" in change_log
     assert "`builder_maturity_evidence_for_surface()`" in change_log
@@ -15162,7 +15174,7 @@ def test_sprint_1012_documents_operational_store_read_row_collection_guard() -> 
     change_log = Path("docs/sprints/sprint-1012-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store read-row collection guard" in change_log
     assert "`_operational_read_rows()`" in change_log
@@ -15189,7 +15201,7 @@ def test_sprint_1013_documents_operational_store_single_read_row_guard() -> None
     change_log = Path("docs/sprints/sprint-1013-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store single-row read guard" in change_log
     assert "`_operational_read_row()`" in change_log
@@ -15215,7 +15227,7 @@ def test_sprint_1014_documents_operational_store_scalar_read_guard() -> None:
     change_log = Path("docs/sprints/sprint-1014-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store scalar read guard" in change_log
     assert "`_operational_read_int()`" in change_log
@@ -15244,7 +15256,7 @@ def test_sprint_1015_documents_operational_store_record_hydration_guard() -> Non
     change_log = Path("docs/sprints/sprint-1015-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store record hydration guard" in change_log
     assert "`LifecycleEventRecord`" in change_log
@@ -15273,7 +15285,7 @@ def test_sprint_1016_documents_operational_store_payload_traversal_guard() -> No
     change_log = Path("docs/sprints/sprint-1016-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store payload traversal guard" in change_log
     assert "`_ensure_operational_record_payload_json_safe()`" in change_log
@@ -15300,7 +15312,7 @@ def test_sprint_1017_documents_retention_prune_report_hydration_guard() -> None:
     change_log = Path("docs/sprints/sprint-1017-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retention prune report hydration guard" in change_log
     assert "`RetentionClassPruneResult`" in change_log
@@ -15327,7 +15339,7 @@ def test_sprint_1018_documents_surface_maturity_evidence_record_guard() -> None:
     change_log = Path("docs/sprints/sprint-1018-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Surface maturity evidence record guard" in change_log
     assert "`SurfaceMaturityEvidenceRecord`" in change_log
@@ -15355,7 +15367,7 @@ def test_sprint_1018_documents_surface_maturity_evidence_record_guard() -> None:
 
 def test_sprint_770_documents_operational_store_initialization_command() -> None:
     change_log = Path("docs/sprints/sprint-770-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Operational store initialization command" in change_log
     assert "3 failing-first initialization command assertions" in change_log
@@ -15367,7 +15379,7 @@ def test_sprint_770_documents_operational_store_initialization_command() -> None
 
 def test_sprint_771_documents_non_root_container_runtime() -> None:
     change_log = Path("docs/sprints/sprint-771-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Non-root container runtime" in change_log
     assert "3 failing-first non-root container assertions" in change_log
@@ -15379,7 +15391,7 @@ def test_sprint_771_documents_non_root_container_runtime() -> None:
 
 def test_sprint_772_documents_container_audit_root_default() -> None:
     change_log = Path("docs/sprints/sprint-772-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Container audit-root default" in change_log
     assert "3 failing-first audit-root container assertions" in change_log
@@ -15391,7 +15403,7 @@ def test_sprint_772_documents_container_audit_root_default() -> None:
 
 def test_sprint_774_documents_compose_runtime_restart_policies() -> None:
     change_log = Path("docs/sprints/sprint-774-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose runtime restart policies" in change_log
     assert "3 failing-first compose restart assertions" in change_log
@@ -15403,7 +15415,7 @@ def test_sprint_774_documents_compose_runtime_restart_policies() -> None:
 
 def test_sprint_775_documents_compose_role_specific_images() -> None:
     change_log = Path("docs/sprints/sprint-775-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose role-specific runtime images" in change_log
     assert "2 failing-first compose Dockerfile assertions" in change_log
@@ -15415,7 +15427,7 @@ def test_sprint_775_documents_compose_role_specific_images() -> None:
 
 def test_sprint_776_documents_compose_explicit_runtime_roles() -> None:
     change_log = Path("docs/sprints/sprint-776-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose explicit runtime roles" in change_log
     assert "2 failing-first compose runtime role assertions" in change_log
@@ -15427,7 +15439,7 @@ def test_sprint_776_documents_compose_explicit_runtime_roles() -> None:
 
 def test_sprint_777_documents_compose_postgres_password_externalization() -> None:
     change_log = Path("docs/sprints/sprint-777-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose Postgres password externalization" in change_log
     assert "4 failing-first compose credential assertions" in change_log
@@ -15439,7 +15451,7 @@ def test_sprint_777_documents_compose_postgres_password_externalization() -> Non
 
 def test_sprint_778_documents_compose_password_example_config() -> None:
     change_log = Path("docs/sprints/sprint-778-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose password example config" in change_log
     assert "3 failing-first env example assertions" in change_log
@@ -15450,7 +15462,7 @@ def test_sprint_778_documents_compose_password_example_config() -> None:
 
 def test_sprint_779_documents_neutral_servicenow_example_targets() -> None:
     change_log = Path("docs/sprints/sprint-779-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Neutral ServiceNow example targets" in change_log
     assert "4 failing-first ServiceNow example target assertions" in change_log
@@ -15461,7 +15473,7 @@ def test_sprint_779_documents_neutral_servicenow_example_targets() -> None:
 
 def test_sprint_780_documents_compose_split_servicenow_runtime_values() -> None:
     change_log = Path("docs/sprints/sprint-780-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose split ServiceNow runtime values" in change_log
     assert "6 failing-first split ServiceNow compose assertions" in change_log
@@ -15473,7 +15485,7 @@ def test_sprint_780_documents_compose_split_servicenow_runtime_values() -> None:
 
 def test_sprint_781_documents_compose_api_readiness_healthcheck() -> None:
     change_log = Path("docs/sprints/sprint-781-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose API readiness healthcheck" in change_log
     assert "8 failing-first compose readiness assertions" in change_log
@@ -15484,7 +15496,7 @@ def test_sprint_781_documents_compose_api_readiness_healthcheck() -> None:
 
 def test_sprint_782_documents_docker_context_runtime_evidence_exclusion() -> None:
     change_log = Path("docs/sprints/sprint-782-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Docker context runtime evidence exclusion" in change_log
     assert "6 failing-first Docker context artifact assertions" in change_log
@@ -15495,7 +15507,7 @@ def test_sprint_782_documents_docker_context_runtime_evidence_exclusion() -> Non
 
 def test_sprint_783_documents_compose_runtime_privilege_reduction() -> None:
     change_log = Path("docs/sprints/sprint-783-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose runtime privilege reduction" in change_log
     assert "8 failing-first compose privilege assertions" in change_log
@@ -15506,7 +15518,7 @@ def test_sprint_783_documents_compose_runtime_privilege_reduction() -> None:
 
 def test_sprint_784_documents_compose_read_only_app_roots() -> None:
     change_log = Path("docs/sprints/sprint-784-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose read-only app roots" in change_log
     assert "8 failing-first compose read-only root assertions" in change_log
@@ -15517,7 +15529,7 @@ def test_sprint_784_documents_compose_read_only_app_roots() -> None:
 
 def test_sprint_785_documents_compose_worker_api_readiness_dependency() -> None:
     change_log = Path("docs/sprints/sprint-785-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose worker API readiness dependency" in change_log
     assert "5 failing-first compose dependency assertions" in change_log
@@ -15528,7 +15540,7 @@ def test_sprint_785_documents_compose_worker_api_readiness_dependency() -> None:
 
 def test_sprint_786_documents_compose_bounded_service_logs() -> None:
     change_log = Path("docs/sprints/sprint-786-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose bounded service logs" in change_log
     assert "7 failing-first compose logging assertions" in change_log
@@ -15539,7 +15551,7 @@ def test_sprint_786_documents_compose_bounded_service_logs() -> None:
 
 def test_sprint_787_documents_compose_app_init_shim() -> None:
     change_log = Path("docs/sprints/sprint-787-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose app init shim" in change_log
     assert "5 failing-first compose init assertions" in change_log
@@ -15550,7 +15562,7 @@ def test_sprint_787_documents_compose_app_init_shim() -> None:
 
 def test_sprint_788_documents_compose_app_pid_limits() -> None:
     change_log = Path("docs/sprints/sprint-788-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose app PID limits" in change_log
     assert "5 failing-first compose PID assertions" in change_log
@@ -15561,7 +15573,7 @@ def test_sprint_788_documents_compose_app_pid_limits() -> None:
 
 def test_sprint_789_documents_compose_app_graceful_shutdown() -> None:
     change_log = Path("docs/sprints/sprint-789-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose app graceful shutdown" in change_log
     assert "6 failing-first compose graceful shutdown assertions" in change_log
@@ -15572,7 +15584,7 @@ def test_sprint_789_documents_compose_app_graceful_shutdown() -> None:
 
 def test_sprint_790_documents_compose_loopback_api_binding() -> None:
     change_log = Path("docs/sprints/sprint-790-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose loopback API binding" in change_log
     assert "4 failing-first compose port binding assertions" in change_log
@@ -15583,7 +15595,7 @@ def test_sprint_790_documents_compose_loopback_api_binding() -> None:
 
 def test_sprint_791_documents_ci_read_only_token_permissions() -> None:
     change_log = Path("docs/sprints/sprint-791-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CI read-only token permissions" in change_log
     assert "4 failing-first CI permission assertions" in change_log
@@ -15594,7 +15606,7 @@ def test_sprint_791_documents_ci_read_only_token_permissions() -> None:
 
 def test_sprint_792_documents_ci_concurrency_cancellation() -> None:
     change_log = Path("docs/sprints/sprint-792-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CI concurrency cancellation" in change_log
     assert "4 failing-first CI concurrency assertions" in change_log
@@ -15605,7 +15617,7 @@ def test_sprint_792_documents_ci_concurrency_cancellation() -> None:
 
 def test_sprint_793_documents_ci_checkout_credential_persistence() -> None:
     change_log = Path("docs/sprints/sprint-793-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CI checkout credential persistence" in change_log
     assert "3 failing-first CI checkout credential assertions" in change_log
@@ -15616,7 +15628,7 @@ def test_sprint_793_documents_ci_checkout_credential_persistence() -> None:
 
 def test_sprint_794_documents_ci_action_sha_pinning() -> None:
     change_log = Path("docs/sprints/sprint-794-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "CI third-party action SHA pinning" in change_log
     assert "3 failing-first CI action pinning assertions" in change_log
@@ -15627,7 +15639,7 @@ def test_sprint_794_documents_ci_action_sha_pinning() -> None:
 
 def test_sprint_795_documents_runtime_base_image_digest_pinning() -> None:
     change_log = Path("docs/sprints/sprint-795-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime base image digest pinning" in change_log
     assert "4 failing-first runtime base image digest assertions" in change_log
@@ -15641,7 +15653,7 @@ def test_sprint_795_documents_runtime_base_image_digest_pinning() -> None:
 
 def test_sprint_796_documents_compose_postgres_digest_pinning() -> None:
     change_log = Path("docs/sprints/sprint-796-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose Postgres image digest pinning" in change_log
     assert "3 failing-first compose Postgres digest assertions" in change_log
@@ -15655,7 +15667,7 @@ def test_sprint_796_documents_compose_postgres_digest_pinning() -> None:
 
 def test_sprint_797_documents_compose_postgres_privilege_reduction() -> None:
     change_log = Path("docs/sprints/sprint-797-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose Postgres privilege reduction" in change_log
     assert "5 failing-first compose Postgres privilege assertions" in change_log
@@ -15669,7 +15681,7 @@ def test_sprint_797_documents_compose_postgres_privilege_reduction() -> None:
 
 def test_sprint_798_documents_compose_postgres_graceful_shutdown() -> None:
     change_log = Path("docs/sprints/sprint-798-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Compose Postgres graceful shutdown" in change_log
     assert "3 failing-first compose Postgres graceful shutdown assertions" in change_log
@@ -15680,7 +15692,7 @@ def test_sprint_798_documents_compose_postgres_graceful_shutdown() -> None:
 
 def test_sprint_799_documents_docker_context_control_plane_exclusion() -> None:
     change_log = Path("docs/sprints/sprint-799-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Docker context control-plane exclusion" in change_log
     assert "8 failing-first Docker context control-plane exclusion assertions" in change_log
@@ -15692,7 +15704,7 @@ def test_sprint_799_documents_docker_context_control_plane_exclusion() -> None:
 
 def test_sprint_800_documents_dockerfile_pip_upgrade_removal() -> None:
     change_log = Path("docs/sprints/sprint-800-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dockerfile pip upgrade removal" in change_log
     assert "3 failing-first Dockerfile pip upgrade assertions" in change_log
@@ -15703,7 +15715,7 @@ def test_sprint_800_documents_dockerfile_pip_upgrade_removal() -> None:
 
 def test_sprint_801_documents_dockerfile_pip_environment_defaults() -> None:
     change_log = Path("docs/sprints/sprint-801-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dockerfile pip environment defaults" in change_log
     assert "4 failing-first Dockerfile pip environment assertions" in change_log
@@ -15715,7 +15727,7 @@ def test_sprint_801_documents_dockerfile_pip_environment_defaults() -> None:
 
 def test_sprint_802_documents_public_runtime_hsts_requirement() -> None:
     change_log = Path("docs/sprints/sprint-802-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public runtime HSTS production gate" in change_log
     assert "2 failing-first public runtime HSTS assertions" in change_log
@@ -15727,7 +15739,7 @@ def test_sprint_802_documents_public_runtime_hsts_requirement() -> None:
 
 def test_sprint_803_documents_executable_runtime_role_boundaries() -> None:
     change_log = Path("docs/sprints/sprint-803-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Executable runtime role boundaries" in change_log
     assert "2 failing-first runtime role entrypoint assertions" in change_log
@@ -15753,7 +15765,7 @@ def test_sprint_804_documents_env_example_role_and_hsts_controls() -> None:
 
 def test_sprint_805_documents_production_admin_disabled_with_bearer_posture() -> None:
     change_log = Path("docs/sprints/sprint-805-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
     admin_auth_config = Path("docs/admin-auth-config.md").read_text(encoding="utf-8")
 
     assert "Production admin disabled-with-bearer posture" in change_log
@@ -15763,13 +15775,15 @@ def test_sprint_805_documents_production_admin_disabled_with_bearer_posture() ->
     assert "`JEDI_ADMIN_AUTH_MODE=disabled` is the supported interim production posture" in (
         operator_guide
     )
-    assert "Browser admin console is unavailable" in admin_auth_config
+    assert "Browser console returns `503 admin console authentication is disabled`" in (
+        admin_auth_config
+    )
     assert "Authorization: Bearer <JEDI_ADMIN_API_TOKEN>" in admin_auth_config
 
 
 def test_sprint_806_documents_api_build_claim_role_boundary() -> None:
     change_log = Path("docs/sprints/sprint-806-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "API build-claim role boundary" in change_log
     assert "1 failing-first API build-claim role assertion" in change_log
@@ -15780,7 +15794,7 @@ def test_sprint_806_documents_api_build_claim_role_boundary() -> None:
 
 def test_sprint_807_documents_direct_fulfillment_role_boundary() -> None:
     change_log = Path("docs/sprints/sprint-807-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct fulfillment API-role boundary" in change_log
     assert "1 failing-first direct fulfillment role assertion" in change_log
@@ -15791,7 +15805,7 @@ def test_sprint_807_documents_direct_fulfillment_role_boundary() -> None:
 
 def test_sprint_808_documents_combined_production_explicit_opt_in() -> None:
     change_log = Path("docs/sprints/sprint-808-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "Combined production explicit opt-in" in change_log
@@ -15803,7 +15817,7 @@ def test_sprint_808_documents_combined_production_explicit_opt_in() -> None:
 
 def test_sprint_809_documents_scoped_combined_production_exception_flag() -> None:
     change_log = Path("docs/sprints/sprint-809-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Scoped combined production exception flag" in change_log
     assert "2 failing-first split-role exception flag assertions" in change_log
@@ -15814,7 +15828,7 @@ def test_sprint_809_documents_scoped_combined_production_exception_flag() -> Non
 
 def test_sprint_810_documents_production_admin_console_credential_rejection() -> None:
     change_log = Path("docs/sprints/sprint-810-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production admin console credential rejection" in change_log
     assert "2 failing-first public production credential assertions" in change_log
@@ -15826,7 +15840,7 @@ def test_sprint_810_documents_production_admin_console_credential_rejection() ->
 
 def test_sprint_811_documents_public_production_hsts_max_age_floor() -> None:
     change_log = Path("docs/sprints/sprint-811-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public production HSTS max-age floor" in change_log
     assert "2 failing-first public production HSTS max-age assertions" in change_log
@@ -15837,7 +15851,7 @@ def test_sprint_811_documents_public_production_hsts_max_age_floor() -> None:
 
 def test_sprint_812_documents_public_production_replay_window_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-812-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Public production lifecycle replay window ceiling" in change_log
     assert "2 failing-first public production replay-window assertions" in change_log
@@ -15850,7 +15864,7 @@ def test_sprint_812_documents_public_production_replay_window_ceiling() -> None:
 
 def test_sprint_813_documents_production_body_size_ceilings() -> None:
     change_log = Path("docs/sprints/sprint-813-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production body-size ceiling validation" in change_log
     assert "1 failing-first production body-size assertion" in change_log
@@ -15864,7 +15878,7 @@ def test_sprint_813_documents_production_body_size_ceilings() -> None:
 
 def test_sprint_814_documents_production_public_web_resource_ceilings() -> None:
     change_log = Path("docs/sprints/sprint-814-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production public-web resource ceiling validation" in change_log
     assert "1 failing-first public-web resource assertion" in change_log
@@ -15878,7 +15892,7 @@ def test_sprint_814_documents_production_public_web_resource_ceilings() -> None:
 
 def test_sprint_815_documents_production_stale_job_threshold_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-815-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production stale-job threshold ceiling validation" in change_log
     assert "1 failing-first stale-job threshold assertion" in change_log
@@ -15889,7 +15903,7 @@ def test_sprint_815_documents_production_stale_job_threshold_ceiling() -> None:
 
 def test_sprint_816_documents_production_outbound_timeout_ceilings() -> None:
     change_log = Path("docs/sprints/sprint-816-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production outbound timeout ceiling validation" in change_log
     assert "1 failing-first outbound timeout assertion" in change_log
@@ -15902,7 +15916,7 @@ def test_sprint_816_documents_production_outbound_timeout_ceilings() -> None:
 
 def test_sprint_817_documents_worker_maintenance_batch_ceilings() -> None:
     change_log = Path("docs/sprints/sprint-817-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker maintenance batch ceiling validation" in change_log
     assert "2 failing-first worker maintenance batch assertions" in change_log
@@ -15915,7 +15929,7 @@ def test_sprint_817_documents_worker_maintenance_batch_ceilings() -> None:
 
 def test_sprint_818_documents_worker_scheduler_interval_ceilings() -> None:
     change_log = Path("docs/sprints/sprint-818-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker scheduler interval ceiling validation" in change_log
     assert "1 failing-first worker scheduler interval assertion" in change_log
@@ -15932,7 +15946,7 @@ def test_sprint_818_documents_worker_scheduler_interval_ceilings() -> None:
 
 def test_sprint_819_documents_worker_max_iteration_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-819-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker max-iteration ceiling validation" in change_log
     assert "1 failing-first worker max-iteration assertion" in change_log
@@ -15943,7 +15957,7 @@ def test_sprint_819_documents_worker_max_iteration_ceiling() -> None:
 
 def test_sprint_820_documents_production_stop_on_failure_rejection() -> None:
     change_log = Path("docs/sprints/sprint-820-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production worker stop-on-failure rejection" in change_log
     assert "1 failing-first production stop-on-failure assertion" in change_log
@@ -15956,7 +15970,7 @@ def test_sprint_820_documents_production_stop_on_failure_rejection() -> None:
 
 def test_sprint_821_documents_production_admin_api_token_ceiling() -> None:
     change_log = Path("docs/sprints/sprint-821-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production admin API token ceiling validation" in change_log
     assert "1 failing-first production admin API token ceiling assertion" in change_log
@@ -15967,7 +15981,7 @@ def test_sprint_821_documents_production_admin_api_token_ceiling() -> None:
 
 def test_sprint_822_documents_production_admin_api_token_ascii_validation() -> None:
     change_log = Path("docs/sprints/sprint-822-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Production admin API token ASCII validation" in change_log
     assert "1 failing-first production admin API token ASCII assertion" in change_log
@@ -15978,7 +15992,7 @@ def test_sprint_822_documents_production_admin_api_token_ascii_validation() -> N
 
 def test_sprint_823_documents_admin_bearer_token_policy_parity() -> None:
     change_log = Path("docs/sprints/sprint-823-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin bearer token policy parity" in change_log
     assert "1 failing-first shared admin bearer token policy assertion" in change_log
@@ -15990,7 +16004,7 @@ def test_sprint_823_documents_admin_bearer_token_policy_parity() -> None:
 
 def test_sprint_824_documents_admin_basic_auth_policy_parity() -> None:
     change_log = Path("docs/sprints/sprint-824-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin Basic-auth policy parity" in change_log
     assert "1 failing-first admin console credential ceiling assertion" in change_log
@@ -16003,7 +16017,7 @@ def test_sprint_824_documents_admin_basic_auth_policy_parity() -> None:
 
 def test_sprint_825_documents_admin_basic_auth_encoded_policy_parity() -> None:
     change_log = Path("docs/sprints/sprint-825-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin Basic-auth encoded policy parity" in change_log
     assert "1 failing-first Basic-auth encoded section policy assertion" in change_log
@@ -16013,7 +16027,7 @@ def test_sprint_825_documents_admin_basic_auth_encoded_policy_parity() -> None:
 
 def test_sprint_826_documents_lifecycle_webhook_credential_policy_parity() -> None:
     change_log = Path("docs/sprints/sprint-826-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook credential policy parity" in change_log
     assert "1 failing-first lifecycle webhook secret ceiling assertion" in change_log
@@ -16025,7 +16039,7 @@ def test_sprint_826_documents_lifecycle_webhook_credential_policy_parity() -> No
 
 def test_sprint_827_documents_runtime_rate_limiter_fail_closed_construction() -> None:
     change_log = Path("docs/sprints/sprint-827-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime rate-limiter fail-closed construction" in change_log
     assert "1 failing-first runtime API rate-limit construction assertion" in change_log
@@ -16035,7 +16049,7 @@ def test_sprint_827_documents_runtime_rate_limiter_fail_closed_construction() ->
 
 def test_sprint_828_documents_alert_webhook_runtime_construction_guard() -> None:
     change_log = Path("docs/sprints/sprint-828-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook runtime construction guard" in change_log
     assert "1 failing-first alert webhook runtime construction assertion" in change_log
@@ -16046,7 +16060,7 @@ def test_sprint_828_documents_alert_webhook_runtime_construction_guard() -> None
 
 def test_sprint_829_documents_runtime_request_body_limit_construction_guard() -> None:
     change_log = Path("docs/sprints/sprint-829-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime request body limit construction guard" in change_log
     assert "1 failing-first runtime request body limit construction assertion" in change_log
@@ -16057,7 +16071,7 @@ def test_sprint_829_documents_runtime_request_body_limit_construction_guard() ->
 
 def test_sprint_830_documents_lifecycle_api_body_limit_factory_guard() -> None:
     change_log = Path("docs/sprints/sprint-830-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle API body limit factory guard" in change_log
     assert "1 failing-first lifecycle API body limit construction assertion" in change_log
@@ -16067,7 +16081,7 @@ def test_sprint_830_documents_lifecycle_api_body_limit_factory_guard() -> None:
 
 def test_sprint_831_documents_worker_loop_control_guard() -> None:
     change_log = Path("docs/sprints/sprint-831-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker loop direct-control guard" in change_log
     assert "1 failing-first worker loop control assertion" in change_log
@@ -16078,7 +16092,7 @@ def test_sprint_831_documents_worker_loop_control_guard() -> None:
 
 def test_sprint_832_documents_stale_requeue_direct_control_guard() -> None:
     change_log = Path("docs/sprints/sprint-832-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stale requeue direct-control guard" in change_log
     assert "1 failing-first stale requeue control assertion" in change_log
@@ -16089,7 +16103,7 @@ def test_sprint_832_documents_stale_requeue_direct_control_guard() -> None:
 
 def test_sprint_833_documents_retention_prune_direct_policy_guard() -> None:
     change_log = Path("docs/sprints/sprint-833-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retention prune direct-policy guard" in change_log
     assert "1 failing-first retention prune policy assertion" in change_log
@@ -16101,7 +16115,7 @@ def test_sprint_833_documents_retention_prune_direct_policy_guard() -> None:
 
 def test_sprint_834_documents_alert_webhook_direct_body_limit_guard() -> None:
     change_log = Path("docs/sprints/sprint-834-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook direct body-limit guard" in change_log
     assert "1 failing-first alert webhook body-limit assertion" in change_log
@@ -16112,7 +16126,7 @@ def test_sprint_834_documents_alert_webhook_direct_body_limit_guard() -> None:
 
 def test_sprint_835_documents_admin_result_limit_guard() -> None:
     change_log = Path("docs/sprints/sprint-835-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin result limit guard" in change_log
     assert "1 failing-first admin result limit assertion" in change_log
@@ -16124,7 +16138,7 @@ def test_sprint_835_documents_admin_result_limit_guard() -> None:
 
 def test_sprint_836_documents_rate_limiter_direct_numeric_guard() -> None:
     change_log = Path("docs/sprints/sprint-836-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Rate limiter direct numeric guard" in change_log
     assert "1 failing-first rate limiter numeric assertion" in change_log
@@ -16136,7 +16150,7 @@ def test_sprint_836_documents_rate_limiter_direct_numeric_guard() -> None:
 
 def test_sprint_837_documents_rate_limiter_direct_key_guard() -> None:
     change_log = Path("docs/sprints/sprint-837-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Rate limiter direct key guard" in change_log
     assert "1 failing-first rate limiter key assertion" in change_log
@@ -16147,7 +16161,7 @@ def test_sprint_837_documents_rate_limiter_direct_key_guard() -> None:
 
 def test_sprint_838_documents_rate_limiter_clock_value_guard() -> None:
     change_log = Path("docs/sprints/sprint-838-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Rate limiter clock value guard" in change_log
     assert "1 failing-first rate limiter clock assertion" in change_log
@@ -16158,7 +16172,7 @@ def test_sprint_838_documents_rate_limiter_clock_value_guard() -> None:
 
 def test_sprint_839_documents_rate_limiter_clock_callable_guard() -> None:
     change_log = Path("docs/sprints/sprint-839-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Rate limiter clock callable guard" in change_log
     assert "1 failing-first rate limiter clock callable assertion" in change_log
@@ -16169,7 +16183,7 @@ def test_sprint_839_documents_rate_limiter_clock_callable_guard() -> None:
 
 def test_sprint_840_documents_admin_rate_limiter_decision_guard() -> None:
     change_log = Path("docs/sprints/sprint-840-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin rate limiter decision guard" in change_log
     assert "1 failing-first malformed admin limiter decision assertion" in change_log
@@ -16180,7 +16194,7 @@ def test_sprint_840_documents_admin_rate_limiter_decision_guard() -> None:
 
 def test_sprint_841_documents_lifecycle_rate_limiter_decision_guard() -> None:
     change_log = Path("docs/sprints/sprint-841-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle rate limiter decision guard" in change_log
     assert "1 failing-first malformed lifecycle limiter decision assertion" in change_log
@@ -16191,7 +16205,7 @@ def test_sprint_841_documents_lifecycle_rate_limiter_decision_guard() -> None:
 
 def test_sprint_842_documents_alert_webhook_response_dto_guard() -> None:
     change_log = Path("docs/sprints/sprint-842-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook response DTO guard" in change_log
     assert "1 failing-first alert webhook response DTO assertion" in change_log
@@ -16205,7 +16219,7 @@ def test_sprint_842_documents_alert_webhook_response_dto_guard() -> None:
 
 def test_sprint_843_documents_alert_webhook_transport_exception_guard() -> None:
     change_log = Path("docs/sprints/sprint-843-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert webhook transport exception guard" in change_log
     assert "1 failing-first alert webhook transport exception assertion" in change_log
@@ -16216,7 +16230,7 @@ def test_sprint_843_documents_alert_webhook_transport_exception_guard() -> None:
 
 def test_sprint_844_documents_provider_base_url_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-844-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider base URL exact-string guard" in change_log
     assert "1 failing-first provider base URL exact-string assertion" in change_log
@@ -16227,7 +16241,7 @@ def test_sprint_844_documents_provider_base_url_exact_string_guard() -> None:
 
 def test_sprint_845_documents_provider_token_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-845-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Provider token exact-string guard" in change_log
     assert "1 failing-first provider token exact-string assertion" in change_log
@@ -16241,7 +16255,7 @@ def test_sprint_845_documents_provider_token_exact_string_guard() -> None:
 
 def test_sprint_846_documents_url_query_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-846-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "URL query helper exact-string guard" in change_log
     assert "1 failing-first URL query helper exact-string assertion" in change_log
@@ -16252,7 +16266,7 @@ def test_sprint_846_documents_url_query_exact_string_guard() -> None:
 
 def test_sprint_847_documents_unicode_control_character_guard() -> None:
     change_log = Path("docs/sprints/sprint-847-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Unicode control character guard" in change_log
     assert "1 failing-first Unicode control character assertion" in change_log
@@ -16263,7 +16277,7 @@ def test_sprint_847_documents_unicode_control_character_guard() -> None:
 
 def test_sprint_848_documents_sensitive_key_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-848-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Sensitive key exact-string guard" in change_log
     assert "1 failing-first sensitive key exact-string assertion" in change_log
@@ -16274,7 +16288,7 @@ def test_sprint_848_documents_sensitive_key_exact_string_guard() -> None:
 
 def test_sprint_849_documents_work_note_secret_values_guard() -> None:
     change_log = Path("docs/sprints/sprint-849-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Work-note literal secret-values guard" in change_log
     assert "2 failing-first work-note secret-values assertions" in change_log
@@ -16285,7 +16299,7 @@ def test_sprint_849_documents_work_note_secret_values_guard() -> None:
 
 def test_sprint_850_documents_diagnostic_redaction_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-850-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Diagnostic redaction exact-string guard" in change_log
     assert "1 failing-first diagnostic redaction exact-string assertion" in change_log
@@ -16296,7 +16310,7 @@ def test_sprint_850_documents_diagnostic_redaction_exact_string_guard() -> None:
 
 def test_sprint_851_documents_runtime_redaction_secret_values_guard() -> None:
     change_log = Path("docs/sprints/sprint-851-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime redaction literal secret-values guard" in change_log
     assert "2 failing-first runtime redaction secret-values assertions" in change_log
@@ -16307,7 +16321,7 @@ def test_sprint_851_documents_runtime_redaction_secret_values_guard() -> None:
 
 def test_sprint_852_documents_servicenow_failure_notifier_secret_values_guard() -> None:
     change_log = Path("docs/sprints/sprint-852-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow failure notifier secret-values guard" in change_log
     assert "1 failing-first ServiceNow failure notifier secret-values assertion" in change_log
@@ -16321,7 +16335,7 @@ def test_sprint_852_documents_servicenow_failure_notifier_secret_values_guard() 
 
 def test_sprint_853_documents_completion_missing_sys_id_diagnostic_redaction() -> None:
     change_log = Path("docs/sprints/sprint-853-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Completion missing-sys-id diagnostic redaction" in change_log
     assert "1 failing-first completion missing-sys-id diagnostic assertion" in change_log
@@ -16335,7 +16349,7 @@ def test_sprint_853_documents_completion_missing_sys_id_diagnostic_redaction() -
 
 def test_sprint_854_documents_failure_notifier_story_not_found_redaction() -> None:
     change_log = Path("docs/sprints/sprint-854-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Failure notifier story-not-found diagnostic redaction" in change_log
     assert "1 failing-first failure notifier story-not-found diagnostic assertion" in change_log
@@ -16349,7 +16363,7 @@ def test_sprint_854_documents_failure_notifier_story_not_found_redaction() -> No
 
 def test_sprint_855_documents_failure_notifier_lookup_query_guard() -> None:
     change_log = Path("docs/sprints/sprint-855-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Failure notifier story lookup query guard" in change_log
     assert "1 failing-first failure notifier lookup query assertion" in change_log
@@ -16363,7 +16377,7 @@ def test_sprint_855_documents_failure_notifier_lookup_query_guard() -> None:
 
 def test_sprint_856_documents_failure_notifier_story_sys_id_record_guard() -> None:
     change_log = Path("docs/sprints/sprint-856-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Failure notifier story sys-id record guard" in change_log
     assert "1 failing-first failure notifier story sys-id assertion" in change_log
@@ -16377,7 +16391,7 @@ def test_sprint_856_documents_failure_notifier_story_sys_id_record_guard() -> No
 
 def test_sprint_857_documents_failure_notifier_state_choice_guard() -> None:
     change_log = Path("docs/sprints/sprint-857-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Failure notifier state-choice guard" in change_log
     assert "1 failing-first failure notifier state-choice assertion" in change_log
@@ -16390,7 +16404,7 @@ def test_sprint_857_documents_failure_notifier_state_choice_guard() -> None:
 
 def test_sprint_858_documents_failure_notifier_state_choice_value_guard() -> None:
     change_log = Path("docs/sprints/sprint-858-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Failure notifier state-choice value guard" in change_log
     assert "1 failing-first failure notifier state-choice value assertion" in change_log
@@ -16404,7 +16418,7 @@ def test_sprint_858_documents_failure_notifier_state_choice_value_guard() -> Non
 
 def test_sprint_859_documents_failure_notifier_lookup_result_guard() -> None:
     change_log = Path("docs/sprints/sprint-859-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Failure notifier lookup-result sys-id guard" in change_log
     assert "1 failing-first failure notifier lookup-result assertion" in change_log
@@ -16418,7 +16432,7 @@ def test_sprint_859_documents_failure_notifier_lookup_result_guard() -> None:
 
 def test_sprint_860_documents_completion_story_sys_id_guard() -> None:
     change_log = Path("docs/sprints/sprint-860-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Completion notifier story-sys-id guard" in change_log
     assert "1 failing-first completion story-sys-id assertion" in change_log
@@ -16432,7 +16446,7 @@ def test_sprint_860_documents_completion_story_sys_id_guard() -> None:
 
 def test_sprint_861_documents_servicenow_story_query_guard() -> None:
     change_log = Path("docs/sprints/sprint-861-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow story query guard" in change_log
     assert "1 failing-first ServiceNow story-query assertion" in change_log
@@ -16444,7 +16458,7 @@ def test_sprint_861_documents_servicenow_story_query_guard() -> None:
 
 def test_sprint_862_documents_ready_story_project_id_truthiness_guard() -> None:
     change_log = Path("docs/sprints/sprint-862-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Ready-story project-id truthiness guard" in change_log
     assert "1 failing-first ready-story project-id truthiness assertion" in change_log
@@ -16461,7 +16475,7 @@ def test_sprint_862_documents_ready_story_project_id_truthiness_guard() -> None:
 
 def test_sprint_863_documents_servicenow_field_list_truthiness_guard() -> None:
     change_log = Path("docs/sprints/sprint-863-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow field-list truthiness guard" in change_log
     assert "1 failing-first ServiceNow field-list truthiness assertion" in change_log
@@ -16475,7 +16489,7 @@ def test_sprint_863_documents_servicenow_field_list_truthiness_guard() -> None:
 
 def test_sprint_864_documents_cicd_source_id_truthiness_guard() -> None:
     change_log = Path("docs/sprints/sprint-864-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CI/CD source-id truthiness guard" in change_log
     assert "2 failing-first ServiceNow CI/CD source-id truthiness assertions" in change_log
@@ -16492,7 +16506,7 @@ def test_sprint_864_documents_cicd_source_id_truthiness_guard() -> None:
 
 def test_sprint_865_documents_cicd_probe_action_guard() -> None:
     change_log = Path("docs/sprints/sprint-865-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CI/CD probe action guard" in change_log
     assert "1 failing-first ServiceNow CI/CD probe-action assertion" in change_log
@@ -16506,7 +16520,7 @@ def test_sprint_865_documents_cicd_probe_action_guard() -> None:
 
 def test_sprint_866_documents_servicenow_empty_field_list_guard() -> None:
     change_log = Path("docs/sprints/sprint-866-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow empty field-list guard" in change_log
     assert "1 failing-first ServiceNow empty field-list assertion" in change_log
@@ -16519,7 +16533,7 @@ def test_sprint_866_documents_servicenow_empty_field_list_guard() -> None:
 
 def test_sprint_867_documents_cicd_request_container_truthiness_guard() -> None:
     change_log = Path("docs/sprints/sprint-867-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CI/CD request-container truthiness guard" in change_log
     assert "2 failing-first ServiceNow CI/CD request-container truthiness assertions" in (
@@ -16542,7 +16556,7 @@ def test_sprint_867_documents_cicd_request_container_truthiness_guard() -> None:
 
 def test_sprint_868_documents_cicd_request_method_action_guard() -> None:
     change_log = Path("docs/sprints/sprint-868-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow CI/CD request method/action guard" in change_log
     assert "2 failing-first ServiceNow CI/CD request method/action assertions" in change_log
@@ -16560,7 +16574,7 @@ def test_sprint_868_documents_cicd_request_method_action_guard() -> None:
 
 def test_sprint_869_documents_empty_lookup_body_guard() -> None:
     change_log = Path("docs/sprints/sprint-869-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow empty lookup body guard" in change_log
     assert "2 failing-first ServiceNow empty lookup assertions" in change_log
@@ -16575,7 +16589,7 @@ def test_sprint_869_documents_empty_lookup_body_guard() -> None:
 
 def test_sprint_870_documents_missing_response_result_guard() -> None:
     change_log = Path("docs/sprints/sprint-870-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow missing response result guard" in change_log
     assert "2 failing-first ServiceNow missing result assertions" in change_log
@@ -16601,7 +16615,7 @@ def test_sprint_870_documents_missing_response_result_guard() -> None:
 
 def test_sprint_871_documents_dictionary_form_existing_element_sys_id_guard() -> None:
     change_log = Path("docs/sprints/sprint-871-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form existing element sys_id guard" in change_log
     assert "1 failing-first dictionary/form missing element sys_id assertion" in change_log
@@ -16618,7 +16632,7 @@ def test_sprint_871_documents_dictionary_form_existing_element_sys_id_guard() ->
 
 def test_sprint_872_documents_form_section_missing_sys_id_guard() -> None:
     change_log = Path("docs/sprints/sprint-872-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Form-section missing sys_id guard" in change_log
     assert "1 failing-first form-section missing sys_id assertion" in change_log
@@ -16635,7 +16649,7 @@ def test_sprint_872_documents_form_section_missing_sys_id_guard() -> None:
 
 def test_sprint_873_documents_catalog_metadata_missing_sys_id_guard() -> None:
     change_log = Path("docs/sprints/sprint-873-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Catalog metadata missing sys_id guard" in change_log
     assert "1 failing-first catalog metadata missing sys_id assertion" in change_log
@@ -16652,7 +16666,7 @@ def test_sprint_873_documents_catalog_metadata_missing_sys_id_guard() -> None:
 
 def test_sprint_874_documents_update_set_apply_form_section_sys_id_guard() -> None:
     change_log = Path("docs/sprints/sprint-874-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply form-section sys_id guard" in change_log
     assert "1 failing-first Update Set apply missing section sys_id assertion" in change_log
@@ -16669,7 +16683,7 @@ def test_sprint_874_documents_update_set_apply_form_section_sys_id_guard() -> No
 
 def test_sprint_875_documents_update_set_apply_metadata_non_json_guard() -> None:
     change_log = Path("docs/sprints/sprint-875-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply metadata non-JSON guard" in change_log
     assert "1 failing-first Update Set apply metadata non-JSON assertion" in change_log
@@ -16686,7 +16700,7 @@ def test_sprint_875_documents_update_set_apply_metadata_non_json_guard() -> None
 
 def test_sprint_876_documents_update_set_apply_position_metadata_guard() -> None:
     change_log = Path("docs/sprints/sprint-876-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply position metadata guard" in change_log
     assert "1 failing-first Update Set apply position metadata assertion" in change_log
@@ -16703,7 +16717,7 @@ def test_sprint_876_documents_update_set_apply_position_metadata_guard() -> None
 
 def test_sprint_877_documents_update_set_apply_invalid_position_guard() -> None:
     change_log = Path("docs/sprints/sprint-877-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply invalid position guard" in change_log
     assert "1 failing-first Update Set apply invalid position assertion" in change_log
@@ -16720,7 +16734,7 @@ def test_sprint_877_documents_update_set_apply_invalid_position_guard() -> None:
 
 def test_sprint_878_documents_update_set_apply_view_metadata_guard() -> None:
     change_log = Path("docs/sprints/sprint-878-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply section view metadata guard" in change_log
     assert "1 failing-first Update Set apply section view metadata assertion" in change_log
@@ -16739,7 +16753,7 @@ def test_sprint_952_documents_update_set_apply_reference_dict_subclass_guard() -
     change_log = Path("docs/sprints/sprint-952-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply reference dict-subclass guard" in change_log
     assert "`_is_global_main_story_view_section()`" in change_log
@@ -16763,7 +16777,7 @@ def test_sprint_953_documents_dictionary_form_reference_dict_subclass_guard() ->
     change_log = Path("docs/sprints/sprint-953-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form reference dict-subclass guard" in change_log
     assert "`_is_global_main_view_section()`" in change_log
@@ -16788,7 +16802,7 @@ def test_sprint_954_documents_handoff_reference_dict_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-954-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff reference dict-subclass guard" in change_log
     assert "`_reference_table()`" in change_log
@@ -16812,7 +16826,7 @@ def test_sprint_955_documents_handoff_candidate_truthiness_guard() -> None:
     change_log = Path("docs/sprints/sprint-955-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff candidate truthiness guard" in change_log
     assert "`_first_present()`" in change_log
@@ -16836,7 +16850,7 @@ def test_sprint_956_documents_handoff_description_summary_guard() -> None:
     change_log = Path("docs/sprints/sprint-956-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff description summary guard" in change_log
     assert "`_field_summary()`" in change_log
@@ -16862,7 +16876,7 @@ def test_sprint_957_documents_handoff_reviewer_note_guard() -> None:
     change_log = Path("docs/sprints/sprint-957-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff reviewer-note guard" in change_log
     assert "`_reviewer_note_lines()`" in change_log
@@ -16888,7 +16902,7 @@ def test_sprint_958_documents_handoff_description_header_guard() -> None:
     change_log = Path("docs/sprints/sprint-958-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff description header guard" in change_log
     assert "`_update_set_description()`" in change_log
@@ -16915,7 +16929,7 @@ def test_sprint_959_documents_handoff_remote_sys_id_source_guard() -> None:
     change_log = Path("docs/sprints/sprint-959-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff remote_sys_id source guard" in change_log
     assert "`_remote_sys_id()`" in change_log
@@ -16937,7 +16951,7 @@ def test_sprint_960_documents_handoff_description_metric_guard() -> None:
     change_log = Path("docs/sprints/sprint-960-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff description metric guard" in change_log
     assert "`_description_metric_text()`" in change_log
@@ -16958,7 +16972,7 @@ def test_sprint_961_documents_handoff_changes_collection_guard() -> None:
     change_log = Path("docs/sprints/sprint-961-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff changes collection guard" in change_log
     assert "`_candidate_changes()`" in change_log
@@ -16981,7 +16995,7 @@ def test_sprint_962_documents_handoff_reviewer_note_collection_guard() -> None:
     change_log = Path("docs/sprints/sprint-962-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff reviewer-note collection guard" in change_log
     assert "`_reviewer_notes()`" in change_log
@@ -17006,7 +17020,7 @@ def test_sprint_963_documents_handoff_story_number_name_guard() -> None:
     change_log = Path("docs/sprints/sprint-963-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff story-number name guard" in change_log
     assert "`_update_set_name()`" in change_log
@@ -17031,7 +17045,7 @@ def test_sprint_964_documents_handoff_instance_url_guard() -> None:
     change_log = Path("docs/sprints/sprint-964-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff instance URL guard" in change_log
     assert "`_update_set_url()`" in change_log
@@ -17057,7 +17071,7 @@ def test_sprint_965_documents_handoff_lookup_collection_guard() -> None:
     change_log = Path("docs/sprints/sprint-965-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff lookup collection guard" in change_log
     assert "`_imported_update_set_sys_id()`" in change_log
@@ -17080,7 +17094,7 @@ def test_sprint_966_documents_customer_update_collection_guard() -> None:
     change_log = Path("docs/sprints/sprint-966-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set customer update collection guard" in change_log
     assert "`_customer_updates()`" in change_log
@@ -17105,7 +17119,7 @@ def test_sprint_977_documents_handoff_generated_customer_update_guard() -> None:
     change_log = Path("docs/sprints/sprint-977-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set generated customer update guard" in change_log
     assert "`_customer_updates_for_candidate()`" in change_log
@@ -17131,7 +17145,7 @@ def test_sprint_978_documents_handoff_change_identifier_guard() -> None:
     change_log = Path("docs/sprints/sprint-978-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff change identifier guard" in change_log
     assert "`_handoff_change_identifier_text()`" in change_log
@@ -17160,7 +17174,7 @@ def test_sprint_979_documents_handoff_change_fields_guard() -> None:
     change_log = Path("docs/sprints/sprint-979-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff change fields guard" in change_log
     assert "`_handoff_change_fields()`" in change_log
@@ -17193,7 +17207,7 @@ def test_sprint_980_documents_dictionary_form_alias_truthiness_guard() -> None:
     change_log = Path("docs/sprints/sprint-980-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Dictionary/form handoff alias truthiness guard" in change_log
     assert "`_form_table_name()`" in change_log
@@ -17224,7 +17238,7 @@ def test_sprint_981_documents_handoff_state_choice_guard() -> None:
     change_log = Path("docs/sprints/sprint-981-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff state choice guard" in change_log
     assert "`_ready_for_testing_state()`" in change_log
@@ -17254,7 +17268,7 @@ def test_sprint_982_documents_writeback_orchestration_state_choice_guard() -> No
     change_log = Path("docs/sprints/sprint-982-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback orchestration state choice guard" in change_log
     assert "`_writeback_state_choices()`" in change_log
@@ -17283,7 +17297,7 @@ def test_sprint_983_documents_writeback_orchestration_dictionary_field_guard() -
     change_log = Path("docs/sprints/sprint-983-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback orchestration dictionary field guard" in change_log
     assert "`_writeback_dictionary_fields()`" in change_log
@@ -17312,7 +17326,7 @@ def test_sprint_984_documents_writeback_orchestration_story_fetch_guard() -> Non
     change_log = Path("docs/sprints/sprint-984-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Writeback orchestration story fetch guard" in change_log
     assert "`_writeback_stories()`" in change_log
@@ -17342,7 +17356,7 @@ def test_sprint_985_documents_intake_feedback_story_fetch_guard() -> None:
     change_log = Path("docs/sprints/sprint-985-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Intake feedback story fetch guard" in change_log
     assert "`_intake_stories()`" in change_log
@@ -17370,7 +17384,7 @@ def test_sprint_986_documents_model_fulfillment_story_fetch_guard() -> None:
     change_log = Path("docs/sprints/sprint-986-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Model fulfillment story fetch guard" in change_log
     assert "`_model_fulfillment_stories()`" in change_log
@@ -17398,7 +17412,7 @@ def test_sprint_987_documents_runtime_failure_notifier_story_collection_guard() 
     change_log = Path("docs/sprints/sprint-987-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime failure notifier story collection guard" in change_log
     assert "`_failure_notifier_stories()`" in change_log
@@ -17427,7 +17441,7 @@ def test_sprint_988_documents_artifact_handoff_cli_story_lookup_guard() -> None:
     change_log = Path("docs/sprints/sprint-988-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Artifact handoff CLI story lookup guard" in change_log
     assert "`_cli_story_lookup_results()`" in change_log
@@ -17452,7 +17466,7 @@ def test_sprint_989_documents_pipeline_cli_story_lookup_guard() -> None:
     change_log = Path("docs/sprints/sprint-989-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Pipeline CLI story lookup guard" in change_log
     assert "`_pipeline_story_lookup_results()`" in change_log
@@ -17484,7 +17498,7 @@ def test_sprint_990_documents_runtime_split_client_story_lookup_guard() -> None:
     change_log = Path("docs/sprints/sprint-990-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime split-client story lookup guard" in change_log
     assert "`_split_story_lookup_results()`" in change_log
@@ -17510,7 +17524,7 @@ def test_sprint_991_documents_runtime_split_client_table_record_collection_guard
     change_log = Path("docs/sprints/sprint-991-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime split-client table-record collection guard" in change_log
     assert "`_split_table_record_lookup_results()`" in change_log
@@ -17537,7 +17551,7 @@ def test_sprint_992_documents_runtime_split_client_story_metadata_collection_gua
     change_log = Path("docs/sprints/sprint-992-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime split-client story metadata collection guard" in change_log
     assert "`_split_story_state_choice_results()`" in change_log
@@ -17570,7 +17584,7 @@ def test_sprint_993_documents_runtime_split_client_single_record_response_guard(
     change_log = Path("docs/sprints/sprint-993-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime split-client single-record response guard" in change_log
     assert "`_split_optional_table_record_result()`" in change_log
@@ -17611,7 +17625,7 @@ def test_sprint_994_documents_runtime_split_client_story_mutation_response_guard
     change_log = Path("docs/sprints/sprint-994-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime split-client story mutation response guard" in change_log
     assert "`_split_story_mutation_result()`" in change_log
@@ -17639,7 +17653,7 @@ def test_sprint_995_documents_bootstrap_dictionary_field_planning_guard() -> Non
     change_log = Path("docs/sprints/sprint-995-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bootstrap dictionary-field planning guard" in change_log
     assert "`_bootstrap_dictionary_fields()`" in change_log
@@ -17668,7 +17682,7 @@ def test_sprint_996_documents_bootstrap_apply_response_guard() -> None:
     change_log = Path("docs/sprints/sprint-996-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Bootstrap apply response guard" in change_log
     assert "`_bootstrap_create_field_result()`" in change_log
@@ -17705,7 +17719,7 @@ def test_sprint_997_documents_lifecycle_apply_response_guard() -> None:
     change_log = Path("docs/sprints/sprint-997-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Lifecycle webhook apply response guard" in change_log
     assert "`_lifecycle_webhook_upsert_result()`" in change_log
@@ -17735,7 +17749,7 @@ def test_sprint_967_documents_update_set_import_metadata_guard() -> None:
     change_log = Path("docs/sprints/sprint-967-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set import metadata guard" in change_log
     assert "`_import_metadata_text()`" in change_log
@@ -17758,7 +17772,7 @@ def test_sprint_968_documents_handoff_story_sys_id_guard() -> None:
     change_log = Path("docs/sprints/sprint-968-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff story sys_id guard" in change_log
     assert "`_handoff_story_sys_id()`" in change_log
@@ -17783,7 +17797,7 @@ def test_sprint_969_documents_handoff_artifact_ref_guard() -> None:
     change_log = Path("docs/sprints/sprint-969-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Retrieved Update Set handoff artifact reference guard" in change_log
     assert "`_handoff_artifact_ref()`" in change_log
@@ -17806,7 +17820,7 @@ def test_sprint_969_documents_handoff_artifact_ref_guard() -> None:
 
 def test_sprint_879_documents_update_set_apply_element_metadata_guard() -> None:
     change_log = Path("docs/sprints/sprint-879-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply form element metadata guard" in change_log
     assert "1 failing-first Update Set apply form element metadata assertion" in change_log
@@ -17823,7 +17837,7 @@ def test_sprint_879_documents_update_set_apply_element_metadata_guard() -> None:
 
 def test_sprint_880_documents_update_set_apply_form_candidate_field_guard() -> None:
     change_log = Path("docs/sprints/sprint-880-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply form candidate field guard" in change_log
     assert "1 failing-first Update Set apply form candidate field assertion" in change_log
@@ -17840,7 +17854,7 @@ def test_sprint_880_documents_update_set_apply_form_candidate_field_guard() -> N
 
 def test_sprint_881_documents_update_set_apply_dictionary_candidate_field_guard() -> None:
     change_log = Path("docs/sprints/sprint-881-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply dictionary candidate field guard" in change_log
     assert "2 failing-first Update Set apply dictionary candidate field assertions" in change_log
@@ -17861,7 +17875,7 @@ def test_sprint_881_documents_update_set_apply_dictionary_candidate_field_guard(
 
 def test_sprint_882_documents_update_set_apply_candidate_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-882-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply candidate string-subclass guard" in change_log
     assert "2 failing-first Update Set apply candidate string-subclass assertions" in change_log
@@ -17875,7 +17889,7 @@ def test_sprint_882_documents_update_set_apply_candidate_string_subclass_guard()
 
 def test_sprint_883_documents_update_set_apply_response_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-883-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply response string-subclass guard" in change_log
     assert "2 failing-first Update Set apply response string-subclass assertions" in change_log
@@ -17888,7 +17902,7 @@ def test_sprint_883_documents_update_set_apply_response_string_subclass_guard() 
 
 def test_sprint_884_documents_update_set_apply_form_xml_string_subclass_guard() -> None:
     change_log = Path("docs/sprints/sprint-884-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply form XML string-subclass guard" in change_log
     assert "1 failing-first Update Set apply form XML string-subclass assertion" in change_log
@@ -17900,7 +17914,7 @@ def test_sprint_884_documents_update_set_apply_form_xml_string_subclass_guard() 
 
 def test_sprint_885_documents_update_set_apply_form_placement_candidate_guard() -> None:
     change_log = Path("docs/sprints/sprint-885-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply form placement candidate guard" in change_log
     assert "1 failing-first Update Set apply form placement candidate assertion" in change_log
@@ -17916,7 +17930,7 @@ def test_sprint_885_documents_update_set_apply_form_placement_candidate_guard() 
 
 def test_sprint_886_documents_update_set_apply_request_identifier_guard() -> None:
     change_log = Path("docs/sprints/sprint-886-change-log.md").read_text(encoding="utf-8")
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply request identifier guard" in change_log
     assert "2 failing-first Update Set apply request identifier assertions" in change_log
@@ -17933,7 +17947,7 @@ def test_sprint_970_documents_update_set_apply_change_identifier_guard() -> None
     change_log = Path("docs/sprints/sprint-970-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply change identifier guard" in change_log
     assert "`_apply_change_identifier_text()`" in change_log
@@ -17955,7 +17969,7 @@ def test_sprint_971_documents_update_set_apply_records_collection_guard() -> Non
     change_log = Path("docs/sprints/sprint-971-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply records collection guard" in change_log
     assert "`_apply_records()`" in change_log
@@ -17981,7 +17995,7 @@ def test_sprint_972_documents_update_set_apply_single_record_guard() -> None:
     change_log = Path("docs/sprints/sprint-972-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply single-record lookup guard" in change_log
     assert "`_apply_optional_record()`" in change_log
@@ -18005,7 +18019,7 @@ def test_sprint_973_documents_update_set_apply_changes_collection_guard() -> Non
     change_log = Path("docs/sprints/sprint-973-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply changes collection guard" in change_log
     assert "`_apply_changes()`" in change_log
@@ -18030,7 +18044,7 @@ def test_sprint_974_documents_update_set_apply_change_fields_guard() -> None:
     change_log = Path("docs/sprints/sprint-974-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply change fields container guard" in change_log
     assert "`_apply_change_fields()`" in change_log
@@ -18056,7 +18070,7 @@ def test_sprint_975_documents_update_set_apply_change_field_key_guard() -> None:
     change_log = Path("docs/sprints/sprint-975-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply change field key guard" in change_log
     assert "`_apply_change_fields()`" in change_log
@@ -18082,7 +18096,7 @@ def test_sprint_976_documents_update_set_apply_dictionary_discovery_identifier_g
     change_log = Path("docs/sprints/sprint-976-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Update Set apply dictionary discovery identifier guard" in change_log
     assert "`_custom_dictionary_elements()`" in change_log
@@ -18103,7 +18117,7 @@ def test_sprint_1019_documents_validation_helper_decimal_input_guard() -> None:
     change_log = Path("docs/sprints/sprint-1019-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Validation helper Decimal input guard" in change_log
     assert "`_scalar_text()`" in change_log
@@ -18123,7 +18137,7 @@ def test_sprint_1020_documents_validation_helper_slug_string_subclass_guard() ->
     change_log = Path("docs/sprints/sprint-1020-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Validation helper slug string-subclass guard" in change_log
     assert "`slug()`" in change_log
@@ -18150,7 +18164,7 @@ def test_sprint_1021_documents_stable_record_sys_id_part_guard() -> None:
     change_log = Path("docs/sprints/sprint-1021-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Stable record sys_id part guard" in change_log
     assert "`stable_record_sys_id()`" in change_log
@@ -18177,7 +18191,7 @@ def test_sprint_1022_documents_runtime_config_scalar_exact_string_guard() -> Non
     change_log = Path("docs/sprints/sprint-1022-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime config scalar exact-string guard" in change_log
     assert "`_bool_value()`" in change_log
@@ -18211,7 +18225,7 @@ def test_sprint_1023_documents_split_servicenow_env_fallback_exact_string_guard(
     change_log = Path("docs/sprints/sprint-1023-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Split ServiceNow env fallback exact-string guard" in change_log
     assert "`_env_value()`" in change_log
@@ -18238,7 +18252,7 @@ def test_sprint_1024_documents_runtime_store_and_audit_exact_string_guard() -> N
     change_log = Path("docs/sprints/sprint-1024-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime store and audit exact-string guard" in change_log
     assert "`DATABASE_URL`" in change_log
@@ -18265,7 +18279,7 @@ def test_sprint_1025_documents_runtime_csv_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-1025-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime CSV exact-string guard" in change_log
     assert "`_csv_values()`" in change_log
@@ -18292,7 +18306,7 @@ def test_sprint_1026_documents_runtime_optional_setting_exact_string_guard() -> 
     change_log = Path("docs/sprints/sprint-1026-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime optional setting exact-string guard" in change_log
     assert "`_optional_model_provider()`" in change_log
@@ -18340,7 +18354,7 @@ def test_sprint_1027_documents_direct_runtime_mode_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-1027-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct runtime mode exact-string guard" in change_log
     assert "`_runtime_environment()`" in change_log
@@ -18376,7 +18390,7 @@ def test_sprint_1028_documents_direct_production_credential_exact_string_guard()
     change_log = Path("docs/sprints/sprint-1028-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct production credential exact-string guard" in change_log
     assert "`_direct_optional_runtime_setting_text()`" in change_log
@@ -18413,7 +18427,7 @@ def test_sprint_1029_documents_direct_auth_mode_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-1029-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct auth mode exact-string guard" in change_log
     assert "`RuntimeSettings.lifecycle_webhook_auth_mode`" in change_log
@@ -18445,7 +18459,7 @@ def test_sprint_1030_documents_direct_model_setting_exact_string_guard() -> None
     change_log = Path("docs/sprints/sprint-1030-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct model setting exact-string guard" in change_log
     assert "`RuntimeSettings.model_provider`" in change_log
@@ -18480,7 +18494,7 @@ def test_sprint_1031_documents_direct_public_web_access_exact_string_guard() -> 
     change_log = Path("docs/sprints/sprint-1031-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct public web access exact-string guard" in change_log
     assert "`RuntimeSettings.public_web_access`" in change_log
@@ -18505,7 +18519,7 @@ def test_sprint_1032_documents_direct_worker_id_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-1032-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct worker id exact-string guard" in change_log
     assert "`RuntimeSettings.worker_id`" in change_log
@@ -18528,7 +18542,7 @@ def test_sprint_1033_documents_direct_update_set_user_exact_string_guard() -> No
     change_log = Path("docs/sprints/sprint-1033-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct Update Set user exact-string guard" in change_log
     assert "`RuntimeSettings.update_set_user_name`" in change_log
@@ -18557,7 +18571,7 @@ def test_sprint_1034_documents_direct_public_web_list_exact_string_guard() -> No
     change_log = Path("docs/sprints/sprint-1034-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct public-web list exact-string guard" in change_log
     assert "`RuntimeSettings.public_web_allowed_domains`" in change_log
@@ -18587,7 +18601,7 @@ def test_sprint_1035_documents_direct_integer_runtime_exact_type_guard() -> None
     change_log = Path("docs/sprints/sprint-1035-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct integer runtime exact-type guard" in change_log
     assert "direct integer runtime setting validation" in change_log
@@ -18611,7 +18625,7 @@ def test_sprint_1036_documents_direct_timeout_finite_number_guard() -> None:
     change_log = Path("docs/sprints/sprint-1036-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct timeout finite-number guard" in change_log
     assert "direct outbound timeout validation" in change_log
@@ -18634,7 +18648,7 @@ def test_sprint_1037_documents_direct_boolean_runtime_exact_type_guard() -> None
     change_log = Path("docs/sprints/sprint-1037-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct boolean runtime exact-type guard" in change_log
     assert "direct boolean runtime setting validation" in change_log
@@ -18657,7 +18671,7 @@ def test_sprint_1038_documents_direct_build_claim_state_exact_string_guard() -> 
     change_log = Path("docs/sprints/sprint-1038-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct build-claim state exact-string guard" in change_log
     assert "`JEDI_BUILD_CLAIM_FROM_STATE`" in change_log
@@ -18685,7 +18699,7 @@ def test_sprint_1039_documents_direct_alert_webhook_url_exact_string_guard() -> 
     change_log = Path("docs/sprints/sprint-1039-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct alert webhook URL exact-string guard" in change_log
     assert "`RuntimeSettings.alert_webhook_url`" in change_log
@@ -18711,7 +18725,7 @@ def test_sprint_1040_documents_direct_audit_root_exact_path_guard() -> None:
     change_log = Path("docs/sprints/sprint-1040-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct audit root exact-path guard" in change_log
     assert "`RuntimeSettings.audit_root`" in change_log
@@ -18735,7 +18749,7 @@ def test_sprint_1041_documents_direct_database_url_exact_string_guard() -> None:
     change_log = Path("docs/sprints/sprint-1041-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct database URL exact-string guard" in change_log
     assert "`RuntimeSettings.database_url`" in change_log
@@ -18760,7 +18774,7 @@ def test_sprint_1042_documents_direct_servicenow_url_exact_string_guard() -> Non
     change_log = Path("docs/sprints/sprint-1042-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct ServiceNow instance URL exact-string guard" in change_log
     assert "`SERVICENOW_INSTANCE_URL`" in change_log
@@ -18788,7 +18802,7 @@ def test_sprint_1043_documents_direct_servicenow_oauth_exact_string_guard() -> N
     change_log = Path("docs/sprints/sprint-1043-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct ServiceNow OAuth credential exact-string guard" in change_log
     assert "`SERVICENOW_CLIENT_ID`" in change_log
@@ -18822,7 +18836,7 @@ def test_sprint_1044_documents_direct_admin_console_credential_exact_string_guar
     change_log = Path("docs/sprints/sprint-1044-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Direct admin console credential exact-string guard" in change_log
     assert "`JEDI_ADMIN_CONSOLE_USERNAME`" in change_log
@@ -18848,7 +18862,7 @@ def test_sprint_1045_documents_runtime_role_helper_normalized_input_boundary() -
     change_log = Path("docs/sprints/sprint-1045-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime role helper normalized-input boundary" in change_log
     assert "`_api_runtime_role_errors()`" in change_log
@@ -18876,7 +18890,7 @@ def test_sprint_1046_documents_worker_fulfillment_runtime_role_validation_order(
     change_log = Path("docs/sprints/sprint-1046-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Worker fulfillment runtime-role validation order" in change_log
     assert "`process_one_runtime_fulfillment()`" in change_log
@@ -18900,7 +18914,7 @@ def test_sprint_1047_documents_embedded_worker_runtime_mode_exact_string_boundar
     change_log = Path("docs/sprints/sprint-1047-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Embedded worker runtime mode exact-string boundary" in change_log
     assert "`run_once()`" in change_log
@@ -18927,7 +18941,7 @@ def test_sprint_1048_documents_maintenance_database_url_boundary() -> None:
     change_log = Path("docs/sprints/sprint-1048-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Maintenance database URL boundary" in change_log
     assert "`prune_operational_store()`" in change_log
@@ -18958,7 +18972,7 @@ def test_sprint_1049_documents_alert_emission_direct_settings_boundary() -> None
     change_log = Path("docs/sprints/sprint-1049-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Alert emission direct settings boundary" in change_log
     assert "`_emit_worker_failure_alert()`" in change_log
@@ -18987,7 +19001,7 @@ def test_sprint_1050_documents_runtime_handler_model_routing_boundary() -> None:
     change_log = Path("docs/sprints/sprint-1050-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime handler model-routing direct settings boundary" in change_log
     assert "`_runtime_handler()`" in change_log
@@ -19018,7 +19032,7 @@ def test_sprint_1051_documents_servicenow_runtime_client_boundary() -> None:
     change_log = Path("docs/sprints/sprint-1051-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "ServiceNow runtime client direct settings boundary" in change_log
     assert "`_servicenow_runtime_connection_settings()`" in change_log
@@ -19048,7 +19062,7 @@ def test_sprint_1052_documents_runtime_auth_configured_settings_boundary() -> No
     change_log = Path("docs/sprints/sprint-1052-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime auth configured settings boundary" in change_log
     assert "`_require_admin_token()`" in change_log
@@ -19081,7 +19095,7 @@ def test_sprint_1053_documents_runtime_env_template_coverage() -> None:
     change_log = Path("docs/sprints/sprint-1053-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Runtime Env Template Coverage" in change_log
     assert "every `JEDI_*` and `OPENAI_*`" in change_log
@@ -19101,7 +19115,7 @@ def test_sprint_1054_documents_admin_operations_summary() -> None:
     change_log = Path("docs/sprints/sprint-1054-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Admin Operations Summary" in change_log
     assert "`fulfillment_job_status_summary()`" in change_log
@@ -19132,7 +19146,7 @@ def test_sprint_1055_documents_backup_restore_runbook() -> None:
     change_log = Path("docs/sprints/sprint-1055-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Backup and Restore Runbook" in change_log
     assert "PostgreSQL is the authoritative operational store" in change_log
@@ -19154,7 +19168,7 @@ def test_sprint_1056_documents_lifecycle_webhook_secret_rotation() -> None:
     change_log = Path("docs/sprints/sprint-1056-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "Lifecycle Webhook Secret Rotation" in change_log
@@ -19178,7 +19192,7 @@ def test_sprint_1057_documents_runtime_trusted_host_enforcement() -> None:
     change_log = Path("docs/sprints/sprint-1057-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "Runtime Trusted Host Enforcement" in change_log
@@ -19198,7 +19212,7 @@ def test_sprint_1058_documents_trusted_host_worker_boundary() -> None:
     change_log = Path("docs/sprints/sprint-1058-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
 
     assert "Trusted Host Worker Role Boundary" in change_log
     assert "`JEDI_TRUSTED_HOSTS`" in change_log
@@ -19215,7 +19229,7 @@ def test_sprint_1059_documents_security_verification_gate() -> None:
     change_log = Path("docs/sprints/sprint-1059-change-log.md").read_text(
         encoding="utf-8"
     )
-    operator_guide = Path("docs/operator-guide.md").read_text(encoding="utf-8")
+    operator_guide = _read_operator_guide()
     development_guide = Path("docs/development.md").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
