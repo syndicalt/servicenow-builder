@@ -19,6 +19,10 @@ dependencies = [
 dev = [
   "bandit[toml]",
   "coverage",
+  # starlette.testclient imports httpx on starlette<1.0 and httpx2 on >=1.0;
+  # declare both so fresh CI installs work regardless of the resolved version.
+  "httpx",
+  "httpx2",
   "mypy",
   "pip-audit",
   "pytest",
