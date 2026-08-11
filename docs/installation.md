@@ -327,16 +327,25 @@ Railway development now uses `JEDI_BUILD_CLAIM_APPLY=true` so live fulfillment m
 
 ## Hosted Railway Process Split
 
-`railway.json` is the API service manifest. It builds from `Dockerfile`, lets the container command
-bind to `${PORT:-8000}`, exposes `/ready` as the Railway healthcheck path, and uses an on-failure
-restart policy. Railway deploy healthcheck uses `/ready` so hosted rollout checks include
-PostgreSQL operational-store reachability. The container liveness probe still uses `/health` inside
-the image because it only verifies that the API process can answer HTTP. The API service owns
+`deploy/railway/api-service.json` is the API service manifest. It builds from `Dockerfile`, lets the
+container command bind to `${PORT:-8000}`, exposes `/ready` as the Railway healthcheck path, and uses
+an on-failure restart policy. Railway deploy healthcheck uses `/ready` so hosted rollout checks
+include PostgreSQL operational-store reachability. The container liveness probe still uses `/health`
+inside the image because it only verifies that the API process can answer HTTP. The API service owns
 `/health`, `/ready`, lifecycle webhooks, and the admin console.
 
-`deploy/railway/worker-service.json` is the worker service template. Use it when creating the
-separate hosted worker service from the same repository. The worker builds from `Dockerfile.worker`
-and starts with `python -m jedi_devproject.runtime_worker`. The worker service must not expose a public HTTP process, must not define a public healthcheck path, and should share the same PostgreSQL-backed operational store as the API service.
+`deploy/railway/worker-service.json` is the worker service manifest. The worker builds from
+`Dockerfile.worker` and starts with `python -m jedi_devproject.runtime_worker`.
+The worker service must not expose a public HTTP process, must not define a public healthcheck path, and should share
+the same PostgreSQL-backed operational store as the API service.
+
+Each hosted service has its Railway "Config File Path" setting pointed at its own manifest
+(`/deploy/railway/api-service.json` or `/deploy/railway/worker-service.json`), and both services
+auto-deploy from the repository's `master` branch. The repository root intentionally has no
+`railway.json`: a root config is Railway's default manifest for every service that builds from the
+repo, and a shared default previously made CLI uploads to the worker service build the API image.
+Never run `railway up` from the repository root; deploy by pushing to `master` or by running
+`railway redeploy` on the target service.
 
 Both hosted services need the same runtime configuration boundary for database access, ServiceNow
 PM/DEV credentials, model provider credentials, and audit paths. API-only secrets such as lifecycle

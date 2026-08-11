@@ -26,7 +26,7 @@ def _read_json(path: str) -> dict[str, Any]:
 
 
 def test_railway_api_manifest_uses_api_dockerfile_healthcheck_and_restart_policy() -> None:
-    manifest = _read_json("railway.json")
+    manifest = _read_json("deploy/railway/api-service.json")
 
     assert manifest["$schema"] == "https://railway.app/railway.schema.json"
     assert manifest["build"]["builder"] == "DOCKERFILE"
@@ -38,9 +38,7 @@ def test_railway_api_manifest_uses_api_dockerfile_healthcheck_and_restart_policy
     assert "runtime_worker" not in json.dumps(manifest)
 
 
-def test_railway_worker_manifest_template_uses_worker_dockerfile_without_healthcheck() -> (
-    None
-):
+def test_railway_worker_manifest_uses_worker_dockerfile_without_healthcheck() -> None:
     manifest = _read_json("deploy/railway/worker-service.json")
 
     assert manifest["$schema"] == "https://railway.app/railway.schema.json"
@@ -57,8 +55,8 @@ def test_operator_guide_documents_hosted_api_worker_service_split() -> None:
     guide = _read_operator_guide()
 
     assert "Hosted Railway Process Split" in guide
-    assert "`railway.json` is the API service manifest" in guide
-    assert "`deploy/railway/worker-service.json` is the worker service template" in guide
+    assert "`deploy/railway/api-service.json` is the API service manifest" in guide
+    assert "`deploy/railway/worker-service.json` is the worker service manifest" in guide
     assert "exposes `/ready` as the Railway healthcheck path" in guide
     assert "The API service owns" in guide
     assert "`/health`, `/ready`, lifecycle webhooks" in guide
