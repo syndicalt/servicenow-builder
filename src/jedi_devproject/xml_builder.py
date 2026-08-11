@@ -9,7 +9,7 @@ rejected before rendering so generation modules cannot emit malformed payloads.
 from __future__ import annotations
 
 import re
-from xml.sax.saxutils import escape as _xml_escape
+from xml.sax.saxutils import escape as _xml_escape  # nosec B406
 
 XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>'
 SYS_SCOPE_GLOBAL = '<sys_scope display_value="Global">global</sys_scope>'
