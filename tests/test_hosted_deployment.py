@@ -51,6 +51,20 @@ def test_railway_worker_manifest_uses_worker_dockerfile_without_healthcheck() ->
     assert "uvicorn" not in json.dumps(manifest)
 
 
+def test_no_root_railway_manifest_and_service_manifests_are_distinct() -> None:
+    # A root railway.json is Railway's default manifest for every service that
+    # builds from the repo; a shared default previously made CLI uploads to the
+    # worker service build the API image. Per-service manifests live under
+    # deploy/railway/ and each hosted service's Config File Path points at its
+    # own file.
+    assert not Path("railway.json").exists()
+
+    api_manifest = _read_json("deploy/railway/api-service.json")
+    worker_manifest = _read_json("deploy/railway/worker-service.json")
+    assert api_manifest["build"]["dockerfilePath"] == "Dockerfile"
+    assert worker_manifest["build"]["dockerfilePath"] == "Dockerfile.worker"
+
+
 def test_operator_guide_documents_hosted_api_worker_service_split() -> None:
     guide = _read_operator_guide()
 
