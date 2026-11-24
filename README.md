@@ -1,4 +1,4 @@
-# jedi-devproject-0
+# servicenow-builder
 
 **Version**: 0.2.0 (FedRAMP-aligned MVP)  
 **Date**: May 2026  
